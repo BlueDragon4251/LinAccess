@@ -64,6 +64,27 @@ End Function
         assert(sql.exec("INSERT INTO cash VALUES(0.2),(-0.3),(NULL)"));
         auto database=linaccess::makeDaoDatabase(db);
         const auto open=[&](const std::string& source) { return database->member("OpenRecordset",{VbaValue::string(source)}).object; };
+    {
+        assert(sql.exec("CREATE TABLE cross_probe(row_key INTEGER,category TEXT,cell INTEGER)"));
+        assert(sql.exec("INSERT INTO cross_probe VALUES(1,'A',1),(1,'A',NULL),(1,'B',2),(2,'B',NULL),(2,'Z',3),(3,NULL,NULL)"));
+        const QString source="TRANSFORM Count([cell]) AS n SELECT [row_key] AS row_id FROM cross_probe GROUP BY row_key ORDER BY row_key PIVOT category IN ('B','A','missing');";
+        const auto plan=linaccess::compileAccessQuery(source);assert(plan.daoQueryType==16 && plan.source==source);
+        const auto result=linaccess::executeAccessQueryPlan(db,plan,{});
+        assert(result.columns==QStringList({"row_id","B","A","missing"}) && result.rows.size()==3 && result.types.value("b")=="INTEGER4");
+        assert(result.rows[0][1].toInt()==1 && result.rows[0][2].toInt()==1 && result.rows[0][3].toInt()==0 && result.rows[1][1].toInt()==0 && result.rows[2][1].toInt()==0);
+        auto rows=open(source.toStdString());assert(rows->member("Fields",{VbaValue::string("B")}).object->member("Type",{}).number==4);rows->member("Close",{});
+        auto definition=database->member("CreateQueryDef",{VbaValue::string(""),VbaValue::string(("PARAMETERS wanted LONG; "+QString(source).replace("FROM cross_probe","FROM cross_probe WHERE row_key=[wanted]")).toStdString())}).object;
+        assert(definition->member("Type",{}).number==16);definition->member("Parameters",{VbaValue::string("wanted")}).object->assign("Value",VbaValue::numeric(1));
+        rows=definition->member("OpenRecordset",{}).object;assert(rows->member("RecordCount",{}).number==1);rows->member("Close",{});
+        const auto stars=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery(QString(source).replace("Count([cell])","Count(*)")),{});
+        assert(stars.rows[0][2].toInt()==2 && stars.rows[1][1].toInt()==1);
+        auto saved=database->member("CreateQueryDef",{VbaValue::string("fixed_cross_probe"),VbaValue::string(source.toStdString())}).object;
+        rows=open("fixed_cross_probe");assert(rows->member("RecordCount",{}).number==3);rows->member("Close",{});
+        for(const auto* invalid:{"TRANSFORM Sum(cell) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category IN ('A')", "TRANSFORM Count(*) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category", "TRANSFORM Count(*) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category IN ('A','a')", "TRANSFORM Count(*) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category IN ('row_key')", "TRANSFORM Count(*) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category IN ('A',)", "TRANSFORM Count(*) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category IN (1)"}) {
+            int refused=0;try {(void)linaccess::compileAccessQuery(invalid);}catch(const linaccess::VbaRuntimeError& error) {refused=error.number;}assert(refused==3251);
+        }
+    }
+
         auto rows=open("SELECT amount FROM cash ORDER BY rowid"); auto field=rows->member("Fields",{VbaValue::string("amount")}).object;
         assert(field->member("Type",{}).number==5);
         for(const auto expected:std::vector<std::optional<std::int64_t>>{1000,2000,-3000,{}}) {

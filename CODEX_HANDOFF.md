@@ -3140,7 +3140,7 @@ ungespeicherten Einfügebereich bestehen jetzt gemeinsame Strg+Z/Y-, Bearbeiten-
 und Undo/Redo(292/199)-Wege; gespeicherte Date-Defaults werden beim Redo übernommen.
 Spätere Fremdänderung, Requery oder erfolgreicher Save verwirft den Bereichsverlauf.
 Vorhandene GUI/Feld/DAO gemeinsam3/3 (8,59s), App gebaut. Echte SQL-/Qt-Nachweise für
-Bytes inklusive leerem BLOB, NULL/leer, benachbarte große Ganzzahlen, datumhaltige
+Bytes inklusive leerem BLOB, NULL/leer, große 64-Bit-Ganzzahlen, datumhaltige
 Bereiche, Anfügen, leere Tabelle, Undo/Redo und Verlaufverfall; ungültige MIME,
 AutoWert und verdeckte Ziele verweigert. Zwei veraltete Binär-Copy-Negativannahmen
 angepasst; Qt-interner Schreibschutz während geprüfter Binärübernahme begrenzt
@@ -3148,3 +3148,19 @@ freigegeben, außerhalb weiterhin wirksam. Keine neue CTest-ID oder Windows-
 Beobachtung. Kein VBA-Binary-Variant, keine allgemeine SQL-Rücknahme; Einfügen über
 fremde Entwürfe, volle Regional-/Access-/MIME-Gleichheit bleiben offen. F340/F168/
 F016 unverändert; TYPED_GRID_CLIPBOARD.md;456/384/72 unverändert. Direkt weiter.
+
+Kreuztabellen mit TRANSFORM Count(Feld)/Count(*) und festen Textüberschriften in
+PIVOT ... IN(...) laufen jetzt über denselben nativen Compiler, direkte DAO-
+Recordsets, parametrisierte QueryDefs und gespeicherte Abfragen. Zählungen lassen
+NULL-Feldwerte aus, Count(*) zählt Zeilen; fehlende Kategorien ergeben0. Reihenfolge,
+Aliases und Fallkollisionsschutz der Ausgabespalten werden erhalten, Count-Spalten
+sind provenient INTEGER4/DAO Long, QueryDef.Type ist dbQCrosstab16. Simple gruppierte
+Zeilenfelder, einzelner Quellname mit optionalem Alias sowie WHERE/HAVING/ORDER
+bleiben begrenzt; numerische Aggregate, dynamische/numerische Überschriften und
+allgemeine Join-/Ausdrucks-Kreuztabellen verweigern3251. Vorhandene Query-Resultat/
+Schema-/DAO-Prüfungen gemeinsam3/3 (2,44s), App gebaut. Zusätzlich vorhandene SQL-
+Dokument-/DAO-Prüfungen2/2 (2,37s); keine neue CTest-ID. Klammer-/Nichtklammernamen
+werden semantisch gleich verglichen. Kein Windows-Ergebnis-/Kollationsorakel und
+keine volle Kreuztabellenparität behauptet. Siehe COUNT_CROSSTAB_RUNTIME.md.
+F068/F067 und456/384/72 bleiben unverändert. Vier Repository-Originale und drei
+Upload-Originale aktuell per SHA unverändert. Ohne Zwischenabschluss fortsetzen.

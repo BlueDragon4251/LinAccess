@@ -3448,7 +3448,7 @@ public:
             const bool physical=nativeTableNames(db_).contains(source,Qt::CaseInsensitive);const int mode=nativeRecordsetMode(args,1,physical ? 1 : 2);
             if (db_.tables().contains(source,Qt::CaseInsensitive)) {if(mode==1 && !physical) throw VbaRuntimeError(3251,"DAO: Table-type Recordset requires a physical main user table");return VbaValue::reference(std::make_shared<Recordset>(db_,source,mode == 4,QMap<QString,QVariant>{},AccessQueryPlan{},mode));}
             if(mode==1) throw VbaRuntimeError(3251,"DAO: Table-type Recordset requires a physical table");
-            const auto sql = source.trimmed().startsWith("SELECT ",Qt::CaseInsensitive) ? source : accessQuerySource(db_,source);
+            const auto sql = (source.trimmed().startsWith("SELECT ",Qt::CaseInsensitive) || source.trimmed().startsWith("TRANSFORM ",Qt::CaseInsensitive)) ? source : accessQuerySource(db_,source);
             const auto plan = compileAccessQuery(sql);
             require(plan.sql.trimmed().startsWith("SELECT ",Qt::CaseInsensitive),"DAO: SELECT required");
             return VbaValue::reference(std::make_shared<Recordset>(db_,plan.sql,true,bindAccessQueryParameters(plan,{}),plan,mode));

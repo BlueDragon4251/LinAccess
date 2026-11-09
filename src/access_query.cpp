@@ -168,6 +168,79 @@ bool expressionBoundary(const QVector<Token>& tokens,qsizetype index) {
         "distinctrow","parameters","pivot","transform","asc","desc","and","or","xor","eqv","imp","not","is","like","in","between"};
     return words.contains(token.value.toCaseFolded());
 }
+// Fixed-heading Count crosstabs are rewritten structurally. Dynamic headings
+// and numeric aggregates need independent type/precision handling.
+struct CountCrosstab {int rowHeadings{},pivotHeadings{};};
+CountCrosstab expandCountCrosstab(QVector<Token>& tokens,qsizetype start) {
+    const auto word=[&](qsizetype i,const char* value) {return i>=0 && i<tokens.size() && tokens[i].kind==Token::Word && tokens[i].value.compare(value,Qt::CaseInsensitive)==0;};
+    if(!word(start,"TRANSFORM")) return {};
+    const auto fail=[] {throw VbaRuntimeError(3251,"Jet SQL: supported crosstabs require Count, simple row fields and fixed literal headings");};
+    const auto field=[](const QVector<Token>& part) {
+        const auto name=[](const Token& token) {return token.kind==Token::Word || token.kind==Token::Identifier;};
+        return (part.size()==1 && name(part[0])) || (part.size()==3 && name(part[0]) && symbol(part[1],".") && name(part[2]));
+    };
+    while(!tokens.isEmpty() && symbol(tokens.back(),";")) tokens.removeLast();
+    qsizetype select=-1,from=-1,group=-1,pivot=-1;int depth=0;
+    for(qsizetype i=start+1;i<tokens.size();++i) {
+        if(symbol(tokens[i],"(")) ++depth;
+        else if(symbol(tokens[i],")")) {if(--depth<0) fail();}
+        if(word(i,"SELECT")) {if(depth || select>=0) fail();select=i;}
+        if(word(i,"UNION") || word(i,"JOIN") || word(i,"INTO") || symbol(tokens[i],";")) fail();
+        if(depth) continue;
+        if(word(i,"FROM")) {if(from>=0) fail();from=i;}
+        if(word(i,"GROUP") && word(i+1,"BY")) {if(group>=0) fail();group=i;}
+        if(word(i,"PIVOT")) {if(pivot>=0) fail();pivot=i;}
+    }
+    if(depth || select<=start+4 || from<=select+1 || group<=from+1 || pivot<=group+2) fail();
+    auto aggregate=tokens.mid(start+1,select-start-1);
+    if(aggregate.size()>=2 && aggregate[aggregate.size()-2].kind==Token::Word && aggregate[aggregate.size()-2].value.compare("AS",Qt::CaseInsensitive)==0) {
+        if(aggregate.back().kind!=Token::Word && aggregate.back().kind!=Token::Identifier) fail();aggregate.resize(aggregate.size()-2);
+    }
+    if(aggregate.size()<4 || aggregate[0].kind!=Token::Word || aggregate[0].value.compare("COUNT",Qt::CaseInsensitive)!=0 || !symbol(aggregate[1],"(") || !symbol(aggregate.back(),")")) fail();
+    const auto argument=aggregate.mid(2,aggregate.size()-3);
+    const bool star=argument.size()==1 && symbol(argument[0],"*");if(!star && !field(argument)) fail();
+    QVector<QVector<Token>> rowFields;QSet<QString> outputNames;
+    qsizetype first=select+1;
+    for(qsizetype i=first;i<=from;++i) if(i==from || symbol(tokens[i],",")) {
+        auto part=tokens.mid(first,i-first);auto source=part;QString label;
+        if(source.size()>=2 && source[source.size()-2].kind==Token::Word && source[source.size()-2].value.compare("AS",Qt::CaseInsensitive)==0) {
+            if(source.back().kind!=Token::Word && source.back().kind!=Token::Identifier) fail();label=source.back().value;source.resize(source.size()-2);
+        }
+        if(!field(source)) fail();if(label.isEmpty()) label=source.back().value;
+        if(label.isEmpty() || label.size()>64 || label.contains(QChar(0)) || !label.isValidUtf16() || outputNames.contains(label.toCaseFolded())) fail();outputNames.insert(label.toCaseFolded());rowFields.push_back(source);first=i+1;
+    }
+    // A single physical/saved source with optional alias; no implicit joins.
+    qsizetype sourceEnd=from+1;while(sourceEnd<group && !word(sourceEnd,"WHERE")) ++sourceEnd;
+    const auto source=tokens.mid(from+1,sourceEnd-from-1);
+    if(!field(source.mid(0,1)) || (source.size()!=1 && source.size()!=2 && !(source.size()==3 && source[1].kind==Token::Word && source[1].value.compare("AS",Qt::CaseInsensitive)==0))) fail();
+    for(const auto& token:source) if(token.kind!=Token::Word && token.kind!=Token::Identifier) fail();
+    qsizetype groupEnd=group+2;while(groupEnd<pivot && !word(groupEnd,"HAVING") && !word(groupEnd,"ORDER")) ++groupEnd;
+    QVector<QVector<Token>> grouped;first=group+2;
+    for(qsizetype i=first;i<=groupEnd;++i) if(i==groupEnd || symbol(tokens[i],",")) {const auto part=tokens.mid(first,i-first);if(!field(part)) fail();grouped.push_back(part);first=i+1;}
+    if(grouped.size()!=rowFields.size()) fail();
+    for(int i=0;i<grouped.size();++i) {
+        if(grouped[i].size()!=rowFields[i].size()) fail();
+        for(int token=0;token<grouped[i].size();++token) if(grouped[i][token].value.compare(rowFields[i][token].value,Qt::CaseInsensitive)!=0) fail();
+    }
+    qsizetype in=pivot+1;while(in<tokens.size() && !word(in,"IN")) ++in;
+    const auto pivotField=tokens.mid(pivot+1,in-pivot-1);if(!field(pivotField) || in+3>=tokens.size() || !symbol(tokens[in+1],"(") || !symbol(tokens.back(),")")) fail();
+    QVector<Token> headings;
+    for(qsizetype i=in+2;i<tokens.size()-1;++i) {
+        if((i-in-2)%2) {if(!symbol(tokens[i],",")) fail();continue;}
+        const auto token=tokens[i];
+        if(token.kind!=Token::String || token.value.isEmpty() || token.value.size()>64 || token.value.contains(QChar(0)) || !token.value.isValidUtf16() || outputNames.contains(token.value.toCaseFolded())) fail();
+        outputNames.insert(token.value.toCaseFolded());headings.push_back(token);
+    }
+    if(headings.isEmpty() || (tokens.size()-in-3)%2==0 || headings.size()+rowFields.size()>255) fail();
+    auto output=tokens.mid(0,start);output.append({Token::Word,"SELECT"});output+=tokens.mid(select+1,from-select-1);
+    for(const auto& heading:headings) {
+        output.append({Token::Other,","});output.append({Token::Word,"Count"});output.append({Token::Other,"("});output.append({Token::Word,"CASE"});output.append({Token::Word,"WHEN"});output+=pivotField;output.append({Token::Other,"="});output.append(heading);output.append({Token::Word,"THEN"});
+        if(star) output.append({Token::Other,"1"});else output+=argument;
+        output.append({Token::Word,"ELSE"});output.append({Token::Word,"NULL"});output.append({Token::Word,"END"});output.append({Token::Other,")"});output.append({Token::Word,"AS"});output.append({Token::Identifier,heading.value});
+    }
+    output+=tokens.mid(from,pivot-from);tokens=std::move(output);
+    return {static_cast<int>(rowFields.size()),static_cast<int>(headings.size())};
+}
 qsizetype operandEnd(const QVector<Token>& tokens,qsizetype start) {
     int depth=0;
     auto end=start;
@@ -1151,6 +1224,7 @@ static AccessQueryPlan compileCurrencyQuery(const QString& source,const QMap<QSt
         }
     }
     require(pos < tokens.size(), "Jet SQL: query body required");
+    const auto crosstab=expandCountCrosstab(tokens,pos);
     if(tokens[pos].kind==Token::Word) {
         const auto command=tokens[pos].value.toUpper();
         if(command=="SELECT") {
@@ -1167,9 +1241,11 @@ static AccessQueryPlan compileCurrencyQuery(const QString& source,const QMap<QSt
         else if(command=="CREATE" || command=="ALTER" || command=="DROP") plan.daoQueryType=96;
     }
 
+    if(crosstab.pivotHeadings) plan.daoQueryType=16;
     if(plan.daoQueryType==96) adaptCounterDdl(tokens,pos,plan);
     preserveComputedProjectionNames(tokens,pos);
     plan.resultTypes=typedProjectionExpressions(tokens,pos,plan.parameters,fields,functions);
+    if(crosstab.pivotHeadings) {plan.resultTypes.resize(crosstab.rowHeadings+crosstab.pivotHeadings);for(int i=crosstab.rowHeadings;i<plan.resultTypes.size();++i) plan.resultTypes[i]="INTEGER4";}
     if (tokens[pos].kind==Token::Word && tokens[pos].value.compare("UPDATE",Qt::CaseInsensitive)==0) {
         for (auto i=pos+1;i<tokens.size();++i) {
             if (tokens[i].kind==Token::Word && tokens[i].value.compare("SET",Qt::CaseInsensitive)==0) break;
