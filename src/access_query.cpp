@@ -36,7 +36,7 @@ QString renderJetTokens(const QVector<Token>& tokens);
 QString nativeScalarSqlName(const QString& source) {
     const auto name=source.toCaseFolded();
     if(name=="format$") return "linaccess_jet_format_string";
-    static const QSet<QString> names{"pv","nper","rate","sln","syd","ddb","fv","pmt","ipmt","ppmt","partition","filelen","filedatetime","curdir","lenb","sqr","exp","log","sin","cos","tan","atn","lcase","ucase","datevalue","timevalue","dateadd","dateserial","timeserial","cdate","datepart","choose","switch","val","hex","oct","space","string","asc","ascw","chr","chrw","instrrev","strreverse","datediff","year","month","day","hour","minute","second","weekday","format","formatnumber","formatcurrency","formatpercent","formatdatetime","len","rgb","qbcolor","round","ccur","iif","first","last"};
+    static const QSet<QString> names{"pv","nper","rate","sln","syd","ddb","fv","pmt","ipmt","ppmt","partition","filelen","filedatetime","curdir","lenb","sqr","exp","log","sin","cos","tan","atn","lcase","ucase","datevalue","timevalue","dateadd","dateserial","timeserial","cdate","datepart","choose","switch","val","hex","oct","space","string","asc","ascw","chr","chrw","instrrev","strreverse","datediff","year","month","day","hour","minute","second","weekday","format","formatnumber","formatcurrency","formatpercent","formatdatetime","len","rgb","qbcolor","round","ccur","iif","first","last","var","stdev"};
     return names.contains(name) ? "linaccess_jet_"+name : QString{};
 }
 
@@ -492,15 +492,16 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
             }
         }
         const QSet<QString> dates{"linaccess_jet_date_add_1","linaccess_jet_date_add_2","linaccess_jet_date_add_3","linaccess_jet_date_subtract_1","linaccess_jet_date_subtract_2","linaccess_jet_date_subtract_3","dateserial","timeserial","cdate","linaccess_jet_dateserial","linaccess_jet_timeserial","linaccess_jet_cdate","datevalue","linaccess_jet_datevalue","timevalue","linaccess_jet_timevalue","dateadd","linaccess_jet_dateadd","datevalue","linaccess_jet_datevalue","timevalue","linaccess_jet_timevalue","date","time","now"};
+        const bool statistic=function=="var" || function=="stdev" || function=="linaccess_jet_var" || function=="linaccess_jet_stdev";
         const bool fileLength=function=="filelen" || function=="linaccess_jet_filelen";
-        if(dates.contains(expression.front().value.toCaseFolded()) || fileLength || function=="filedatetime" || function=="linaccess_jet_filedatetime") {
+        if(statistic || dates.contains(expression.front().value.toCaseFolded()) || fileLength || function=="filedatetime" || function=="linaccess_jet_filedatetime") {
             if((function=="date" || function=="time" || function=="now") && expression.size()!=3) throw VbaRuntimeError(450,"Clock SQL function requires no arguments");
             int depth=0;
             for(qsizetype index=1;index<expression.size();++index) {
                 if(symbol(expression[index],"(")) ++depth;
                 else if(symbol(expression[index],")")) { if(--depth==0 && index!=expression.size()-1) return unknown; }
             }
-            if(depth==0) return {fileLength ? "INTEGER4" : expression.front().value.compare("linaccess_jet_date_subtract_3",Qt::CaseInsensitive)==0 ? "DOUBLE" : "DATETIME",expression};
+            if(depth==0) return {statistic ? "DOUBLE" : fileLength ? "INTEGER4" : expression.front().value.compare("linaccess_jet_date_subtract_3",Qt::CaseInsensitive)==0 ? "DOUBLE" : "DATETIME",expression};
             return unknown;
         }
         const bool currency=expression.front().value.compare("CCur",Qt::CaseInsensitive)==0,sum=expression.front().value.compare("Sum",Qt::CaseInsensitive)==0;

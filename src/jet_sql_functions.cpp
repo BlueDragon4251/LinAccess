@@ -15,6 +15,8 @@
 #include "vba_calendar.hpp"
 #include "vba_qt_value.hpp"
 #include "native_vba_sql.hpp"
+#include "native_report_aggregate.hpp"
+#include <memory>
 #include "vba_currency.hpp"
 #include "vba_decimal.hpp"
 #include "vba_qt_value.hpp"
@@ -562,6 +564,32 @@ void aggregateStep(sqlite3_context* context,sqlite3_value* value,bool first) noe
 }
 void firstStep(sqlite3_context* context,int,sqlite3_value** args) noexcept { aggregateStep(context,args[0],true); }
 void lastStep(sqlite3_context* context,int,sqlite3_value** args) noexcept { aggregateStep(context,args[0],false); }
+// SQLite owns only the small pointer/error slot; the C++ accumulator has its
+// normal alignment/lifetime and is destroyed even when a group fails.
+struct StatisticalState { NativeReportAggregate* aggregate; int error; };
+template<bool Deviation> void statisticalStep(sqlite3_context* context,int,sqlite3_value** args) noexcept {
+    auto& native=api();auto* state=static_cast<StatisticalState*>(native.aggregate(context,sizeof(StatisticalState)));
+    if(!state) {native.error(context,"LinAccess SQL function error 7",-1);return;}
+    if(state->error || native.type(args[0])==SQLITE_NULL) return;
+    try {
+        if(native.type(args[0])!=SQLITE_INTEGER && native.type(args[0])!=SQLITE_FLOAT)
+            throw VbaRuntimeError(13,"Statistical SQL aggregate requires numeric values");
+        if(!state->aggregate) state->aggregate=new NativeReportAggregate(Deviation ? "stdev" : "var");
+        state->aggregate->add(VbaValue::numeric(native.number(args[0])));
+    } catch(const VbaRuntimeError& failure) {state->error=failure.number;functionError(context,failure);}
+      catch(...) {state->error=7;native.error(context,"LinAccess SQL function error 7",-1);}
+}
+void statisticalFinal(sqlite3_context* context) noexcept {
+    auto& native=api();auto* state=static_cast<StatisticalState*>(native.aggregate(context,0));
+    if(!state) {native.nullResult(context);return;}
+    std::unique_ptr<NativeReportAggregate> aggregate(state->aggregate);state->aggregate=nullptr;
+    try {
+        if(state->error) throw VbaRuntimeError(state->error,"Statistical SQL aggregate failed");
+        const auto value=aggregate ? aggregate->result() : VbaValue{};
+        if(value.kind==VbaValue::Kind::Null) native.nullResult(context);else native.numberResult(context,value.number);
+    } catch(const VbaRuntimeError& failure) {functionError(context,failure);}
+      catch(...) {native.error(context,"LinAccess SQL function error 7",-1);}
+}
 struct SingleState { sqlite3_value* value; int error; bool seen; };
 bool identicalUpdateValue(sqlite3_value* left,sqlite3_value* right) noexcept {
     auto& native=api(); const auto type=native.type(left);
@@ -724,6 +752,8 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_currency_add",2,&currencyAdd,nullptr,nullptr);
     ensure("linaccess_jet_currency_subtract",2,&currencySubtract,nullptr,nullptr);
     ensure("linaccess_jet_currency_multiply",2,&currencyMultiply,nullptr,nullptr);
+    ensure("linaccess_jet_var",1,nullptr,&statisticalStep<false>,&statisticalFinal);
+    ensure("linaccess_jet_stdev",1,nullptr,&statisticalStep<true>,&statisticalFinal);
     ensure("linaccess_jet_first",1,nullptr,&firstStep,&aggregateFinal);
     ensure("linaccess_jet_last",1,nullptr,&lastStep,&aggregateFinal);
     ensure("linaccess_jet_update_value",1,nullptr,&singleStep,&singleFinal);

@@ -4436,3 +4436,15 @@ invalidieren typisierte Abfrageansichten. Details: COUNT_CROSSTAB_RUNTIME.md.
 Abschließend bestehendes SQL-Bündel3/3 bestanden (0,12s); Anwendung neu gebaut.
 Kein neuer CTest/Windows-/Original-/Gesamtsuiten-/Paketnachweis. F067/F068 bleiben
 offen; Katalog456/386 bestätigte Teilumfänge/70 offene Vollanforderungen unverändert.
+
+
+## 2026-11-09: Statistische SQL-Aggregate
+
+Var und StDev sind in echte SQL-Ausführung eingebunden, mit bestehendem nativen
+Berichts-/Domänen-Akkumulator, Double-Metadaten, n-1, Null-Auslassung und Null bei
+weniger als zwei Werten. Gruppierung/DISTINCT/Parameter und große gemeinsame
+Offsets sind geprüft; Text/BLOB13 und Überlauf6 bleiben explizit.
+SQL_STATISTICAL_AGGREGATES.md beschreibt Umfang und Microsoft-Dokumentationsbasis.
+Abschließend bestehendes SQL-Bündel4/4 bestanden (0,13s), Anwendung neu gebaut;
+keine neuen CTests oder Windows-/Original-/Gesamtsuiten-Nachweise. Noch kein neues
+Paket; folgt aus dem aktuellen Stand. F067/F068/F071 und456/386/70 unverändert.

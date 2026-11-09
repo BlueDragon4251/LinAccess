@@ -314,6 +314,26 @@ int main(int argc, char** argv) {
     catch(const linaccess::VbaRuntimeError&) { rejected = true; }
     assert(rejected);
 
+    assert(query.exec("CREATE TABLE statistical_values(group_id INTEGER,value REAL)"));
+    assert(query.exec("INSERT INTO statistical_values VALUES(1,10),(1,20),(1,NULL),(1,30),(2,1000000000001),(2,1000000000002),(2,1000000000003),(3,NULL),(4,7)"));query.finish();
+    model.execute(db,"SELECT group_id,Var(value),StDev(value) FROM statistical_values GROUP BY group_id ORDER BY group_id");
+    assert(model.rowCount()==4 && model.columnCount()==3);
+    assert(model.index(0,1).data().toDouble()==100 && model.index(0,2).data().toDouble()==10);
+    assert(model.index(1,1).data().toDouble()==1 && model.index(1,2).data().toDouble()==1);
+    for(int row=2;row<4;++row) assert(model.index(row,1).data().isNull() && model.index(row,2).data().isNull());
+    model.execute(db,"SELECT Var(value),StDev(value) FROM statistical_values WHERE 1=0");
+    assert(model.rowCount()==1 && model.index(0,0).data().isNull() && model.index(0,1).data().isNull());
+    model.execute(db,"SELECT Var(DISTINCT value),StDev(DISTINCT value) FROM statistical_values WHERE group_id=1");
+    assert(model.index(0,0).data().toDouble()==100 && model.index(0,1).data().toDouble()==10);
+    model.execute(db,"PARAMETERS minimum LONG; SELECT Var(value) FROM statistical_values WHERE group_id=1 AND value>[minimum]",{{"minimum",10}});
+    assert(model.index(0,0).data().toDouble()==50);
+    for(const auto& invalid:QStringList{"SELECT Var(label) FROM samples","SELECT StDev(value) FROM aggregate_blobs","SELECT Var(value) FROM (SELECT -1e308 AS value UNION ALL SELECT 1e308)"}) {
+        int error=0;try{model.execute(db,invalid);}catch(const linaccess::VbaRuntimeError& failure){error=failure.number;}
+        // A BLOB fixture is added below; the missing table remains a dependency error.
+        assert(error==(invalid.contains("aggregate_blobs") ? 3078 : invalid.contains("label") ? 13 : 6));
+        assert(model.rowCount()==0);
+    }
+
     assert(query.exec("CREATE TABLE aggregate_values(group_name TEXT,sequence INTEGER,value TEXT)"));
     assert(query.exec("INSERT INTO aggregate_values VALUES('a',1,NULL),('a',2,'last'),('b',1,'first'),('b',2,NULL)"));
     query.finish();
@@ -329,6 +349,7 @@ int main(int argc, char** argv) {
     assert(query.exec("CREATE TABLE aggregate_blobs(value BLOB)"));
     query.prepare("INSERT INTO aggregate_blobs VALUES(?)");
     const auto binary = QByteArray::fromHex("0001ff00"); query.addBindValue(binary); assert(query.exec()); query.finish();
+    int binaryStatError=0;try{model.execute(db,"SELECT StDev(value) FROM aggregate_blobs");}catch(const linaccess::VbaRuntimeError& failure){binaryStatError=failure.number;}assert(binaryStatError==13 && model.rowCount()==0);
     model.execute(db,"SELECT First(value),Last(value) FROM aggregate_blobs");
     assert(model.data(model.index(0,0)).toByteArray()==binary && model.data(model.index(0,1)).toByteArray()==binary);
     query.clear(); db.close(); assert(db.open());
