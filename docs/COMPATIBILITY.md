@@ -4154,3 +4154,25 @@ bleiben verweigert. Bestehende GUI-Prüfung1/1 (6,42s), App gebaut: tatsächlich
 RunCommand/VBA-Aufrufe, SQL-Abgrenzung, anderer Entwurf, neuer Zeilenfokus und Escape
 ohne fremden Datenverlust. Keine neue CTest-ID/Windows-Beobachtung. F368/F173/F168
 und456/384/72 unverändert. Direkt weiter.
+
+
+F088 hat jetzt einen ersten ausführbaren nativen Makroumfang: echter +Makro-
+Aktionseditor (anlegen/entfernen/umsortieren/speichern/wiederöffnen), Explorergruppe,
+DoCmd.RunMacro mit benannten Parametern und begrenzter Wiederholung. Acht Aktionen
+verwenden vorhandene DoCmd-Pfade; StopMacro beendet einschließlich Wiederholungen.
+Gesamte Struktur/Arity/Typen/Attribute werden vor erster Aktion geprüft, unbekannte
+Bedingungen verweigert. Aktionen behalten ihre jeweiligen Transaktionsgrenzen;
+späterer Laufzeitfehler rollt frühere erfolgreiche Aktionen nicht zurück. Diagnostik
+bewahrt Fehlernummer/-metadaten mit Makroname/Aktionsnummer. AllMacros bietet den
+bewachten vorhandenen Projektkatalog; SysCmd unterstützt nativen acMacro-Zustand.
+GUI/Layout gemeinsam2/2 (17,16s), App gebaut: echter Editor/Reopen, gespeicherte
+Definition, tatsächlicher benannter VBA-Aufruf mit dreifacher SQL-Wirkung,
+StopMacro, präventiv verweigerte spätere unbekannte/bedingte/falsch typisierte
+Aktionen, fehlendes Makro2485, bestehende SQL-Fehlernummer3078 mit Aktion2 und
+bereits erfolgreich geschriebenen früheren Zeilen, Wiederholungsgrenze und
+Katalog Count/Item/Enumeration/Name/IsLoaded geprüft. Anfänglich zu generische
+SQL-Fehlernummer3146 im Test auf den tatsächlichen bestehenden3078-Pfad korrigiert.
+Keine neue CTest-ID/Windows-Beobachtung. NATIVE_MACROS_RUNTIME.md beschreibt eigene
+Format-/Budgetgrenzen; kein Access-Makroimport. Gruppen, Bedingungen/Ausdrücke,
+RepeatExpression, Eventbindung, volle Aktionssprache und Oracle bleiben offen.
+F088/F050/F057/F148 und456/384/72 unverändert. Direkt weiter programmieren.

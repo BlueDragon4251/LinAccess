@@ -151,6 +151,8 @@ keine nachgewiesene pixelgenaue Access-2003-Oberfläche. Details: [Darstellung](
 - Auf ausgewählten Tabellen über **Ansicht → Tabellenindizes bearbeiten** normale/Unique-Indizes mit geordneten ASC-/DESC-Feldern anlegen und löschen; [Umfang und Grenzen](docs/DAO_INDEXES_RUNTIME.md)
 - Über **Ansicht → Beziehungen bearbeiten** numerische Beziehungen mit echter Integritätsprüfung/Kaskaden oder ausdrücklich ohne Integritätsprüfung verwalten; [Umfang und Grenzen](docs/DAO_RELATIONS_RUNTIME.md)
 - Gespeicherte SQL-SELECT-Abfragen
+- Native Aktionsmakros erstellen, speichern und über `DoCmd.RunMacro` ausführen;
+  Umfang und Grenzen: [Makrolaufzeit](docs/NATIVE_MACROS_RUNTIME.md).
 - Einfache tabellengebundene Formulare definieren und Datensätze damit bearbeiten
 - Pro Formular VBA-Quelltext speichern; `.bas`/`.cls`-Textdateien laden und auf
   Prozeduren bzw. Abhängigkeiten statisch untersuchen. Originalbytes importierter

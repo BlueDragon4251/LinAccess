@@ -1,6 +1,7 @@
 #include "native_schema_editor.hpp"
 #include "native_field_defaults.hpp"
 #include "mainwindow.hpp"
+#include "native_macro.hpp"
 #include "native_grid_clipboard.hpp"
 #include "native_datasheet_print.hpp"
 #include "native_datasheet_page_store.hpp"
@@ -286,6 +287,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     action("+ Abfrage", [this] { editQuery(); });
     action("+ Formular", [this] { editForm(); });
     action("+ Bericht", [this] { editReport(); });
+    action("+ Makro", [this] { editMacro(); });
     action("Aktualisieren", [this] { refreshExplorer(); });
     auto* fileMenu=menuBar()->addMenu("&Datei");
     const auto projectActions=toolbar->actions();
@@ -344,7 +346,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto* objectMenu=menuBar()->addMenu("&Einfügen");
     auto* viewMenu=menuBar()->addMenu("&Ansicht");
     menuBar()->removeAction(viewMenu->menuAction()); menuBar()->insertMenu(objectMenu->menuAction(),viewMenu);
-    for (int i=5;i<9;++i) objectMenu->addAction(projectActions[i]);
+    for (int i=5;i<10;++i) objectMenu->addAction(projectActions[i]);
     auto* renameTable=viewMenu->addAction("Tabelle &umbenennen...");renameTable->setObjectName("native-table-rename");
     connect(renameTable,&QAction::triggered,this,[this] {
         const auto* item=explorer_->currentItem();if(!item || item->data(0,Qt::UserRole).toString()!="table" || QApplication::activeModalWidget() || !db_.isOpen()) return;const auto oldName=item->text(0);
@@ -1557,6 +1559,7 @@ void MainWindow::refreshExplorer() {
     group("Abfragen", "query", objectNames("query"));
     group("Formulare", "form", objectNames("form"));
     group("Berichte", "report", objectNames("report"));
+    group("Makros", "macro", objectNames("macro"));
     QSqlQuery artifacts(db_);
     if (artifacts.exec("SELECT id,kind,name,status FROM _la_access_artifacts "
                        "ORDER BY kind,name COLLATE NOCASE")) {
@@ -1583,6 +1586,7 @@ void MainWindow::openExplorerItem(QTreeWidgetItem* item, int) {
     else if (kind == "query") editQuery(name);
     else if (kind == "form") runForm(name);
     else if (kind == "report") runReport(name);
+    else if (kind == "macro") editMacro(name);
     else if (kind == "access_artifact") showAccessArtifact(
         item->data(0, Qt::UserRole + 1).toInt());
 }
@@ -2089,6 +2093,55 @@ int MainWindow::showTable(const QString& name,bool readOnly,bool interactive,con
     if(!alive() || !registered) return 2501;
     if(!activated) { const int index=tabs_->indexOf(registered); if(index>=0) tabs_->removeTab(index); registered->deleteLater(); return 2501; }
     return 0;
+}
+
+void MainWindow::editMacro(const QString& existingName) {
+    if(!hasProject()) return;
+    const auto old=existingName.isEmpty() ? QJsonObject{} : objectDefinition("macro",existingName);
+    try {if(!existingName.isEmpty()) (void)linaccess::parseNativeMacro(old);}
+    catch(const std::exception& error) {messageError(this,QString::fromUtf8(error.what()));return;}
+    QDialog dialog(this);dialog.setObjectName("native-macro-designer");dialog.setWindowTitle("Makro bearbeiten");dialog.resize(950,520);
+    tagProjectObject(&dialog,this,db_,"macro",existingName);
+    auto* layout=new QVBoxLayout(&dialog);auto* name=new QLineEdit(existingName,&dialog);name->setObjectName("native-macro-name");name->setMaxLength(64);name->setPlaceholderText("Name des Makros");layout->addWidget(name);
+    auto* list=new QTableWidget(0,4,&dialog);list->setObjectName("native-macro-actions");list->setHorizontalHeaderLabels({"Aktion","Argument 1 (Ziel / SQL / Befehl)","Argument 2 (optional)","Argument 3 (optional)"});list->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);list->setSelectionBehavior(QAbstractItemView::SelectRows);layout->addWidget(list);
+    auto* help=new QLabel("Aktionen werden von oben nach unten ausgeführt. RunSQL: SQL und optional Ja/Nein für Transaktion; Öffnen: Objektname und optionale numerische Ansicht/Modus; RunCommand: Befehlsnummer; Requery: optionaler Steuerelementname. StopMacro beendet den Ablauf.",&dialog);help->setWordWrap(true);layout->addWidget(help);
+    auto* buttons=new QHBoxLayout;auto* add=addButton(buttons,"Aktion hinzufügen");add->setObjectName("native-macro-add");auto* remove=addButton(buttons,"Aktion entfernen");auto* up=addButton(buttons,"Nach oben");auto* down=addButton(buttons,"Nach unten");auto* save=addButton(buttons,"Speichern");save->setObjectName("native-macro-save");layout->addLayout(buttons);installDesignerSaveShortcut(dialog,save);
+    const auto append=[&](const QJsonObject& entry) {
+        const int row=list->rowCount();if(row>=256) return;list->insertRow(row);
+        auto* action=new QComboBox(list);for(const auto& signature:linaccess::nativeMacroSignatures()) action->addItem(signature.name);
+        action->setCurrentText(entry.value("action").toString("RunSQL"));list->setCellWidget(row,0,action);
+        const auto arguments=entry.value("arguments").toArray();for(int index=0;index<3;++index) {const auto value=index<arguments.size() ? arguments[index] : QJsonValue{};const auto displayed=value.isString() ? value.toString() : value.isBool() ? (value.toBool() ? QString("Ja") : QString("Nein")) : value.isDouble() ? QString::number(value.toDouble(),'g',17) : QString{};list->setItem(row,index+1,new QTableWidgetItem(displayed));}
+        QObject::connect(action,&QComboBox::currentTextChanged,&dialog,[&dialog] {dialog.setWindowModified(true);if(auto* status=dialog.findChild<QLabel*>("native-designer-save-status")) status->setText("Nicht gespeicherte Änderungen");});list->setCurrentCell(row,1);
+    };
+    if(old.isEmpty()) append({});else for(const auto& entry:old.value("actions").toArray()) append(entry.toObject());
+    QObject::connect(add,&QPushButton::clicked,&dialog,[&] {append({});});
+    QObject::connect(remove,&QPushButton::clicked,&dialog,[&] {if(list->currentRow()>=0) list->removeRow(list->currentRow());});
+    const auto move=[&](int distance) {const int row=list->currentRow(),target=row+distance;if(row<0 || target<0 || target>=list->rowCount()) return;auto* first=qobject_cast<QComboBox*>(list->cellWidget(row,0));auto* second=qobject_cast<QComboBox*>(list->cellWidget(target,0));const auto action=first->currentText();first->setCurrentText(second->currentText());second->setCurrentText(action);for(int column=1;column<4;++column) {const auto value=list->item(row,column)->text();list->item(row,column)->setText(list->item(target,column)->text());list->item(target,column)->setText(value);}list->setCurrentCell(target,1);};
+    QObject::connect(up,&QPushButton::clicked,&dialog,[&] {move(-1);});QObject::connect(down,&QPushButton::clicked,&dialog,[&] {move(1);});
+    QObject::connect(save,&QPushButton::clicked,&dialog,[&] {
+        try {
+            if(!linaccess::nativeMacroNameValid(name->text().trimmed())) throw linaccess::VbaRuntimeError(5,"Ungültiger Makroname; Makrogruppen werden noch nicht unterstützt.");
+            QJsonArray actions;
+            for(int row=0;row<list->rowCount();++row) {
+                const auto action=qobject_cast<QComboBox*>(list->cellWidget(row,0))->currentText();const linaccess::NativeMacroSignature* signature=nullptr;for(const auto& candidate:linaccess::nativeMacroSignatures()) if(candidate.name==action) signature=&candidate;
+                if(!signature) throw linaccess::VbaRuntimeError(3251,"Unbekannte Makroaktion.");
+                int count=signature->required;for(int index=0;index<3;++index) if(!list->item(row,index+1)->text().isEmpty()) count=index+1;
+                if(count>signature->types.size()) throw linaccess::VbaRuntimeError(450,"Zu viele Argumente für die Makroaktion.");
+                QJsonArray arguments;
+                for(int index=0;index<count;++index) {
+                    const auto value=list->item(row,index+1)->text(),type=signature->types[index];
+                    if(type=="text") arguments.append(value);
+                    else if(type=="boolean") {if(value.compare("Ja",Qt::CaseInsensitive)==0 || value.compare("True",Qt::CaseInsensitive)==0) arguments.append(true);else if(value.compare("Nein",Qt::CaseInsensitive)==0 || value.compare("False",Qt::CaseInsensitive)==0) arguments.append(false);else throw linaccess::VbaRuntimeError(13,"Transaktion erfordert Ja oder Nein.");}
+                    else {bool valid=false;const auto integer=value.toLongLong(&valid);if(!valid || integer<std::numeric_limits<qint32>::min() || integer>std::numeric_limits<qint32>::max()) throw linaccess::VbaRuntimeError(13,"Makroargument erfordert eine 32-Bit-Ganzzahl.");arguments.append(static_cast<int>(integer));}
+                }
+                actions.append(QJsonObject{{"action",action},{"arguments",arguments}});
+            }
+            const QJsonObject definition{{"version",1},{"actions",actions}};(void)linaccess::parseNativeMacro(definition);
+            QSqlQuery conflicts(db_);conflicts.prepare("SELECT name FROM main._la_objects WHERE kind='macro' AND name=? COLLATE NOCASE AND name<>?");conflicts.addBindValue(name->text().trimmed());conflicts.addBindValue(name->text().trimmed());if(!conflicts.exec()) throw linaccess::VbaRuntimeError(3146,"Makrokatalog konnte nicht geprüft werden.");if(conflicts.next()) throw linaccess::VbaRuntimeError(3251,"Makroname ist bereits mit anderer Groß-/Kleinschreibung vorhanden.");
+            if(saveObject("macro",name->text(),definition)) {tagProjectObject(&dialog,this,db_,"macro",name->text().trimmed());completeDesignerSave(dialog,name->text().trimmed());}
+        } catch(const std::exception& error) {messageError(&dialog,QString::fromUtf8(error.what()));}
+    });
+    trackDesignerChanges(dialog);dialog.exec();
 }
 
 void MainWindow::editQuery(const QString& existingName) {

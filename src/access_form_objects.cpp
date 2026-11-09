@@ -1,4 +1,5 @@
 #include "access_form_objects.hpp"
+#include "native_macro.hpp"
 #include "access_list_box.hpp"
 #include "access_value_list.hpp"
 #include "jet_sql_functions.hpp"
@@ -1393,6 +1394,7 @@ public:
         if(key=="quit") return Signature{{"Options"},0};
         if(key=="runsql") return Signature{{"SQLStatement","UseTransaction"},1};
         if(key=="runcommand") return Signature{{"Command"},1};
+        if(key=="runmacro") return Signature{{"MacroName","RepeatCount","RepeatExpression"},1};
         if(key=="sendkeys") return Signature{{"Keys","Wait"},1};
         if(key=="findrecord") return Signature{{"FindWhat","Match","MatchCase","Search","SearchAsFormatted","OnlyCurrentField","FindFirst"},1};
         if(key=="gotocontrol") return Signature{{"ControlName"},1};
@@ -1405,6 +1407,23 @@ public:
         auto& preview=checked(); const auto key=text(name).toCaseFolded();
         if (key=="domenuitem" || key=="runcommand" || key=="sendkeys" || key=="findrecord" || key=="gotorecord" || key=="requery" || key=="maximize" || key=="minimize" || key=="restore" || key=="runsql" || key=="selectobject")
             return dispatchPreviewDocumentCommand(preview,key.toStdString(),args);
+        if(key=="runmacro") {
+            if(args.empty() || args.size()>3) throw linaccess::VbaRuntimeError(450,"RunMacro requires a name and optional repeat count");
+            const auto scalar=[&](const linaccess::VbaValue& value) {const auto result=linaccess::scalarVbaValue(value);(void)checked();return result;};
+            const auto macro=linaccess::coerceVbaModuleValue(scalar(args[0]),"string");
+            const auto count=args.size()>1 && args[1].kind!=linaccess::VbaValue::Kind::Missing ? linaccess::coerceVbaModuleValue(scalar(args[1]),"long").number : 1;
+            if(args.size()>2 && args[2].kind!=linaccess::VbaValue::Kind::Missing) throw linaccess::VbaRuntimeError(3251,"RunMacro RepeatExpression is not implemented");
+            if(count<1 || count>1000) throw linaccess::VbaRuntimeError(3251,"Native macro repeat count requires 1 to 1000");
+            const auto actions=linaccess::loadNativeMacro(checked().db_,text(macro.asText()));
+            if(count*actions.size()>10000) throw linaccess::VbaRuntimeError(3251,"Native macro action budget exceeded");
+            for(int repeat=0;repeat<count;++repeat) for(int index=0;index<actions.size();++index) {
+                (void)checked();if(linaccess::vbaExecutionStopRequested()) throw linaccess::VbaExecutionStopped{};
+                const auto& action=actions[index];if(action.name=="StopMacro") return {};
+                try { (void)member(action.name.toStdString(),action.arguments); }
+                catch(const linaccess::VbaRuntimeError& error) {throw linaccess::VbaRuntimeError(error.number,"Makro "+macro.asText()+", Aktion "+std::to_string(index+1)+" ("+action.name.toStdString()+"): "+error.what(),error.source,error.helpFile,error.helpContext);}
+            }
+            return {};
+        }
         if(key=="echo") return linaccess::nativeEcho(preview,args);
         if(key=="hourglass") {
             if(args.size()!=1 || args[0].kind==linaccess::VbaValue::Kind::Missing) throw linaccess::VbaRuntimeError(450,"Hourglass requires one Boolean argument");
@@ -1576,16 +1595,16 @@ public:
     std::string_view className() const override { return "CurrentProject"; }
     std::optional<linaccess::VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         const auto key=text(name).toCaseFolded();
-        if(key=="allforms" || key=="allreports") return linaccess::VbaArgumentSignature{{"Index"},0};
+        if(key=="allforms" || key=="allreports" || key=="allmacros") return linaccess::VbaArgumentSignature{{"Index"},0};
         return {};
     }
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         check();
         const auto key=text(name).toCaseFolded();
-        if(key=="allforms" || key=="allreports") {
-            auto& cache=key=="allforms" ? forms_ : reports_;
+        if(key=="allforms" || key=="allreports" || key=="allmacros") {
+            auto& cache=key=="allforms" ? forms_ : key=="allreports" ? reports_ : macros_;
             auto catalog=cache.lock();
-            if(!catalog) { catalog=makeNativeProjectCatalog(shared_from_this(),key=="allforms" ? "form" : "report"); cache=catalog; }
+            if(!catalog) { catalog=makeNativeProjectCatalog(shared_from_this(),key=="allforms" ? "form" : key=="allreports" ? "report" : "macro"); cache=catalog; }
             return args.empty() ? linaccess::VbaValue::reference(catalog) : catalog->member("Item",args);
         }
         if(!args.empty()) throw linaccess::VbaRuntimeError(450,"CurrentProject property requires no arguments");
@@ -1693,7 +1712,7 @@ private:
     QPointer<QObject> owner_;
     bool hasOwner_{};
     qulonglong generation_{};
-    std::weak_ptr<linaccess::VbaObject> forms_,reports_,data_;
+    std::weak_ptr<linaccess::VbaObject> forms_,reports_,macros_,data_;
 };
 
 class NativeProjectCatalogObject;
@@ -1714,6 +1733,7 @@ public:
     std::string_view className() const override {
         if(kind_=="table") return "AllTables";
         if(kind_=="query") return "AllQueries";
+        if(kind_=="macro") return "AllMacros";
         return kind_=="form" ? "AllForms" : "AllReports";
     }
     std::optional<linaccess::VbaArgumentSignature> argumentSignature(std::string_view name) const override {
@@ -1815,7 +1835,7 @@ public:
                 const auto type=linaccess::coerceVbaModuleValue(linaccess::scalarVbaValue(args[1]),"long").number;
                 const auto objectName=linaccess::coerceVbaModuleValue(linaccess::scalarVbaValue(args[2]),"string").asText();
                 if(objectName.find('\0')!=std::string::npos) throw linaccess::VbaRuntimeError(5,"Invalid object name");
-                const QStringList kinds{"table","query","form","report"};
+                const QStringList kinds{"table","query","form","report","macro"};
                 if(type<0 || type>=kinds.size()) throw linaccess::VbaRuntimeError(3251,"GetObjectState object type is not implemented");
                 auto project=std::dynamic_pointer_cast<NativeCurrentProjectObject>(member("CurrentProject",{}).object);
                 if(!project) throw linaccess::VbaRuntimeError(3420,"Native project context unavailable");

@@ -1,4 +1,5 @@
 #include "native_schema_editor.hpp"
+#include "native_macro.hpp"
 #include "native_stored_form.hpp"
 #include "native_stored_report.hpp"
 #include <QDateTime>
@@ -2478,6 +2479,54 @@ void exerciseDateDefaultBuffers() {
     AccessFormPreview form(stored.name,stored.layout,stored.code,db,nullptr,false,{},std::nullopt,0,0);form.show();QApplication::processEvents();assert(form.hasDataSource());auto* moment=form.findChild<QLineEdit*>("access-control-Moment");assert(moment && !moment->text().isEmpty());const auto formDefault=moment->text();std::vector<VbaValue> arguments;const auto result=form.executeProcedure("StoreDate",arguments);if(result.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Date form: "<<result.explanation<<"\n";assert(result.status==linaccess::VbaExecutionStatus::Completed);assert(sql.exec("SELECT Moment FROM [Date UI rows] WHERE ID=2") && sql.next() && sql.value(0).toString()==formDefault);sql.finish();assert(form.close());
 }
 
+void testNativeMacros(MainWindow& window,QSqlDatabase db) {
+    using linaccess::VbaValue;QSqlQuery sql(db);assert(sql.exec("CREATE TABLE native_macro_effects(n INTEGER)"));
+    QTimer::singleShot(0,&window,[&] {
+        auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-macro-designer");
+        dialog->findChild<QLineEdit*>("native-macro-name")->setText("Native Macro");auto* rows=dialog->findChild<QTableWidget*>("native-macro-actions");assert(rows && rows->rowCount()==1);
+        rows->item(0,1)->setText("INSERT INTO native_macro_effects VALUES(1)");rows->item(0,2)->setText("Ja");dialog->findChild<QPushButton*>("native-macro-save")->click();
+    });action(window,"+ Makro")->trigger();
+    assert(linaccess::loadNativeMacro(db,"native macro").size()==1);
+    auto* explorer=window.findChild<QTreeWidget*>("database-explorer");bool listed=false;QTreeWidgetItem* macroItem=nullptr;
+    for(int group=0;group<explorer->topLevelItemCount();++group) for(int index=0;index<explorer->topLevelItem(group)->childCount();++index) {auto* item=explorer->topLevelItem(group)->child(index);if(item->data(0,Qt::UserRole).toString()=="macro" && item->text(0)=="Native Macro") {listed=true;macroItem=item;}}
+    assert(listed && macroItem);QTimer::singleShot(0,&window,[&] {auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-macro-designer");auto* rows=dialog->findChild<QTableWidget*>("native-macro-actions");assert(rows && rows->item(0,1)->text()=="INSERT INTO native_macro_effects VALUES(1)");dialog->reject();});QMetaObject::invokeMethod(explorer,"itemDoubleClicked",Qt::DirectConnection,Q_ARG(QTreeWidgetItem*,macroItem),Q_ARG(int,0));
+    const QByteArray code=R"VBA(Sub RepeatMacro()
+DoCmd.RunMacro RepeatCount:=3,MacroName:="Native Macro"
+End Sub
+Sub UnsupportedExpression()
+DoCmd.RunMacro "Native Macro",1,True
+End Sub
+Sub MissingMacro()
+DoCmd.RunMacro "No Such Macro"
+End Sub)VBA";
+    AccessFormPreview form("native_macro_context","Begin Form\nBegin Section\nEnd\nEnd",code,db,&window);form.show();QApplication::processEvents();std::vector<VbaValue> args;
+    assert(form.executeProcedure("RepeatMacro",args).status==linaccess::VbaExecutionStatus::Completed);
+    assert(sql.exec("SELECT COUNT(*),SUM(n) FROM native_macro_effects") && sql.next() && sql.value(0).toInt()==3 && sql.value(1).toInt()==3);sql.finish();
+    assert(form.executeProcedure("UnsupportedExpression",args).errorNumber==3251 && form.executeProcedure("MissingMacro",args).errorNumber==2485);
+    auto application=makePreviewApplicationObject(form);auto macros=application->member("CurrentProject",{}).object->member("AllMacros",{}).object;
+    assert(macros->member("Count",{}).number==1 && macros->enumerate().size()==1);
+    auto descriptor=macros->member("Item",{VbaValue::string("native macro")}).object;
+    assert(descriptor->member("Name",{}).asText()=="Native Macro" && !descriptor->member("IsLoaded",{}).truthy());
+    assert(application->member("SysCmd",{VbaValue::integer(10),VbaValue::integer(4),VbaValue::string("Native Macro")}).number==0);
+    auto commands=makePreviewApplicationObject(form)->member("DoCmd",{}).object;
+    const auto store=[&](const QString& name,const QJsonArray& actions) {QSqlQuery insert(db);insert.prepare("INSERT INTO _la_objects(kind,name,definition) VALUES('macro',?,?)");insert.addBindValue(name);insert.addBindValue(QJsonDocument(QJsonObject{{"version",1},{"actions",actions}}).toJson(QJsonDocument::Compact));assert(insert.exec());};
+    const QJsonObject write{{"action","RunSQL"},{"arguments",QJsonArray{"INSERT INTO native_macro_effects VALUES(2)"}}};
+    store("stopped",{write,QJsonObject{{"action","StopMacro"},{"arguments",QJsonArray{}}},write});commands->member("RunMacro",{VbaValue::string("stopped"),VbaValue::integer(3)});
+    assert(sql.exec("SELECT COUNT(*),SUM(n) FROM native_macro_effects") && sql.next() && sql.value(0).toInt()==4 && sql.value(1).toInt()==5);sql.finish();
+    store("invalid",{write,QJsonObject{{"action","UnsupportedAction"},{"arguments",QJsonArray{}}}});
+    int error=0;try {commands->member("RunMacro",{VbaValue::string("invalid")});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==3251);
+    store("conditional",{write,QJsonObject{{"action","RunSQL"},{"arguments",QJsonArray{"INSERT INTO native_macro_effects VALUES(3)"}},{"condition",false}}});
+    error=0;try {commands->member("RunMacro",{VbaValue::string("conditional")});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==3251);
+    store("typed_invalid",{write,QJsonObject{{"action","RunCommand"},{"arguments",QJsonArray{1.5}}}});
+    error=0;try {commands->member("RunMacro",{VbaValue::string("typed_invalid")});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==13);
+    assert(sql.exec("SELECT COUNT(*) FROM native_macro_effects") && sql.next() && sql.value(0).toInt()==4);sql.finish();
+    store("sql_failure",{write,QJsonObject{{"action","RunSQL"},{"arguments",QJsonArray{"INSERT INTO native_macro_missing VALUES(1)"}}}});
+    error=0;QString description;try {commands->member("RunMacro",{VbaValue::string("sql_failure")});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;description=QString::fromUtf8(failure.what());}assert(error==3078 && description.contains("Aktion 2 (RunSQL)"));
+    assert(sql.exec("SELECT COUNT(*),SUM(n) FROM native_macro_effects") && sql.next() && sql.value(0).toInt()==5 && sql.value(1).toInt()==7);sql.finish();
+    error=0;try {commands->member("RunMacro",{VbaValue::string("Native Macro"),VbaValue::longInteger(1001)});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==3251);
+    assert(form.close());
+}
+
 void testEditableControlFormats(MainWindow& window,QSqlDatabase db) {
     using linaccess::VbaValue;
     auto database=linaccess::makeDaoDatabase(db);auto table=database->member("CreateTableDef",{VbaValue::string("format_edit")}).object;
@@ -3380,6 +3429,7 @@ End Sub
         const auto closing=std::make_shared<ScalarFormatValue>();closing->callback=[&form] {assert(form.close());};expect([&] {writable->assign("Value",VbaValue::reference(closing));},2450);assert(closing->reads==1);
     }
     testEditableControlFormats(window,db);
+    testNativeMacros(window,db);
     assert(window.close()); dispose(); watchdog.stop();
     std::cout<<"Main window: native project/explorer opening, independent nonmodal form/report lifetime, deduplication, modal metadata, cancellation, SQL save and retained close/MsgBox passed\n";
 }

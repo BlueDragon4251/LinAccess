@@ -1,0 +1,72 @@
+#pragma once
+#include "vba_runtime.hpp"
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QSqlDatabase>
+#include <QSqlQuery>
+#include <QSqlError>
+#include <QStringList>
+#include <QVector>
+#include <cmath>
+#include <limits>
+namespace linaccess {
+struct NativeMacroSignature {QString name;QStringList types;int required;};
+inline const QVector<NativeMacroSignature>& nativeMacroSignatures() {
+    static const QVector<NativeMacroSignature> signatures{
+        {"RunSQL",{"text","boolean"},1},{"OpenTable",{"text","long","long"},1},
+        {"OpenQuery",{"text","long","long"},1},{"OpenForm",{"text","long"},1},
+        {"OpenReport",{"text","long"},1},{"RunCommand",{"long"},1},
+        {"Requery",{"text"},0},{"StopMacro",{},0}};
+    return signatures;
+}
+inline bool nativeMacroNameValid(const QString& name) {
+    return !name.trimmed().isEmpty() && name.size()<=64 && name.isValidUtf16() && !name.contains(QChar(0)) && !name.contains('.');
+}
+struct NativeMacroAction {QString name;std::vector<VbaValue> arguments;};
+inline QVector<NativeMacroAction> parseNativeMacro(const QJsonObject& definition) {
+    if(definition.size()!=2) throw VbaRuntimeError(3251,"Unknown native macro attributes are not supported");
+    if(definition.value("version")!=QJsonValue(1) || !definition.value("actions").isArray()) throw VbaRuntimeError(3251,"Unsupported native macro definition");
+    if(QJsonDocument(definition).toJson(QJsonDocument::Compact).size()>1024*1024) throw VbaRuntimeError(3035,"Native macro size limit exceeded");
+    const auto entries=definition.value("actions").toArray();
+    if(entries.isEmpty() || entries.size()>256) throw VbaRuntimeError(3251,"Native macros require 1 to 256 actions");
+    QVector<NativeMacroAction> actions;
+    for(const auto& entry:entries) {
+        if(!entry.isObject()) throw VbaRuntimeError(13,"Invalid native macro action");
+        const auto object=entry.toObject();if(object.size()!=2) throw VbaRuntimeError(3251,"Native macro conditions or other action attributes are not supported");const auto name=object.value("action").toString();
+        const NativeMacroSignature* signature=nullptr;
+        for(const auto& candidate:nativeMacroSignatures()) if(candidate.name.compare(name,Qt::CaseInsensitive)==0) {signature=&candidate;break;}
+        if(!signature) throw VbaRuntimeError(3251,"Native macro action is not implemented");
+        if(!object.value("arguments").isArray()) throw VbaRuntimeError(13,"Native macro arguments require a list");
+        const auto arguments=object.value("arguments").toArray();
+        if(arguments.size()<signature->required || arguments.size()>signature->types.size()) throw VbaRuntimeError(450,"Native macro action argument count invalid");
+        NativeMacroAction action{signature->name,{}};
+        for(int index=0;index<arguments.size();++index) {
+            const auto value=arguments[index];const auto type=signature->types[index];
+            if(type=="text" && value.isString()) {
+                const auto text=value.toString();if(text.size()>262144 || !text.isValidUtf16() || text.contains(QChar(0))) throw VbaRuntimeError(5,"Invalid native macro text");
+                if(index==0 && signature->required && text.trimmed().isEmpty()) throw VbaRuntimeError(5,"Native macro target cannot be empty");
+                action.arguments.push_back(VbaValue::string(text.toUtf8().toStdString()));
+            } else if(type=="boolean" && value.isBool()) action.arguments.push_back(VbaValue::logical(value.toBool()));
+            else if(type=="long" && value.isDouble() && std::isfinite(value.toDouble()) && std::trunc(value.toDouble())==value.toDouble()
+                && value.toDouble()>=std::numeric_limits<qint32>::min() && value.toDouble()<=std::numeric_limits<qint32>::max()) action.arguments.push_back(VbaValue::longInteger(static_cast<qint32>(value.toDouble())));
+            else throw VbaRuntimeError(13,"Native macro action argument type invalid");
+        }
+        actions.push_back(std::move(action));
+    }
+    return actions;
+}
+inline QVector<NativeMacroAction> loadNativeMacro(QSqlDatabase database,const QString& name) {
+    if(!nativeMacroNameValid(name)) throw VbaRuntimeError(3251,"Macro groups or invalid native macro names are not supported");
+    QSqlQuery query(database);query.prepare("SELECT definition FROM main._la_objects WHERE kind='macro' AND name=? COLLATE NOCASE LIMIT 2");query.addBindValue(name);
+    if(!query.exec()) throw VbaRuntimeError(3146,"Native macro catalog unavailable");
+    if(!query.next()) throw VbaRuntimeError(2485,"Native macro not found");
+    const auto bytes=query.value(0).toByteArray();
+    if(query.next()) throw VbaRuntimeError(3251,"Native macro name is ambiguous");
+    if(query.lastError().isValid()) throw VbaRuntimeError(3146,"Native macro catalog read failed");
+    if(bytes.size()>1024*1024) throw VbaRuntimeError(3035,"Native macro size limit exceeded");
+    QJsonParseError error;const auto document=QJsonDocument::fromJson(bytes,&error);
+    if(error.error!=QJsonParseError::NoError || !document.isObject()) throw VbaRuntimeError(13,"Invalid native macro document");
+    return parseNativeMacro(document.object());
+}
+}
