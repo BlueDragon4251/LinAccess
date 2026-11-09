@@ -18,7 +18,7 @@ namespace linaccess {
 struct NativeMacroSignature {QString name;QStringList types;int required;};
 inline const QVector<NativeMacroSignature>& nativeMacroSignatures() {
     static const QVector<NativeMacroSignature> signatures{
-        {"RepaintObject",{"long","text"},0},{"SetValue",{"text","text"},2},{"GoToControl",{"text"},1},{"Hourglass",{"boolean"},1},{"FindRecord",{"text","long","boolean","long","boolean","long","boolean"},1},{"GoToRecord",{"long","text","long","long"},0},{"MessageBox",{"text","boolean","text","text"},1},{"RunSQL",{"text","boolean"},1},{"OpenTable",{"text","long","long"},1},
+        {"ApplyFilter",{"text","text"},0},{"ShowAllRecords",{},0},{"RepaintObject",{"long","text"},0},{"SetValue",{"text","text"},2},{"GoToControl",{"text"},1},{"Hourglass",{"boolean"},1},{"FindRecord",{"text","long","boolean","long","boolean","long","boolean"},1},{"GoToRecord",{"long","text","long","long"},0},{"MessageBox",{"text","boolean","text","text"},1},{"RunSQL",{"text","boolean"},1},{"OpenTable",{"text","long","long"},1},
         {"OpenQuery",{"text","long","long"},1},{"OpenForm",{"text","long","text","text","long","long","text"},1},
         {"OpenReport",{"text","long","text","text","long","text"},1},{"RunCommand",{"long"},1},
         {"SelectObject",{"long","text","boolean"},2},{"Close",{"long","text","long"},0},{"DeleteObject",{"long","text"},2},{"Rename",{"text","long","text"},3},{"RunCode",{"text"},1},{"Echo",{"boolean","text"},1},{"Requery",{"text"},0},{"StopAllMacros",{},0},{"StopMacro",{},0},{"CancelEvent",{},0},{"RunMacro",{"text","long","text"},1}};
@@ -87,6 +87,7 @@ inline QVector<NativeMacroAction> parseNativeMacro(const QJsonObject& definition
                     if(index==0) {if(text.size()>255) throw VbaRuntimeError(5,"MessageBox message argument exceeds 255 characters");if(text.startsWith('=' ) && !validVbaExpression(text.mid(1).toUtf8().toStdString())) throw VbaRuntimeError(3251,"MessageBox expression syntax unsupported");}
                     if(index==2 && !QStringList{"none","critical","warning?","warning!","information",""}.contains(text.toCaseFolded())) throw VbaRuntimeError(5,"MessageBox requires a supported named message type");
                 }
+                if(signature->name=="ApplyFilter" && index==1 && text.size()>256) throw VbaRuntimeError(5,"ApplyFilter macro condition exceeds 256 characters");
                 if(signature->name=="SetValue") {if(index==0) (void)nativeMacroSetValueTarget(text);else (void)nativeMacroSetValueExpression(text);}
                 if(signature->name=="RunCode") (void)nativeMacroFunctionName(text);
                 if(signature->name=="RunMacro" && index==2) (void)nativeMacroRepeatExpression(text);

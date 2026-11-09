@@ -4828,3 +4828,23 @@ JOIN/NULL/Zähler, Payload/Rechten/Build-ID/fehlenden Fixtures geprüft. Uploads
 und Fixtures4/4 hashgleich. Keine neue CTest-ID/Gesamtsuite/Windows-Beobachtung.
 F056/F050/F088/F052 und456/384/72 unverändert.
 Direkt weiter mit echten ApplyFilter-/ShowAllRecords-Dokumentfiltern.
+
+
+## Fortschreibung 2026-11-09: tatsächliche Dokumentfilter
+Gemeinsamer nativer Filterweg für echte Datenblatt-Dialoge und DoCmd/Makro
+ApplyFilter/ShowAllRecords beider Hosts. Jet-Prädikat ohne zusätzliche Klauseln/
+Subqueries; VBA32768/Makro256 UTF-16-Grenzen, Null94, benannte Filter3251. Tabellen
+behalten Entwürfe (Filterwechsel2501), bearbeitbare Abfragen behalten Basis-WHERE.
+Readonly-Ergebnisse verwenden tatsächliche Quelle/Parameter und werden erst nach
+Erfolg ausgetauscht; Requery behält Filter. Formulare nutzen vorhandenen atomaren
+Filter-/Validierungsweg; Berichte nur tatsächliches gebundenes Open-Ereignis,
+Kontext nach Verschachtelung wiederhergestellt. DATASHEET_FILTER_RUNTIME.md.
+App gebaut; abschließende GUI1/1 (8,62s), Layout1/1 (11,77s) bestanden. Prüffall
+sortiert technische Tabellen ausdrücklich statt Qt-Standardreihenfolge zu raten.
+Wiederherstellung berücksichtigt Qt: nach fehlgeschlagener Selektion ist Query
+inaktiv und setFilter allein selektiert nicht erneut; explizite Auswahl ohne
+doppelte erfolgreiche SQL-Ausführung. Reale UI/Cancel/SQL/Dirty/LIKE/Datum/
+Parameter-/Abfrage-/Makro-/Form-/Report-Open-Prüfungen, kein neues CTest-Ziel.
+Keine Gesamtsuite/Windows-Beobachtung/neue Paketprüfung; DEB073c20a, Original
+zuletzt073c20a1/1 (124,97s), erwartetes F129/3075 unverändert offen.
+F080/F056/F052/F088/F087 und456/384/72 unverändert.

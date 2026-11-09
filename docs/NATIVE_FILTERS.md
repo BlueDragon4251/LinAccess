@@ -44,3 +44,9 @@ all focus/reentrant/nested event sequences, report NoData/requery ordering and
 persisting runtime filter changes through the designer remain open. There is
 no Microsoft Access UI/event/result oracle. Existing row/budget limits still
 apply; this package does not establish complete Kassa workflows.
+
+
+Native ApplyFilter/ShowAllRecords and actual datasheet filter dialogs now share
+the checked document controller. See [DATASHEET_FILTER_RUNTIME.md](DATASHEET_FILTER_RUNTIME.md).
+Existing mainwindow_documents8.62s and access_2003_layouts11.77s pass; saved named
+filters, complete events/locale/persistence and the Access oracle remain open.

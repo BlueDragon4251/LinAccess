@@ -1,4 +1,5 @@
 #include "access_form_objects.hpp"
+#include "access_query.hpp"
 #include "native_macro.hpp"
 #include "native_macro_runner.hpp"
 #include "native_macro_message_box.hpp"
@@ -931,6 +932,10 @@ class PreviewFormObject final : public linaccess::VbaObject, private PreviewObje
 public:
     explicit PreviewFormObject(AccessFormPreview& preview) : PreviewObjectBase(preview),report_(preview.layout_.kind==linaccess::AccessDocumentKind::Report) {}
     bool isNativeType(std::string_view type) const override { return type==(report_ ? "access.report" : "access.form"); }
+    void applyNativeFilter(const QString& criteria,bool clear) {
+        auto& preview=checked();if(report_ && (clear || preview.property("la_bound_event_name").toString().compare("report_open",Qt::CaseInsensitive)!=0)) throw linaccess::VbaRuntimeError(2046,"Report filters require the actual Open event");
+        preview.setFilterState(clear ? preview.filter_ : criteria,!clear);(void)checked();
+    }
     linaccess::VbaValue defaultMember(const std::vector<linaccess::VbaValue>& args,bool reference) override {
         if (args.size()!=1) throw linaccess::VbaRuntimeError(450,"Form default member requires one control");
         const auto control=makePreviewControlsObject(checked())->member("Item",args);
@@ -1441,6 +1446,8 @@ public:
         if(key=="openreport") return Signature{{"ReportName","View","FilterName","WhereCondition","WindowMode","OpenArgs"},1};
         if(key=="close") return Signature{{"ObjectType","ObjectName","Save"},0};
         if(key=="repaintobject") return Signature{{"ObjectType","ObjectName"},0};
+        if(key=="applyfilter") return Signature{{"FilterName","WhereCondition"},0};
+        if(key=="showallrecords") return Signature{{},0};
         if(key=="gotorecord") return Signature{{"ObjectType","ObjectName","Record","Offset"},0};
         if(key=="quit") return Signature{{"Options"},0};
         if(key=="runsql") return Signature{{"SQLStatement","UseTransaction"},1};
@@ -1464,6 +1471,7 @@ public:
             if(!preview.property("la_bound_event_can_cancel").toBool()) throw linaccess::VbaRuntimeError(3251,"CancelEvent requires a supported cancellable event");
             preview.setProperty("la_bound_event_cancelled",true);return {};
         }
+        if(key=="applyfilter" || key=="showallrecords") {std::vector<linaccess::VbaValue> values;for(const auto& argument:args) {values.push_back(linaccess::scalarVbaValue(argument));(void)checked();}return nativeProjectApplyFilter(preview.db_,&preview,values,key=="showallrecords",&preview);}
         if(key=="repaintobject") {std::vector<linaccess::VbaValue> values;for(const auto& argument:args) {values.push_back(linaccess::scalarVbaValue(argument));(void)checked();}return nativeProjectRepaintObject(preview.db_,&preview,values,&preview);}
         if(key=="runmacro") {
             enterNativeUiExecution();const auto leave=qScopeGuard([] {leaveNativeUiExecution();});
@@ -2023,4 +2031,17 @@ linaccess::VbaValue nativeProjectRepaintObject(QSqlDatabase database,QWidget* ow
     if(!selected && type==-1 && !AccessFormPreview::databaseWindowActive() && caller) selected=caller;
     if(selected) {(void)makePreviewFormObject(*selected)->member("Repaint",{});guard();return VbaValue::empty();}
     if(type!=-1) throw VbaRuntimeError(type==3 ? 2451 : 2450,"Requested repaint document is not open");if(!dispatch(-1)) throw VbaRuntimeError(2046,"No active native object to repaint");guard();return VbaValue::empty();
+}
+
+linaccess::VbaValue nativeProjectApplyFilter(QSqlDatabase database,QWidget* owner,const std::vector<linaccess::VbaValue>& args,bool clear,AccessFormPreview* caller) {
+    using linaccess::VbaValue;using linaccess::VbaRuntimeError;auto guard=nativeDocumentProjectGuard(database,owner);guard();if(args.size()>(clear ? 0 : 2)) throw VbaRuntimeError(450,"Invalid filter command argument count");
+    const auto argument=[&](std::size_t index) {if(index>=args.size() || args[index].kind==VbaValue::Kind::Missing || args[index].kind==VbaValue::Kind::Empty) return QString{};if(args[index].kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"Invalid Null filter argument");return QString::fromStdString(linaccess::coerceVbaModuleValue(args[index],"string").asText());};
+    const auto named=argument(0);const auto criteria=argument(1).trimmed();if(!named.trimmed().isEmpty()) throw VbaRuntimeError(3251,"Saved named filters are not implemented");if(!clear && criteria.isEmpty()) throw VbaRuntimeError(5,"ApplyFilter requires a filter condition");(void)linaccess::accessWhereClause(criteria);
+    enterNativeUiExecution();const auto leave=qScopeGuard([] {leaveNativeUiExecution();});QPointer<AccessFormPreview> selected;
+    if(caller && caller->property("la_bound_event_name").toString().endsWith("_Open",Qt::CaseInsensitive)) selected=caller;
+    if(!selected) for(const auto& document:nativeLoadedProjectDocuments(database,owner)) if(document && document==activePreviewDocument()) selected=document;
+    if(!selected && caller && !AccessFormPreview::databaseWindowActive()) selected=caller;
+    if(selected) {auto form=std::dynamic_pointer_cast<PreviewFormObject>(makePreviewFormObject(*selected));if(!form) throw VbaRuntimeError(2450,"Native filter document is unavailable");form->applyNativeFilter(criteria,clear);guard();return VbaValue::empty();}
+    QWidget* project=nullptr;for(auto* widget=owner;widget;widget=widget->parentWidget()) if(qobject_cast<QMainWindow*>(widget)) {project=widget;break;}
+    QVariantMap result;if(!project || project->metaObject()->indexOfMethod("filterDatasheet(QString,bool)")<0 || !QMetaObject::invokeMethod(project,"filterDatasheet",Qt::DirectConnection,Q_RETURN_ARG(QVariantMap,result),Q_ARG(QString,criteria),Q_ARG(bool,clear))) throw VbaRuntimeError(2046,"No actual native filter context");if(const int error=result.value("error").toInt()) throw VbaRuntimeError(error,result.value("description").toString().toStdString());guard();return VbaValue::empty();
 }

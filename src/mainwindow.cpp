@@ -732,7 +732,7 @@ QVariantMap MainWindow::loadQueryDocument(const QString& name,int view,int mode,
             if(executingQueries_.contains(key)) return tableCommandFailure(3251,"Rekursive Ausführung derselben Abfrage ist nicht implementiert.");
             executingQueries_.insert(key); ++queryExecutionDepth_;
             const auto finished=qScopeGuard([self,key] { if(self) { self->executingQueries_.remove(key); --self->queryExecutionDepth_; } });
-            model->execute(database,source,parameters);
+            model->executeFiltered(database,source,parameters,refreshing ? refreshing->property("la_datasheet_filter").toString() : QString{});
         }
         if(!alive() || linaccess::vbaExecutionStopRequested()) return tableCommandFailure(2501,"Abfrageöffnung wurde beendet.");
         if(refresh) {
@@ -746,6 +746,7 @@ QVariantMap MainWindow::loadQueryDocument(const QString& name,int view,int mode,
             if(previous) previous->deleteLater();
             if(!alive() || !refreshing || !target || !replacement || tabs_->indexOf(refreshing)<0)
                 return tableCommandFailure(2501,"Abfragedokument wurde beim Ergebnisaustausch geschlossen.");
+            refreshing->setProperty("la_datasheet_query_source",source);refreshing->setProperty("la_datasheet_query_parameters",parameters);
             if(model->rowCount() && model->columnCount()) target->setCurrentIndex(model->index(0,qMin(column,model->columnCount()-1)));
             if(!alive() || !refreshing || !target || !replacement || linaccess::vbaExecutionStopRequested())
                 return tableCommandFailure(2501,"Abfragedokument wurde während der Auswahl geschlossen.");
@@ -757,7 +758,7 @@ QVariantMap MainWindow::loadQueryDocument(const QString& name,int view,int mode,
         auto* document=page.release(); document->setParent(tabs_);
         const QPointer<QWidget> registered=document;
         tagProjectObject(document,this,db_,"query",canonical); document->setProperty("la_project_object_scope","tab");
-        document->setProperty("la_query_data_mode",2);
+        document->setProperty("la_query_data_mode",2);document->setProperty("la_datasheet_query_source",source);document->setProperty("la_datasheet_query_parameters",parameters);installDatasheetFilter(document,layout);
         for(const auto key:{QKeySequence(Qt::ControlModifier|Qt::Key_W),QKeySequence(Qt::ControlModifier|Qt::Key_F4)}) {
             auto* close=new QShortcut(key,document); close->setContext(Qt::WidgetWithChildrenShortcut);
             connect(close,&QShortcut::activated,document,[this,document] { const int index=tabs_->indexOf(document); if(index>=0) emit tabs_->tabCloseRequested(index); });
@@ -949,6 +950,40 @@ QVariantMap MainWindow::dispatchTableCommand(int command) {
         return {{"handled",true},{"error",0}};
     }
     return tableCommandFailure(3251,"Dieser native Tabellenbefehl ist noch nicht implementiert.");
+}
+
+void MainWindow::installDatasheetFilter(QWidget* rawPage,QBoxLayout* layout) {
+    auto* row=new QHBoxLayout;auto* button=addButton(row,"Filter…");button->setObjectName("native-datasheet-filter-open");row->addStretch();layout->addLayout(row);
+    const QPointer<QWidget> page=rawPage;connect(button,&QPushButton::clicked,rawPage,[this,page] {
+        if(!page || !activateDataPage(page)) return;const QPointer<MainWindow> self=this;const auto generation=property("la_project_generation");const auto identity=db_.databaseName();
+        QDialog dialog(this);dialog.setObjectName("native-datasheet-filter-dialog");dialog.setWindowTitle("Datenblatt filtern");auto* content=new QVBoxLayout(&dialog);content->addWidget(new QLabel("Bedingung (ohne WHERE):",&dialog));auto* expression=new QLineEdit(page->property("la_datasheet_filter").toString(),&dialog);expression->setObjectName("native-datasheet-filter-expression");expression->setMaxLength(32768);content->addWidget(expression);
+        auto* buttons=new QHBoxLayout;auto* apply=addButton(buttons,"Anwenden");apply->setObjectName("native-datasheet-filter-apply");auto* clear=addButton(buttons,"Alle Datensätze");clear->setObjectName("native-datasheet-filter-clear");auto* cancel=addButton(buttons,"Abbrechen");content->addLayout(buttons);connect(apply,&QPushButton::clicked,&dialog,&QDialog::accept);connect(clear,&QPushButton::clicked,&dialog,[&dialog] {dialog.done(2);});connect(cancel,&QPushButton::clicked,&dialog,&QDialog::reject);
+        const int accepted=dialog.exec();if(!self || !accepted) return;if(!page || !db_.isOpen() || db_.databaseName()!=identity || property("la_project_generation")!=generation || tabs_->indexOf(page)<0 || activeDataPage_!=page) {statusBar()->showMessage("Das Datenblatt ist nicht mehr verfügbar. (2501)",10000);return;}
+        const auto result=filterDatasheet(expression->text(),accepted==2 || expression->text().trimmed().isEmpty());if(self && result.value("error").toInt()) statusBar()->showMessage(result.value("description").toString()+" ("+result.value("error").toString()+")",10000);
+    });
+}
+
+QVariantMap MainWindow::filterDatasheet(const QString& criteria,bool clear) {
+    const QPointer<MainWindow> self=this;const QPointer<QWidget> page=activeDataPage_;
+    if(!db_.isOpen() || queryExecutionDepth_ || datasheetOutputActive_ || QApplication::activeModalWidget() || activePreviewDocument() || !AccessFormPreview::databaseWindowActive(this) || !page || tabs_->indexOf(page)<0 || tabs_->currentWidget()!=page) return tableCommandFailure(2046,"Kein aktives Datenblatt zum Filtern verfügbar.");
+    const QPointer<QTableView> view=page->findChild<QTableView*>();if(!view) return tableCommandFailure(2046,"Datenblattansicht ist nicht verfügbar.");const auto generation=property("la_project_generation");const auto identity=db_.databaseName();
+    const auto alive=[self,page,view,generation,identity] {return self && page && view && self->db_.isOpen() && self->db_.databaseName()==identity && self->property("la_project_generation")==generation && self->tabs_->indexOf(page)>=0 && self->activeDataPage_==page && self->tabs_->currentWidget()==page && !linaccess::vbaExecutionStopRequested();};
+    try {
+        const auto filter=clear ? QString{} : criteria.trimmed();if(!clear && filter.isEmpty()) return tableCommandFailure(5,"Filterbedingung fehlt.");const auto compiled=linaccess::accessWhereClause(filter);const int column=qMax(0,view->currentIndex().column());
+        if(auto* table=dynamic_cast<linaccess::AccessTableView*>(view.data())) {
+            const QPointer<linaccess::AccessTableModel> model=qobject_cast<linaccess::AccessTableModel*>(table->model());if(!model) return tableCommandFailure(3251,"Tabellenmodell ist nicht verfügbar.");if(!table->finishEditing() || !alive() || !model) return tableCommandFailure(2501,"Filterwechsel wurde abgebrochen.");const auto sourceError=validateEditableQuerySource(page,model);if(!sourceError.isEmpty()) return sourceError;if(model->isDirty()) return tableCommandFailure(2501,"Datenblattänderungen vor dem Filterwechsel speichern oder verwerfen.");
+            const auto base=page->property("la_datasheet_base_filter").toString();const auto desired=base.isEmpty() ? compiled : compiled.isEmpty() ? base : "("+base+") AND ("+compiled+")";const auto previous=model->filter();const int previousRow=view->currentIndex().row();
+            if(previous!=desired || !model->query().isActive()) {
+                ++queryExecutionDepth_;const auto finished=qScopeGuard([self] {if(self) --self->queryExecutionDepth_;});
+                const auto selectFilter=[&](const QString& sql) {const bool automatic=model->query().isActive();model->setFilter(sql);if(!alive() || !model) return false;if(!automatic) (void)model->select();return alive() && model;};
+                if(!selectFilter(desired)) return tableCommandFailure(2501,"Datenblatt wurde beim Filtern geschlossen.");
+                if(model->lastError().isValid()) {const auto message=model->lastError().text().toCaseFolded();auto failure=tableModelFailure(model,message.contains("syntax error") || message.contains("incomplete input") ? 3075 : 3146);if(!selectFilter(previous)) return tableCommandFailure(2501,"Datenblatt wurde beim Wiederherstellen geschlossen.");if(model->lastError().isValid()) failure["description"]=failure.value("description").toString()+" Der vorherige Filter konnte nicht wiederhergestellt werden.";else if(previousRow>=0 && previousRow<model->rowCount() && column<model->columnCount()) view->setCurrentIndex(model->index(previousRow,column));return failure;}
+            }
+        } else {
+            const auto source=page->property("la_datasheet_query_source").toString();if(source.isEmpty() || !dynamic_cast<linaccess::AccessQueryModel*>(view->model())) return tableCommandFailure(3251,"Abfragequelle ist nicht verfügbar.");auto replacement=std::make_unique<linaccess::AccessQueryModel>();++queryExecutionDepth_;const auto finished=qScopeGuard([self] {if(self) --self->queryExecutionDepth_;});replacement->executeFiltered(db_,source,page->property("la_datasheet_query_parameters").toMap(),filter);if(!alive()) return tableCommandFailure(2501,"Abfrage wurde beim Filtern geschlossen.");const QPointer<QAbstractItemModel> previous=view->model();auto* model=replacement.release();model->setParent(page);view->setModel(model);if(previous) previous->deleteLater();if(!alive()) return tableCommandFailure(2501,"Abfrage wurde beim Ergebnisaustausch geschlossen.");
+        }
+        if(!alive()) return tableCommandFailure(2501,"Datenblatt wurde beim Filtern geschlossen.");page->setProperty("la_datasheet_filter",filter);if(view->model()->rowCount() && view->model()->columnCount()) view->setCurrentIndex(view->model()->index(0,qMin(column,view->model()->columnCount()-1)));if(!alive()) return tableCommandFailure(2501,"Datenblatt wurde während der Auswahl geschlossen.");return {{"handled",true},{"error",0}};
+    }catch(const linaccess::VbaRuntimeError& error) {return tableCommandFailure(error.number,QString::fromUtf8(error.what()));}catch(const linaccess::VbaExecutionStopped&) {return tableCommandFailure(2501,"Filtern wurde beendet.");}catch(const std::exception& error) {return tableCommandFailure(3146,QString::fromUtf8(error.what()));}
 }
 
 QVariantMap MainWindow::repaintDatabaseObject(int type,const QString& name) {
@@ -2077,6 +2112,7 @@ int MainWindow::showTable(const QString& name,bool readOnly,bool interactive,con
     page->setProperty("la_project_object_scope","tab");
     auto* outer = new QVBoxLayout(page);
     outer->addWidget(new QLabel((queryName.isEmpty() ? "Tabelle: " + name : "Abfrage: " + queryName) + (readOnly ? " — Schreibgeschützt" : " — Zelländerungen mit 'Speichern' festschreiben")));
+    installDatasheetFilter(page,outer);
     auto* actions = new QHBoxLayout();
     auto* add = addButton(actions, "+ Datensatz");
     auto* remove = addButton(actions, "Datensatz löschen");
@@ -2088,6 +2124,7 @@ int MainWindow::showTable(const QString& name,bool readOnly,bool interactive,con
     connect(model,&linaccess::AccessTableModel::editRejected,page,[self](int number,const QString& message) { if(self) self->statusBar()->showMessage(message+" ("+QString::number(number)+")",10000); });
     connect(model,&QAbstractItemModel::dataChanged,page,[self] { if(self) self->statusBar()->clearMessage(); });
     model->setTable(name);
+    page->setProperty("la_datasheet_base_filter",sourceFilter);
     if(!sourceFilter.isEmpty()) model->setFilter(sourceFilter);
     model->setEditStrategy(QSqlTableModel::OnManualSubmit);
     (void)model->setReadOnly(readOnly);

@@ -553,3 +553,9 @@ control, using the same draft/save/undo path as VBA. See
 [FORM_RECORD_FIELDS_RUNTIME.md](FORM_RECORD_FIELDS_RUNTIME.md). Earlier notes
 listing this specific form-field case as unsupported are superseded; report
 fields, arbitrary targets and complete event/validation parity remain open.
+
+
+Native ApplyFilter/ShowAllRecords and actual datasheet filter dialogs now share
+the checked document controller. See [DATASHEET_FILTER_RUNTIME.md](DATASHEET_FILTER_RUNTIME.md).
+Existing mainwindow_documents8.62s and access_2003_layouts11.77s pass; saved named
+filters, complete events/locale/persistence and the Access oracle remain open.

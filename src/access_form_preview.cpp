@@ -3852,11 +3852,11 @@ linaccess::VbaExecutionResult AccessFormPreview::runHandler(const QString& handl
 }
 linaccess::VbaExecutionResult AccessFormPreview::runBoundEvent(const QString& binding,const QString& handler) {
     const QPointer<AccessFormPreview> self=this;
-    const auto previousAllowed=property("la_bound_event_can_cancel"),previousCancelled=property("la_bound_event_cancelled"),previousActive=property("la_bound_event_active");
-    setProperty("la_bound_event_active",true);
+    const auto previousAllowed=property("la_bound_event_can_cancel"),previousCancelled=property("la_bound_event_cancelled"),previousActive=property("la_bound_event_active"),previousName=property("la_bound_event_name");
+    setProperty("la_bound_event_name",handler);setProperty("la_bound_event_active",true);
     static const QSet<QString> cancellable{"open","unload","nodata","dirty","beforeinsert","beforeupdate","dblclick"};
     setProperty("la_bound_event_can_cancel",cancellable.contains(handler.section('_',-1).toCaseFolded()));setProperty("la_bound_event_cancelled",false);
-    const auto restore=qScopeGuard([self,previousAllowed,previousCancelled,previousActive] {if(self) {self->setProperty("la_bound_event_active",previousActive);self->setProperty("la_bound_event_can_cancel",previousAllowed);self->setProperty("la_bound_event_cancelled",previousCancelled);}});
+    const auto restore=qScopeGuard([self,previousAllowed,previousCancelled,previousActive,previousName] {if(self) {self->setProperty("la_bound_event_name",previousName);self->setProperty("la_bound_event_active",previousActive);self->setProperty("la_bound_event_can_cancel",previousAllowed);self->setProperty("la_bound_event_cancelled",previousCancelled);}});
     linaccess::VbaExecutionResult result;
     if(eventProcedure(binding)) result=runHandler(handler);
     else if(binding.trimmed().startsWith('=')) {

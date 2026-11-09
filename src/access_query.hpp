@@ -60,6 +60,7 @@ class AccessQueryModel final : public QAbstractTableModel {
 public:
     explicit AccessQueryModel(QObject* parent = nullptr) : QAbstractTableModel(parent) {}
     void execute(QSqlDatabase db, const QString& source, const QMap<QString,QVariant>& parameters = {});
+    void executeFiltered(QSqlDatabase db,const QString& source,const QMap<QString,QVariant>& parameters,const QString& criteria);
     int rowCount(const QModelIndex& parent = {}) const override { return parent.isValid() ? 0 : result_.rows.size(); }
     int columnCount(const QModelIndex& parent = {}) const override { return parent.isValid() ? 0 : result_.columns.size(); }
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
@@ -72,6 +73,8 @@ private:
 // Jet ANSI-89 strings, named PARAMETERS and basic LIKE patterns. Unsupported
 // grammar remains an explicit error; this is not a complete Jet SQL translator.
 QString accessLikePattern(const QString& value);
+// Checked single predicate compiled through the Jet adapter, without extra clauses.
+QString accessWhereClause(const QString& criteria);
 AccessQueryPlan compileAccessQuery(const QString& source);
 // Resolves compiled action metadata against the live writable destination.
 QString accessActionSql(QSqlDatabase db,const AccessQueryPlan& plan);

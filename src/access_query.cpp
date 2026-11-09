@@ -2091,6 +2091,16 @@ AccessQueryResult executeAccessQueryPlan(QSqlDatabase db, const AccessQueryPlan&
     if (query.lastError().isValid()) failAccessQuery(query);
     return result;
 }
+QString accessWhereClause(const QString& criteria) {
+    const auto value=criteria.trimmed();if(value.isEmpty()) return {};
+    if(value.size()>32768 || !value.isValidUtf16() || value.contains(QChar(0))) throw VbaRuntimeError(5,"Invalid filter expression text");
+    const QSet<QString> forbidden{"SELECT","FROM","JOIN","GROUP","HAVING","ORDER","LIMIT","OFFSET","UNION","INTERSECT","EXCEPT","WITH","RETURNING","INTO","PARAMETERS","PIVOT","TRANSFORM"};
+    for(const auto& token:tokenize(value)) if(symbol(token,";") || (token.kind==Token::Word && forbidden.contains(token.value.toUpper()))) throw VbaRuntimeError(3251,"Filter subqueries and additional clauses are unsupported");
+    const auto plan=compileAccessQuery("SELECT * FROM [__la_filter_source] WHERE ("+value+")");const auto tokens=tokenize(plan.sql,true);
+    if(tokens.size()<6 || tokens[4].kind!=Token::Word || tokens[4].value.compare("WHERE",Qt::CaseInsensitive)!=0 || !plan.parameters.isEmpty() || !plan.makeTable.isEmpty()) throw VbaRuntimeError(3251,"Filter expression could not be compiled");
+    return renderJetTokens(tokens.mid(5));
+}
+
 QString editableAccessQueryTable(QSqlDatabase db,const QString& source,QString* filter) {
     const auto plan=compileAccessQuery(source);
     auto tokens=tokenize(plan.sql,true);
@@ -2154,6 +2164,11 @@ QString editableAccessQueryTable(QSqlDatabase db,const QString& source,QString* 
     if(filter) *filter=predicate;
     return table;
 }
+void AccessQueryModel::executeFiltered(QSqlDatabase db,const QString& source,const QMap<QString,QVariant>& parameters,const QString& criteria) {
+    const auto plan=filterAccessQueryPlan(db,compileAccessQuery(source),criteria);auto result=executeAccessQueryPlan(db,plan,bindAccessQueryParameters(plan,parameters));
+    beginResetModel();result_=std::move(result);endResetModel();
+}
+
 void AccessQueryModel::execute(QSqlDatabase db, const QString& source, const QMap<QString,QVariant>& parameters) {
     beginResetModel(); result_ = {}; endResetModel();
     const auto plan = compileAccessQuery(source);

@@ -6,6 +6,10 @@
 #include "access_form_objects.hpp"
 #include "access_table_view.hpp"
 #include "dao_database.hpp"
+#include "access_query.hpp"
+#include <QComboBox>
+#include <QInputDialog>
+#include <QPointer>
 #include <QAction>
 #include <QApplication>
 #include <QDialog>
@@ -15,6 +19,7 @@
 #include <QPrintPreviewWidget>
 #include <QPushButton>
 #include <QSqlQuery>
+#include <QSqlRecord>
 #include <QTabWidget>
 #include <QTest>
 #include <QTimer>
@@ -109,4 +114,34 @@ End Sub)VBA","ChangeUnboundRecordField",host);if(run.status!=linaccess::VbaExecu
     commands->member("GoToRecord",{VbaValue::integer(2),VbaValue::string("RecordFieldsForm"),VbaValue::integer(5)});assert(field->scalarValue().number==7);field->assign("Value",VbaValue::integer(8));note->assign("Value",VbaValue::string("new field row"));root->assign("Dirty",VbaValue::logical(false));assert(sql.exec("SELECT hidden,note FROM record_field_rows WHERE id=3") && sql.next() && sql.value(0).toInt()==8 && sql.value(1).toString()=="new field row");sql.finish();commands->member("GoToRecord",{VbaValue::integer(2),VbaValue::string("RecordFieldsForm"),VbaValue::integer(2)});assert(field->scalarValue().number==27 && note->scalarValue().asText()=="Änderung");
     assert(form.close());error=0;try {field->assign("Value",VbaValue::integer(100));}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==2450);
     assert(sql.exec("CREATE VIEW record_field_readonly AS SELECT hidden,note FROM record_field_rows"));auto readonlySource=source;readonlySource.replace("record_field_rows","record_field_readonly");AccessFormPreview readonly("RecordFieldsReadonly",readonlySource,{},db,&window);auto readonlyRoot=makePreviewFormObject(readonly);assert(readonlyRoot->objectItem("hidden").object->scalarValue().number==27);error=0;try {readonlyRoot->assignItem("hidden",VbaValue::integer(100));}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==2448 && !readonlyRoot->member("Dirty",{}).boolean);assert(readonly.close());
+}
+
+void testNativeProjectFilters(MainWindow& window,QSqlDatabase db) {
+    using linaccess::VbaValue;QSqlQuery sql(db);assert(sql.exec("CREATE TABLE filter_rows(id INTEGER PRIMARY KEY,n INTEGER,label TEXT,stamp DATETIME)"));assert(sql.exec("INSERT INTO filter_rows VALUES(1,10,'Alpha','2003-01-01 00:00:00'),(2,20,'Beta','2004-02-29 00:00:00'),(3,30,NULL,NULL)"));
+    const auto saveQuery=[&](const QString& name,const QString& source) {sql.prepare("INSERT INTO _la_objects VALUES('query',?,?)");sql.addBindValue(name);sql.addBindValue(QJsonDocument(QJsonObject{{"sql",source}}).toJson(QJsonDocument::Compact));assert(sql.exec());sql.finish();};saveQuery("FilterEditable","SELECT * FROM filter_rows WHERE n>=20");saveQuery("FilterReadonly","SELECT id,n,label FROM filter_rows ORDER BY id");saveQuery("FilterParameterized","PARAMETERS wanted LONG; SELECT id,n FROM filter_rows WHERE n>=[wanted] ORDER BY id");
+    linaccess::storeNativeMacro(db,"FilterMacro",{{"version",1},{"actions",QJsonArray{QJsonObject{{"action","ApplyFilter"},{"arguments",QJsonArray{QJsonValue::Null,"n>=20"}}}}}});linaccess::storeNativeMacro(db,"FilterClearMacro",{{"version",1},{"actions",QJsonArray{QJsonObject{{"action","ShowAllRecords"},{"arguments",QJsonArray{}}}}}});
+    linaccess::NativeStandardModuleHost host(&window,db,[] {});auto commands=host.applicationObject()->member("DoCmd",{}).object;commands->member("OpenTable",{VbaValue::string("filter_rows")});auto* tabs=window.findChild<QTabWidget*>();assert(tabs);auto* page=tabs->currentWidget();auto* view=page->findChild<QTableView*>();auto* model=qobject_cast<linaccess::AccessTableModel*>(view->model());assert(model && model->rowCount()==3);model->sort(model->fieldIndex("id"),Qt::AscendingOrder);
+    const auto apply=[&](const QString& filter) {commands->member("ApplyFilter",{VbaValue::missing(),VbaValue::string(filter.toStdString())});};const auto failure=[&](const QString& filter,int expected) {int error=0;try {apply(filter);}catch(const linaccess::VbaRuntimeError& result) {error=result.number;}if(error!=expected) qFatal("ApplyFilter expected=%d actual=%d",expected,error);};
+    apply("label Like 'A*'");assert(model->rowCount()==1 && model->record(0).value("id").toInt()==1);commands->member("ShowAllRecords",{});assert(model->rowCount()==3);commands->member("RunMacro",{VbaValue::string("FilterMacro")});assert(model->rowCount()==2 && model->record(0).value("id").toInt()==2);failure("n=",3075);assert(model->rowCount()==2 && page->property("la_datasheet_filter").toString()=="n>=20");failure("n=20; DELETE FROM filter_rows",3251);failure("n IN (SELECT n FROM filter_rows)",3251);failure(QString(32769,'1'),5);assert(model->rowCount()==2);
+    assert(model->setData(model->index(0,model->fieldIndex("n")),21));failure("id=3",2501);assert(model->isDirty() && model->record(0).value("n").toInt()==21);model->revertAll();commands->member("RunMacro",{VbaValue::string("FilterClearMacro")});assert(model->rowCount()==3);
+    const auto filterDialog=[&](const QString& value,bool clear,bool cancel) {QTimer::singleShot(0,&window,[&,value,clear,cancel] {auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-datasheet-filter-dialog");auto* input=dialog->findChild<QLineEdit*>("native-datasheet-filter-expression");assert(input);input->setText(value);if(cancel) dialog->reject();else dialog->findChild<QPushButton*>(clear ? "native-datasheet-filter-clear" : "native-datasheet-filter-apply")->click();});page->findChild<QPushButton*>("native-datasheet-filter-open")->click();};filterDialog("id=3",false,false);assert(model->rowCount()==1 && model->record(0).value("id").toInt()==3);filterDialog("id=1",false,true);assert(model->rowCount()==1 && model->record(0).value("id").toInt()==3);filterDialog({},true,false);assert(model->rowCount()==3);apply("stamp>=#1/1/2004#");assert(model->rowCount()==1 && model->record(0).value("id").toInt()==2);commands->member("Close",{VbaValue::integer(0),VbaValue::string("filter_rows")});
+    commands->member("OpenQuery",{VbaValue::string("FilterEditable"),VbaValue::integer(0),VbaValue::integer(1)});page=tabs->currentWidget();view=page->findChild<QTableView*>();model=qobject_cast<linaccess::AccessTableModel*>(view->model());assert(model && model->rowCount()==2);model->sort(model->fieldIndex("id"),Qt::AscendingOrder);apply("id=3");assert(model->rowCount()==1 && model->record(0).value("id").toInt()==3);commands->member("ShowAllRecords",{});assert(model->rowCount()==2 && model->record(0).value("id").toInt()==2);commands->member("Close",{VbaValue::integer(1),VbaValue::string("FilterEditable")});
+    commands->member("OpenQuery",{VbaValue::string("FilterReadonly"),VbaValue::integer(0),VbaValue::integer(2)});page=tabs->currentWidget();view=page->findChild<QTableView*>("native-query-view");assert(view && view->model()->rowCount()==3);apply("n>=20");assert(view->model()->rowCount()==2 && view->model()->index(0,0).data().toInt()==2);const auto* previous=view->model();failure("n=",3075);assert(view->model()==previous && view->model()->rowCount()==2);commands->member("Requery",{});assert(view->model()->rowCount()==2 && page->property("la_datasheet_filter").toString()=="n>=20");commands->member("ShowAllRecords",{});assert(view->model()->rowCount()==3);commands->member("Close",{VbaValue::integer(1),VbaValue::string("FilterReadonly")});
+    QTimer::singleShot(0,&window,[&] {auto* dialog=qobject_cast<QInputDialog*>(QApplication::activeModalWidget());assert(dialog);dialog->setTextValue("20");dialog->accept();});commands->member("OpenQuery",{VbaValue::string("FilterParameterized"),VbaValue::integer(0),VbaValue::integer(2)});page=tabs->currentWidget();view=page->findChild<QTableView*>("native-query-view");assert(view && view->model()->rowCount()==2);apply("id=3");assert(view->model()->rowCount()==1 && view->model()->index(0,0).data().toInt()==3);commands->member("ShowAllRecords",{});assert(view->model()->rowCount()==2);commands->member("Close",{VbaValue::integer(1),VbaValue::string("FilterParameterized")});
+    const QByteArray formSource=R"FORM(Begin Form
+RecordSource ="filter_rows"
+Width =2400
+Begin Section
+Height =500
+Begin TextBox
+Name ="Value"
+ControlSource ="n"
+Width =1800
+Height =300
+End
+End
+End)FORM";
+    AccessFormPreview form("FilterForm",formSource,{},db,&window);form.show();QApplication::processEvents();auto root=makePreviewFormObject(form);auto bound=makePreviewApplicationObject(form)->member("DoCmd",{}).object;auto* records=form.findChild<QComboBox*>("access-record-selector");assert(records && records->count()==4);root->objectItem("Value").object->assign("Value",VbaValue::integer(12));bound->member("RunMacro",{VbaValue::string("FilterMacro")});assert(root->member("FilterOn",{}).boolean && records->count()==3 && root->objectItem("Value").object->scalarValue().number==20);assert(sql.exec("SELECT n FROM filter_rows WHERE id=1") && sql.next() && sql.value(0).toInt()==12);sql.finish();bound->member("ShowAllRecords",{});assert(!root->member("FilterOn",{}).boolean && records->count()==4);commands->member("ApplyFilter",{VbaValue::missing(),VbaValue::string("id=3")});assert(records->count()==2 && root->objectItem("Value").object->scalarValue().number==30);assert(form.close());
+    auto reportSource=formSource;reportSource.replace("Begin Form","Begin Report");reportSource.replace("RecordSource =\"filter_rows\"","RecordSource =\"filter_rows\"\nOnOpen =\"[Event Procedure]\"");AccessFormPreview report("FilterReport",reportSource,"Private Sub Report_Open(Cancel As Integer)\nDoCmd.ApplyFilter WhereCondition:=\"id=2\"\nEnd Sub",db,&window);assert(report.eventResult("OnOpen") && report.eventResult("OnOpen")->status==linaccess::VbaExecutionStatus::Completed);auto reportRoot=makePreviewFormObject(report);assert(reportRoot->member("FilterOn",{}).boolean && reportRoot->objectItem("Value").object->scalarValue().number==20);report.show();QApplication::processEvents();auto reportCommands=makePreviewApplicationObject(report)->member("DoCmd",{}).object;int reportError=0;try {reportCommands->member("ApplyFilter",{VbaValue::missing(),VbaValue::string("id=1")});}catch(const linaccess::VbaRuntimeError& result) {reportError=result.number;}assert(reportError==2046 && reportRoot->objectItem("Value").object->scalarValue().number==20);assert(report.close());
+    window.focusDatabaseWindow();int error=0;try {commands->member("ShowAllRecords",{});}catch(const linaccess::VbaRuntimeError& result) {error=result.number;}assert(error==2046);
 }

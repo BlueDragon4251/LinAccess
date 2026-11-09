@@ -13,6 +13,7 @@ class QTabWidget;
 class QTreeWidget;
 class QTreeWidgetItem;
 class QKeyEvent;
+class QBoxLayout;
 
 class MainWindow final : public QMainWindow, public linaccess::NativeProjectCloseGuard {
     Q_OBJECT
@@ -35,6 +36,7 @@ public:
     Q_INVOKABLE QVariantMap tableKeyboardContext();
     Q_INVOKABLE QVariantMap requeryTableDocument();
     Q_INVOKABLE QVariantMap repaintDatabaseObject(int type,const QString& name);
+    Q_INVOKABLE QVariantMap filterDatasheet(const QString& criteria,bool clear);
     Q_INVOKABLE QVariantMap outputDatasheet(bool pdf,const QString& path = {});
     Q_INVOKABLE QVariantMap previewDatasheet();
     Q_INVOKABLE QVariantMap setupDatasheetPage();
@@ -59,6 +61,7 @@ private:
     QVariantMap runProjectMacro(const QString& name);
     QVariantMap outputDatasheetInternal(int mode,const QString& path);
     bool finishActiveDataEditors();
+    void installDatasheetFilter(QWidget* page,QBoxLayout* layout);
     bool activateDataPage(QWidget* page);
     QWidget* findOpenTable(const QString& name) const;
     QWidget* findOpenQuery(const QString& name) const;
