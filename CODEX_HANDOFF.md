@@ -4254,3 +4254,18 @@ Argumente/schreibgeschützt; keine editierbaren Abfragen behauptet. Bestehende
 Layout-/GUI-Prüfung gebündelt2/2 (12,40/14,29s) bestanden, kein neuer Testtarget
 oder Windows-/Gesamtsuite-/Installerlauf. Details FORM_RECORDSET_CLONE_RUNTIME.md;
 F054/F160 und Katalog456/386/70 bleiben offen/unverändert.
+
+
+## 2026-11-09: tatsächliche Dateisammlungen und Unterordner
+
+Native Scripting.Files/Folders unterstützen Item(Key), Standardzugriff und
+indizierte Folder.Files/SubFolders-Eigenschaften über echte direkte Linux-Kinder.
+SubFolders.Add(Name) erzeugt einen wirklichen Unterordner; Duplikate/Null/fehlende
+Einträge/ungeeignete Pfade bleiben explizite Fehler. Native Namens-/Snapshotgrenzen
+siehe NATIVE_FILE_SYSTEM_OBJECT.md; keine Windows-Gesamtparität behauptet.
+
+Bestehender Kernlauf nach Implementierung gebündelt: Weiterleitung indizierter
+Elterneigenschaften korrigiert, neue technische Unterordner vor dem vorhandenen
+Symlink-Schutzfall entfernt; derselbe abschließende Kern1/1 (2,17s) bestanden.
+App frisch gebaut. Kein neuer CTest, kein neuer vollständiger Desktop-/Windows-/
+Qt-frei-/Installernachweis. F091 und Katalog456/386/70 bleiben offen/unverändert.

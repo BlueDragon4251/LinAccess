@@ -7594,3 +7594,18 @@ Call130151cf-be4c-4ed8-bc09-27d5871b3f12 tatsächlich angelegt/verarbeitet,
 Statusfailed: recipient ended before agent finalization. Keine übermittelte
 Antwort, keine Zustimmung; keine Wiederholung. Makroquellen bleiben ausstehend,
 unabhängige Implementierung läuft weiter.
+
+
+## 2026-11-09: tatsächliche Dateisammlungen und Unterordner
+
+Native Scripting.Files/Folders unterstützen Item(Key), Standardzugriff und
+indizierte Folder.Files/SubFolders-Eigenschaften über echte direkte Linux-Kinder.
+SubFolders.Add(Name) erzeugt einen wirklichen Unterordner; Duplikate/Null/fehlende
+Einträge/ungeeignete Pfade bleiben explizite Fehler. Native Namens-/Snapshotgrenzen
+siehe NATIVE_FILE_SYSTEM_OBJECT.md; keine Windows-Gesamtparität behauptet.
+
+Bestehender Kernlauf nach Implementierung gebündelt: Weiterleitung indizierter
+Elterneigenschaften korrigiert, neue technische Unterordner vor dem vorhandenen
+Symlink-Schutzfall entfernt; derselbe abschließende Kern1/1 (2,17s) bestanden.
+App frisch gebaut. Kein neuer CTest, kein neuer vollständiger Desktop-/Windows-/
+Qt-frei-/Installernachweis. F091 und Katalog456/386/70 bleiben offen/unverändert.

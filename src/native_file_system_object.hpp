@@ -132,12 +132,50 @@ public:
         }
         return result;
     }
+    std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
+        std::string method(name);
+        std::transform(method.begin(),method.end(),method.begin(),[](unsigned char ch) { return std::tolower(ch); });
+        if(method=="item") return VbaArgumentSignature{{"Key"},1};
+        if(folders_ && method=="add") return VbaArgumentSignature{{"Name"},1};
+        return {};
+    }
+    VbaValue defaultMember(const std::vector<VbaValue>& args,bool reference) override {
+        const auto entry=member("Item",args);
+        return reference ? entry : scalarVbaValue(entry);
+    }
+    VbaValue item(std::string_view name) override {
+        return member("Item",{VbaValue::string(std::string(name))});
+    }
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
         std::string method(name);
         std::transform(method.begin(),method.end(),method.begin(),[](unsigned char ch) { return std::tolower(ch); });
-        if(method!="count") throw VbaRuntimeError(3251,"Native Files member is not implemented");
-        if(!args.empty()) throw VbaRuntimeError(450,"Files Count takes no arguments");
-        return VbaValue::longInteger(static_cast<std::int32_t>(enumerate().size()));
+        if(method=="count") {
+            if(!args.empty()) throw VbaRuntimeError(450,"Files Count takes no arguments");
+            return VbaValue::longInteger(static_cast<std::int32_t>(enumerate().size()));
+        }
+        if(method=="item" || (folders_ && method=="add")) {
+            if(args.size()!=1 || args[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"Collection member requires one key/name");
+            const auto value=scalarVbaValue(args[0]);
+            if(value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"Invalid Null collection key/name");
+            if(method=="item" && value.kind!=VbaValue::Kind::Text) throw VbaRuntimeError(3251,"Native collection lookup requires a child filename");
+            const auto name=coerceVbaModuleValue(value,"string").asText();
+            if(name=="." || name==".." || name.find_first_of("/\\:")!=std::string::npos) throw VbaRuntimeError(3251,"Collection key/name requires a plain native filename");
+            (void)nativeFilePath(VbaValue::string(name)); // Validate NUL/wildcards before filesystem access.
+            if(method=="item") {
+                for(const auto& entry:enumerate())
+                    if(entry.object->member("Name",{}).asText()==name) return entry;
+                throw VbaRuntimeError(folders_ ? 76 : 53,"Collection entry unavailable");
+            }
+            if(name.empty()) throw VbaRuntimeError(52,"Invalid child folder name");
+            (void)nativeFolderReference(folder_); // A held collection must still have a real parent.
+            std::error_code error;
+            const auto destination=folder_/std::filesystem::path(name);
+            const bool created=std::filesystem::create_directory(destination,error);
+            if(error==std::errc::file_exists || (!created && !error)) throw VbaRuntimeError(58,"Folder already exists");
+            if(error) failure(error);
+            return nativeFolderReference(destination);
+        }
+        throw VbaRuntimeError(3251,"Native Files member is not implemented");
     }
     void assign(std::string_view,const VbaValue&) override { throw VbaRuntimeError(438,"Files property is not writable"); }
 };
@@ -173,7 +211,11 @@ public:
             const auto destination=path_/nativeFilePath(VbaValue::string(name));
             return nativeCreateTextStream(VbaValue::string(destination.string()),args);
         }
-        if(method!="path" && method!="name" && method!="files" && method!="subfolders" && method!="parentfolder") throw VbaRuntimeError(3251,"Native Folder member is not implemented");
+        if(method=="files" || method=="subfolders") {
+            auto collection=std::make_shared<VbaFilesObject>(path_,method=="subfolders");
+            return args.empty() ? VbaValue::reference(collection) : collection->member("Item",args);
+        }
+        if(method!="path" && method!="name" && method!="parentfolder") throw VbaRuntimeError(3251,"Native Folder member is not implemented");
         if(!args.empty()) throw VbaRuntimeError(450,"Folder property takes no arguments");
         if(method=="path") return scalarValue();
         if(method=="name") return VbaValue::string(path_.filename().string());
@@ -181,7 +223,7 @@ public:
             if(path_==path_.root_path()) throw VbaRuntimeError(3251,"Root ParentFolder semantics require reference validation");
             return nativeFolderReference(path_.parent_path());
         }
-        return VbaValue::reference(std::make_shared<VbaFilesObject>(path_,method=="subfolders"));
+        throw VbaRuntimeError(3251,"Native Folder member is not implemented");
     }
     void assign(std::string_view,const VbaValue&) override { throw VbaRuntimeError(3251,"Native Folder mutation is not implemented"); }
 };

@@ -3121,6 +3121,16 @@ For Each entry In files
  total=total+entry.Size
 Next entry
 Me!FsoFilesTotal=CStr(total)
+Dim foundFile As Scripting.File, foundFolder As Scripting.Folder
+Set foundFile=files.Item(Key:=fs.GetFileName(Me!FsoFile))
+Me!FsoFileLookup=foundFile.Path
+Set foundFile=files(fs.GetFileName(Me!FsoFile))
+Me!FsoFileLookupDefault=CStr(foundFile)
+Me!FsoFileLookupScalar=files(fs.GetFileName(Me!FsoFile))
+Set foundFolder=folder.SubFolders.Item(Key:="folder-target")
+Me!FsoFolderLookup=foundFolder.Name
+Set foundFolder=folder.SubFolders("folder-target")
+Me!FsoFolderDefault=foundFolder.Path
 Dim created As Scripting.Folder, subfolders As Scripting.Folders
 Set subfolders=folder.SubFolders
 Set created=fs.CreateFolder(Path:=folder.Path & "/created-ä")
@@ -3147,6 +3157,23 @@ fs.DeleteFile FileSpec:=created.Path & "/copy2.dat", Force:=False
 Set copied=fs.GetFile(created.Path & "/final.dat")
 copied.Delete Force:=False
 Me!FsoOpsClean=CStr(created.Files.Count)
+Set foundFolder=created.SubFolders.Add(Name:="child-ä")
+Me!FsoAddedChild=foundFolder.Name & ":" & CStr(created.SubFolders.Count)
+Me!FsoAddedLookup=created.SubFolders("child-ä").Path
+On Error Resume Next
+Err.Clear
+Set foundFolder=created.SubFolders.Add("child-ä")
+Me!FsoAddDuplicate=CStr(Err.Number) & ":" & foundFolder.Name
+Err.Clear
+Set foundFile=files.Item("missing.dat")
+Me!FsoLookupMissing=CStr(Err.Number)
+Err.Clear
+Set foundFile=files.Item(Null)
+Me!FsoLookupNull=CStr(Err.Number)
+Err.Clear
+Set foundFile=files.Item("../outside")
+Me!FsoLookupOutside=CStr(Err.Number)
+On Error GoTo 0
 Me!FsoFileDefault=CStr(nativeFile)
 Me!FsoFileTyped=CStr(TypeOf nativeFile Is Scripting.File)
 Me!FsoFileObject=TypeName(nativeFile) & ":" & CStr(VarType(nativeFile))
@@ -3161,6 +3188,7 @@ Set fs=CreateObject("Scripting.FileSystemObject")
 Me!FsoLate=CStr(fs.FileExists(Me!FsoFile))
 Set fs=Nothing
 End Sub)VBA","ProbeFs",host);
+        if(fsoProbe.status!=VbaExecutionStatus::Completed) std::cerr<<"FSO collection probe error "<<fsoProbe.errorNumber<<" at "<<fsoProbe.line<<": "<<fsoProbe.explanation<<'\n';
         assert(fsoProbe.status==VbaExecutionStatus::Completed);
         assert(host.fields["FsoTyped"]=="True" && host.fields["FsoTypedCall"]=="True" && host.fields["FsoWrongClass"]=="13:FileSystemObject" && host.fields["FsoLate"]=="True");
         assert(host.fields["FsoIdentity"]=="FileSystemObject:9" && host.fields["FsoHasFile"]=="True" && host.fields["FsoHasFolder"]=="True");
@@ -3171,7 +3199,13 @@ End Sub)VBA","ProbeFs",host);
         assert(host.fields["FsoSubFoldersCount"]=="1" && host.fields["FsoSubFolderName"]=="folder-target" && host.fields["FsoFileParent"]==directory.string());
         assert(host.fields["FsoCreated"]=="created-ä:2" && host.fields["FsoDuplicateFolder"]=="58:created-ä" && fs::is_directory(directory/"created-ä"));
         assert(host.fields["FsoCopiedSize"]=="3" && host.fields["FsoCopyExisting"]=="58" && host.fields["FsoMoved"]=="moved.dat:3" && host.fields["FsoOpsClean"]=="0");
-        assert(fs::is_empty(directory/"created-ä") && fs::file_size(file)==3);
+        assert(fs::is_directory(directory/"created-ä"/"child-ä") && fs::is_empty(directory/"created-ä"/"child-ä") && fs::file_size(file)==3);
+        assert(host.fields["FsoFileLookup"]==file.string() && host.fields["FsoFileLookupDefault"]==file.string() && host.fields["FsoFileLookupScalar"]==file.string());
+        assert(host.fields["FsoFolderLookup"]=="folder-target" && host.fields["FsoFolderDefault"]==(directory/"folder-target").string());
+        assert(host.fields["FsoAddedChild"]=="child-ä:1" && host.fields["FsoAddedLookup"]==(directory/"created-ä"/"child-ä").string());
+        assert(host.fields["FsoAddDuplicate"]=="58:child-ä" && host.fields["FsoLookupMissing"]=="53" && host.fields["FsoLookupNull"]=="94" && host.fields["FsoLookupOutside"]=="3251");
+        assert(fs::remove(directory/"created-ä"/"child-ä")); // Restore the later link-guard fixture's empty target.
+
         assert(host.fields["FsoFileObject"]=="File:8" && host.fields["FsoFileTyped"]=="True" && host.fields["FsoFileDefault"]==file.string());
         assert(host.fields["FsoFileMetadata"]==file.string()+"|"+file.filename().string()+"|3:3");
         assert(host.fields["FsoWrongKinds"]=="False:False" && host.fields["FsoMissing"]=="False" && host.fields["FsoAbsolute"]==fs::current_path().string());

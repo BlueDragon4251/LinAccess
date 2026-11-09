@@ -115,7 +115,7 @@ Only regular files are included; directories are excluded from Files. Hidden
 Linux entries are included. Terminal folder links, any link/special-file entry,
 permission errors and more than10000 inspected entries fail explicitly; they
 are not silently skipped. Enumeration order is native and has no Windows order
-or concurrent-mutation oracle. Item lookup, recursive size, folder
+or concurrent-mutation oracle. Recursive size, general folder
 mutations, timestamps and complete Windows collection/attribute/identity behavior
 remain unimplemented or unvalidated.
 
@@ -196,3 +196,33 @@ actual deletion with True. No new repository test target/ID; fixed456/384/72.
 
 Native OpenTextFile/OpenAsTextStream/CreateTextFile and owned TextStream handles
 are bounded separately in [NATIVE_TEXT_STREAM.md](NATIVE_TEXT_STREAM.md).
+
+## Native collection lookup and child-folder creation
+
+Files.Item(Key) and SubFolders.Item(Key) resolve actual direct children by their
+plain native filename. The default collection call, including indexed Folder.Files
+and Folder.SubFolders properties, uses the same lookup. Explicit Set returns the
+real File/Folder object; scalar default evaluation reads that object's Path.
+Keys are case-sensitive native text names, not fabricated numeric positions.
+Null is 94, missing entries 53 (Files) / 76 (Folders); missing/extra arguments 450.
+NUL/wildcards, separators, parent traversal, Windows paths and non-text keys
+retain explicit errors/boundaries. Lookup uses the existing fresh bounded directory
+snapshot, including its link/special-file and 10,000-entry restrictions.
+
+SubFolders.Add(Name) creates one real immediate child and returns its native
+Folder object. It validates the held parent, does not create intermediate parents,
+and reports existing names as 58 without replacing the previous caller reference.
+Subsequent Count/Item/enumeration sees actual filesystem state. Files has no Add.
+The interface parameter names Key and Name follow the public scrrun IDL; this is
+not proof of Windows case, path-key coercion, race or filesystem parity.
+
+The existing core fixture exercises actual early-bound VBA, named Item/Add,
+object/scalar defaults, indexed parent properties, Unicode child creation,
+duplicate creation, missing/Null/traversal errors and independent filesystem
+checks. The first run exposed missing indexed-property forwarding; that precise
+problem was corrected before rerunning the same target. Final result is recorded
+in the handoff/progress entry. No additional CTest or catalog IDs are introduced.
+
+Reference: [Files collection](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/files-collection),
+[Folders collection](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/folders-collection),
+[public scrrun interface definitions](https://github.com/wine-mirror/wine/blob/master/dlls/scrrun/scrrun.idl).
