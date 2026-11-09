@@ -1896,14 +1896,14 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
     }
     const bool staticProcedure=std::any_of(instructions.begin(),instructions.end(),[](const auto& instruction){return instruction.staticScope;});
     bool explicitVariables=false;
-    if(staticProcedure) {
+    {
         const auto active=preprocessVbaConditional(module);std::istringstream source(active);std::string line;
         static const std::regex option(R"(^Option\s+Explicit$)",std::regex::icase);
         static const std::regex defType(R"(^Def(?:Bool|Byte|Cur|Date|Dbl|Int|Lng(?:Lng|Ptr)?|Obj|Sng|Str|Var)\s+)",std::regex::icase);
         int sourceLine=0;
         while(std::getline(source,line)) {
             ++sourceLine;const auto declaration=withoutComment(line);
-            if(std::regex_search(declaration,defType)) {VbaExecutionResult failure{VbaExecutionStatus::Unsupported,"Def-type directives are not implemented for static procedure binding",sourceLine};failure.errorNumber=3251;return failure;}
+            if(std::regex_search(declaration,defType)) {VbaExecutionResult failure{VbaExecutionStatus::Unsupported,"Def-type directives are not implemented for native procedure binding",sourceLine};failure.errorNumber=3251;return failure;}
             if(std::regex_match(declaration,option)) explicitVariables=true;
         }
     }
@@ -2144,21 +2144,33 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
             VbaExecutionResult failure{VbaExecutionStatus::Unsupported,"Declared variable type is unsupported for this loop/object target",instruction.line}; failure.errorNumber=3251; return failure;
         }
     }
-    const auto ensureStaticLocal=[&](const std::string& name) {
-        if(!staticProcedure || locals.contains(name)) return;
-        if(explicitVariables) throw VbaRuntimeError(5,"Static procedure variable is not declared");
+    std::size_t implicitLocals=0;
+    const auto externalProcedure=[&](std::string_view name) -> std::optional<VbaArgumentSignature> {
+        const auto source=host.moduleForProcedure(name);
+        if(!source) return {};
+        if(auto signature=nativeVbaProcedureSignature(*source,name)) return signature;
+        if(nativeVbaPropertySignature(*source,name,VbaPropertyAccess::Get,true))
+            throw VbaRuntimeError(3251,"Unqualified cross-module properties are not implemented");
+        return {};
+    };
+    const auto ensureImplicitLocal=[&](const std::string& name,bool externalChecked=false) {
+        if(locals.contains(name)) return;
+        if(explicitVariables) throw VbaRuntimeError(5,"Procedure variable is not declared");
         if(!name.empty() && std::string_view("$%&!#@^").find(name.back())!=std::string_view::npos)
-            throw VbaRuntimeError(3251,"Implicit static type suffixes require explicit native declarations");
-        if(stateOwners.front()->procedures.contains(name) || host.hasInstanceIdentifier(name))
-            throw VbaRuntimeError(3251,"Implicit static local would hide a declared instance/procedure member");
-        auto& saved=stateOwners.front()->procedureStatics[lower(std::string(procedure))];
-        if(!saved.contains(name) && saved.size()>=4096) throw VbaRuntimeError(3035,"Implicit static local limit exceeded");
-        auto [slot,inserted]=saved.try_emplace(name,VbaValue::empty());
-        locals.emplace(name,slot->second);localTypes.emplace(name,"variant");
-        aliases.push_back({name,&slot->second,slot->second,"variant"});
+            throw VbaRuntimeError(3251,"Implicit type suffixes require explicit native declarations");
+        if(stateOwners.front()->procedures.contains(name) || host.hasInstanceIdentifier(name) || (!externalChecked && externalProcedure(name)))
+            throw VbaRuntimeError(3251,"Implicit local would hide a declared instance/procedure member");
+        if(implicitLocals>=4096) throw VbaRuntimeError(3035,"Implicit local limit exceeded");
+        if(staticProcedure) {
+            auto& saved=stateOwners.front()->procedureStatics[lower(std::string(procedure))];
+            if(!saved.contains(name) && saved.size()>=4096) throw VbaRuntimeError(3035,"Implicit static local limit exceeded");
+            auto [slot,inserted]=saved.try_emplace(name,VbaValue::empty());
+            locals.emplace(name,slot->second);aliases.push_back({name,&slot->second,slot->second,"variant"});
+        } else locals.emplace(name,VbaValue::empty());
+        localTypes.emplace(name,"variant");++implicitLocals;
     };
     const auto assignVariable=[&](const std::string& name,const VbaValue& value,bool arrayElement=false) {
-        ensureStaticLocal(name);
+        ensureImplicitLocal(name);
         if(!arrayElement) {
             const auto local=locals.find(name); const VbaValue* source=local==locals.end() ? nullptr : &local->second;
             for(const auto& alias:aliases) if(alias.name==name) { source=alias.source; break; }
@@ -2380,8 +2392,12 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         if(!signature) throw VbaRuntimeError(3251,"Declared local procedure binding is unsupported");
         return signatureCache.emplace(key,std::move(signature)).first->second;
     };
-    if(staticProcedure) resolver.undeclaredIdentifier=[&](std::string_view name) -> std::optional<VbaValue> {
-        const auto key=lower(std::string(name));ensureStaticLocal(key);return locals.at(key);
+    resolver.undeclaredIdentifier=[&](std::string_view name) -> std::optional<VbaValue> {
+        if(const auto signature=externalProcedure(name)) {
+            if(!signature->function) throw VbaRuntimeError(3251,"A Sub cannot be used as a value");
+            std::vector<VbaValue> arguments;return invoke(name,arguments,VbaArgumentReferences{},true);
+        }
+        const auto key=lower(std::string(name));ensureImplicitLocal(key,true);return locals.at(key);
     };
     const auto compareMode=moduleCompareMode(module);
     const auto evaluate = [&](std::string_view expression) {

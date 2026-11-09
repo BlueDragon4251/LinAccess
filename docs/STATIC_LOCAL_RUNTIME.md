@@ -33,8 +33,8 @@ With no Option Explicit, actual unresolved reads/assignments create procedure-
 private implicit Variant bindings after normal local/module/procedure/instance
 lookup. They share the existing alias synchronization, including ByRef mutation,
 recursion and error exits. At most4096 implicit/static entries can be extended
-through this implicit path. Ordinary nonstatic procedures retain their existing
-strict unresolved-name behavior. Option Explicit prevents implicit creation;
+through this implicit path. Ordinary nonstatic procedures now create fresh invocation-local bindings as
+documented in VBA_IMPLICIT_LOCALS.md. Option Explicit prevents implicit creation;
 this is a native runtime guard, not a complete Access compile-time diagnostic.
 
 Def-type directives are refused before body effects for static procedures.

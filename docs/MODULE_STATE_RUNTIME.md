@@ -68,3 +68,9 @@ The common source catalog now includes separately stored native standard modules
 The real editor and current proof/limits are in
 [NATIVE_STANDARD_MODULES_RUNTIME.md](NATIVE_STANDARD_MODULES_RUNTIME.md). Imported
 archive bytes remain unchanged; native/imported collisions refuse explicitly.
+
+
+Supported implicit procedure-local binding is documented in
+[VBA_IMPLICIT_LOCALS.md](VBA_IMPLICIT_LOCALS.md). Ordinary locals remain transient;
+static locals retain module/procedure extent. Full Access compiler binding remains
+open; no implicit UI/class/API/SQL parameter is fabricated.

@@ -5618,3 +5618,22 @@ Payload/öffentliche Rechte/keine Fixtures. Paket liegt vor klammerlosen Deklara
 F040/F042/F043 und fester Katalog456/386/70 unverändert. Anschließend implizite
 lokale Variablen auch in gewöhnlichen Prozeduren ergänzen (frisch proAufruf,
 OptionExplicit und Typgrenzen beachten), gezielt prüfen und ohne Abschluss weiter.
+
+
+Implizite lokale Variablen jetzt auch in gewöhnlichen nativen Prozeduren: echte
+frische Empty-Variant-Bindungen proAufruf nach bestehender Namensauflösung;
+statische Prozeduren behalten Modulspeicher. Unterstützte externe öffentliche
+Funktionen werden aufgelöst, Sub-/Prozedurnamen nicht durch erfundene Variablen
+ersetzt. Option Explicit verhindert Anlage auch beim Schreiben; native Laufzeit-
+prüfung statt vollständiger Access-Compile-Diagnostik. Def-Typ-Direktiven vor
+Effekten und implizite Typzeichen verweigert;4096 implizite Namen proRahmen.
+Details VBA_IMPLICIT_LOCALS.md. Anwendung gebaut; GUI16,32s bestanden, nur zuvor
+betroffene Kern-/Original-Ziele nach technischen Fixturekorrekturen erneut geprüft:
+2/2, Kern3,11s und unveränderter real_kassa_dao_event124,12s. Keine neuen CTests,
+kein GUI-Nachlauf/Windows-/Gesamtsuitennachweis. Originalinventar32/19OptionExplicit/
+13ohne/0Def; unveränderter Ereignislauf bleibt an2485/1023 fehlender Makroquelle,
+kein vollständiger Verkauf behauptet. Vorstufe klammerlose Deklarationen b05c240
+veröffentlicht/privater Remote-Baum verifiziert; letzte geprüfteDEB46297bf vor
+klammerlosen Deklarationen/impliziten normalen Variablen. F037/F042/F043 und
+Katalog456/386/70 unverändert. Anschließend objektwertige Getter/default-Member-
+Weiterleitung nach MS-VBAL5.4.3.8/5.6.13 ergänzen; ohne Zwischenabschluss weiter.

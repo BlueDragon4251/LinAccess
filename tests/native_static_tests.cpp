@@ -2,6 +2,7 @@
 #include "native_standard_module_host.hpp"
 #include "vba_static_fixture.hpp"
 #include <QApplication>
+#include <QLineEdit>
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
@@ -14,4 +15,9 @@ void exerciseNativeStaticProcedures(QSqlDatabase db){using namespace linaccess;
     QDialog moduleEditor;
     for(int call=1;call<=2;++call){NativeStandardModuleHost host(&moduleEditor,db,[]{});result=executeVbaProcedure(nativeStaticFixture,"Trailing",host);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==call);}
     AccessFormPreview reopened("Static new instance",layout,source,db);reopened.show();QApplication::processEvents();result=reopened.executeProcedure("Retained",args);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->text=="1:2:3:1:A1");assert(reopened.close());
+
+    const QByteArray implicitLayout="Begin Form\nBegin Section\nBegin TextBox\nName =\"Actual\"\nEnd\nEnd\nEnd\n";
+    const QByteArray implicitCode="Public Function ImplicitProbe As Long\ncount=count+1\nActual=count\nImplicitProbe=Actual+count\nEnd Function";
+    AccessFormPreview ordinary("Transient locals",implicitLayout,implicitCode,db);ordinary.show();QApplication::processEvents();auto* actual=ordinary.findChild<QLineEdit*>("access-control-Actual");assert(actual);
+    for(int call=0;call<2;++call){result=ordinary.executeProcedure("ImplicitProbe",args);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==2 && actual->text()=="1");}assert(ordinary.close());
 }

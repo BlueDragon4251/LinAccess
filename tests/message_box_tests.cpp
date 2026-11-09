@@ -17,7 +17,8 @@ void testMessageBoxes() {
     db.setDatabaseName(":memory:"); assert(db.open());
     QSqlQuery query(db); assert(query.exec("CREATE TABLE choices(value INTEGER)"));
     const QByteArray definition="Begin Form\nBegin Section\nBegin TextBox\nName =\"answer\"\nEnd\nEnd\nEnd\n";
-    const QByteArray code=R"VBA(Sub Choose(style As Long)
+    const QByteArray code=R"VBA(Option Explicit
+Sub Choose(style As Long)
 Me!answer=MsgBox("<b>literal</b>",style,"choice")
 If Me!answer=vbYes Then
 CurrentDb.Execute "INSERT INTO choices VALUES(6)"
