@@ -184,6 +184,7 @@ void qbColor(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
 class ScalarStringHost final : public VbaHost {
 public:
     bool isNumericText(std::string_view text) override {return isAccessNumericText(text);}
+    VbaValue formatValue(const VbaValue& value,std::string_view mask,bool stringResult) override {return formatAccessValue(value,mask,stringResult);}
     VbaValue formatNumericValue(const VbaValue& value,bool currency,const VbaNumericFormatOptions& options) override {return formatAccessNumericValue(value,currency,options);}
     std::optional<std::string> field(std::string_view) override { throw VbaRuntimeError(3251,"SQL scalar has no form context"); }
     void setField(std::string_view,std::optional<std::string>) override { throw VbaRuntimeError(3251,"SQL scalar cannot assign fields"); }
@@ -194,7 +195,7 @@ void scalarBuiltinFunction(sqlite3_context* context,int count,sqlite3_value** ar
     auto& native=api();
     try {
         if(count<minimum || count>maximum) throw VbaRuntimeError(450,"Invalid scalar SQL arity");
-        const bool numericFormat=name=="FormatNumber" || name=="FormatCurrency";
+        const bool numericFormat=name=="FormatNumber" || name=="FormatCurrency" || name=="FormatPercent";
         VbaVariables values;
         std::string expression=dateArguments ? std::string{} : std::string(name)+"(";
         for(int index=0;index<count;++index) {
@@ -528,6 +529,7 @@ void formatDate(sqlite3_context* context,sqlite3_value** args,bool stringResult)
 }
 void formatNumber(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"FormatNumber",1,5);}
 void formatCurrency(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"FormatCurrency",1,5);}
+void formatPercent(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"FormatPercent",1,5);}
 void formatString(sqlite3_context* context,int,sqlite3_value** args) noexcept { formatDate(context,args,true); }
 void formatVariant(sqlite3_context* context,int,sqlite3_value** args) noexcept { formatDate(context,args,false); }
 // aggregate_context supplies zeroed storage. Each group retains one copied value;
@@ -714,6 +716,7 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_format",2,&formatVariant,nullptr,nullptr);
     ensure("linaccess_jet_formatnumber",-1,&formatNumber,nullptr,nullptr,SQLITE_UTF8|SQLITE_INNOCUOUS);
     ensure("linaccess_jet_formatcurrency",-1,&formatCurrency,nullptr,nullptr,SQLITE_UTF8|SQLITE_INNOCUOUS);
+    ensure("linaccess_jet_formatpercent",-1,&formatPercent,nullptr,nullptr,SQLITE_UTF8|SQLITE_INNOCUOUS);
     ensure("linaccess_jet_concat",2,&concatenate,nullptr,nullptr);
     ensure("linaccess_jet_len",1,&textLength,nullptr,nullptr);
     ensure("linaccess_jet_default_date",0,&dateFieldDefault<0>,nullptr,nullptr,SQLITE_UTF8|SQLITE_INNOCUOUS);

@@ -162,6 +162,7 @@ VbaValue formatAccessValue(const VbaValue& input,std::string_view mask,bool stri
     if(lower=="yes/no" || lower=="true/false" || lower=="on/off") {
         const bool on=decimalCompare(numericValue(value,locale),decimalLiteral("0"))!=0;QString result;if(locale.language()==QLocale::German) result=lower=="yes/no" ? (on ? "Ja" : "Nein") : lower=="true/false" ? (on ? "Wahr" : "Falsch") : (on ? "Ein" : "Aus");else if(locale.language()==QLocale::English || locale.language()==QLocale::C) result=lower=="yes/no" ? (on ? "Yes" : "No") : lower=="true/false" ? (on ? "True" : "False") : (on ? "On" : "Off");else throw VbaRuntimeError(3251,"Boolean format language unsupported");return VbaValue::string(result.toStdString());
     }
+    if(lower=="percent") return VbaValue::string(numberText(value,1,2,2,false,true,false,false,true,locale).toUtf8().toStdString());
     if(lower=="currency" || lower=="standard" || lower=="fixed") {VbaNumericFormatOptions options;if(lower!="currency") {options.digits=2;options.group=lower=="standard";}return formatAccessNumericValue(value,lower=="currency",options);}
     if(const auto numeric=customNumericText(value,pattern,locale)) return VbaValue::string(numeric->toUtf8().toStdString());
     return VbaValue::string(dateText(value,pattern,locale).toUtf8().toStdString());

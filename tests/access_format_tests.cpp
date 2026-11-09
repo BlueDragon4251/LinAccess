@@ -61,6 +61,12 @@ int main(int argc,char** argv) {
     model.execute(db,"SELECT Format$(#12/31/2003#,\"yyyy\"),Format$(#12/31/2003#,\"mm\"),Format(#12/31/2003#,\"dd\")");
     assert(model.data(model.index(0,0)).toString()=="2003" && model.data(model.index(0,1)).toString()=="12" && model.data(model.index(0,2)).toString()=="31");
     assert(model.data(model.index(0,1)).metaType().id()==QMetaType::QString);
+    assert(format(decimalLiteral("0.125"),"Percent").asText()=="12,50%");
+    model.execute(db,"SELECT FormatPercent(0.125),FormatPercent(-0.00125,2,0,-1,0),FormatPercent(9007199254740993,0,-1,0,0)");
+    assert(model.data(model.index(0,0)).toString()=="12,50%" && model.data(model.index(0,1)).toString()=="(,12%)" && model.data(model.index(0,2)).toString()=="900719925474099300%");
+    for(const auto& [expression,wanted]:std::vector<std::pair<const char*,int>>{{"SELECT FormatPercent(Null)",94},{"SELECT FormatPercent(1,29)",5},{"SELECT FormatPercent(1,2,1)",5},{"SELECT FormatPercent()",450}}) {
+        int actual=0;try {model.execute(db,expression);}catch(const VbaRuntimeError& failure) {actual=failure.number;}assert(actual==wanted && model.rowCount()==0);
+    }
     model.execute(db,"SELECT FormatNumber(9007199254740993,0,-1,0,0),FormatCurrency(1.25,2),Format(1.245,\"0.00\")");assert(model.data(model.index(0,0)).toString()=="9007199254740993" && model.data(model.index(0,2)).toString()=="1,24");
 
     model.execute(db,"SELECT Format(-1234.5,'#,##0.00;(#,##0.00)'),Format(1234500,'0,.00'),Format(0,'0.00;(0.00);\"zero\"')");

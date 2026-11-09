@@ -717,7 +717,7 @@ bool vbaIntrinsicName(const std::string& name) {
     static const std::unordered_set<std::string> intrinsics{
                 "array","lbound","ubound","isarray","ismissing","isobject","iserror","cverr","vartype","typename",
                 "createobject","doevents","msgbox","inputbox","inputbox$","round","asc","ascw","chr","chr$","chrw","chrw$",
-                "cbyte","cint","clng","csng","cdbl","cbool","ccur","cdec","cdate","cstr","str","str$","format","format$","formatnumber","formatcurrency",
+                "cbyte","cint","clng","csng","cdbl","cbool","ccur","cdec","cdate","cstr","str","str$","format","format$","formatnumber","formatcurrency","formatpercent",
                 "left","left$","right","right$","mid","mid$","trim","trim$","ltrim","ltrim$","rtrim","rtrim$","len","lenb",
                 "ucase","ucase$","lcase","lcase$","instr","strcomp","instrrev","strreverse","replace","split","join","filter",
                 "hex","hex$","oct","oct$","space","space$","string","string$","val","abs","int","fix","sgn",
@@ -1369,6 +1369,7 @@ private:
                     {"cdate",{{"Expression"},1}}, {"cdec",{{"Expression"},1}},
                     {"formatnumber",{{"Expression","NumDigitsAfterDecimal","IncludeLeadingDigit","UseParensForNegativeNumbers","GroupDigits"},1}},
                     {"formatcurrency",{{"Expression","NumDigitsAfterDecimal","IncludeLeadingDigit","UseParensForNegativeNumbers","GroupDigits"},1}},
+                    {"formatpercent",{{"Expression","NumDigitsAfterDecimal","IncludeLeadingDigit","UseParensForNegativeNumbers","GroupDigits"},1}},
                     {"datevalue",{{"Date"},1}}, {"timevalue",{{"Time"},1}},
                     {"dateadd",{{"Interval","Number","Date"},3}},
                     {"dateserial",{{"Year","Month","Day"},3}},
@@ -1662,6 +1663,19 @@ private:
                 const auto number=integer(args[0]);
                 if (number<0 || number>65535) throw error("CVErr number out of range");
                 return VbaValue::errorValue(number);
+            }
+            if(word=="formatpercent") {
+                if(!host_) return {};
+                auto values=args;
+                for(std::size_t i=0;i<values.size();++i) if(omitted[i]) values[i]=VbaValue::missing();
+                const auto options=parseVbaNumericFormatOptions(values);
+                const bool leading=options.leading.value_or(true),group=options.group.value_or(true);
+                std::string mask=group ? (leading ? "#,##0" : "#,###") : (leading ? "0" : "#");
+                const int digits=options.digits.value_or(2);
+                if(digits) mask+='.'+std::string(digits,'0');
+                mask+='%';
+                if(options.parens.value_or(false)) mask+=';'+std::string("(")+mask+")";
+                return host_->formatValue(values[0],mask,true);
             }
             if(word=="formatnumber" || word=="formatcurrency") {
                 if(!host_) return {};auto values=args;for(std::size_t i=0;i<values.size();++i) if(omitted[i]) values[i]=VbaValue::missing();const auto options=parseVbaNumericFormatOptions(values);return host_->formatNumericValue(values[0],word=="formatcurrency",options);

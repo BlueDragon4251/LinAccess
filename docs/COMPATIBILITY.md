@@ -3752,3 +3752,16 @@ Wissenschaftliche/bedingte/Farb-/vierteNull-/interleavte Masken und vollständig
 Windows-Formatgleichheit bleiben offen. Neue technische Prüfungen sind kein
 zusätzlicher Windows-Access-Nachweis. NATIVE_FORMAT_RUNTIME.md; bestehende
 F041/F068/F071/F118/F164,456/384/72 unverändert. Direkt weiterentwickeln.
+
+FormatPercent ist jetzt als echte native VBA-/SQL-Funktion mit allen fünf
+benannten/ausgelassenen Standardargumenten verfügbar. Die gemeinsame geprüfte
+Maskenstrecke berücksichtigt Nachkommastellen, führendeNull, negative Klammern,
+Gruppierung und lokale Prozentzeichen. Die benannte Format-Maske Percent liefert
+zwei Nachkommastellen ohne Gruppierung. SQL-Integer bleiben vor der Skalierung
+exakte Decimal-Werte; 9007199254740993 wird ohne Double-Verlust formatiert.
+Null94, ungültige Optionen5 und Arity450 sind geprüft. Bestehender Formatter und
+GUI gemeinsam2/2 (5,83s), App gebaut; native VBA-Positional-/Named-/Missing-Fälle
+und vorhandene48 GUI-Referenzwerte enthalten. Keine neue Windows-Beobachtung
+oder zusätzliche CTest-Registrierung. Decimal96/28-Grenze und vollständige
+regionale Prozentprofile bleiben offen;456/384/72 unverändert.
+NATIVE_FORMAT_RUNTIME.md; kontinuierlich allgemeine Datenbankfunktionen umsetzen.

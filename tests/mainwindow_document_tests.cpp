@@ -2980,6 +2980,10 @@ End Sub
         const auto original=QLocale();QLocale::setDefault(QLocale(QLocale::German,QLocale::Austria));const auto restore=qScopeGuard([original] {QLocale::setDefault(original);});
         const QByteArray source="Begin Form\nBegin Section\nEnd\nEnd\n";const QByteArray code=R"VBA(Sub NamedNumberFormat()
 Me.Tag=FormatNumber(GroupDigits:=vbFalse,Expression:=CDec("1234.5"),NumDigitsAfterDecimal:=2)
+If FormatPercent(Expression:=CCur("-0.00125"),NumDigitsAfterDecimal:=2,IncludeLeadingDigit:=vbFalse,UseParensForNegativeNumbers:=vbTrue,GroupDigits:=vbFalse)<>"(,12%)" Then Err.Raise 5
+If VBA.FormatPercent(CCur("0.125"),,vbUseDefault)<>"12,50%" Then Err.Raise 5
+If Format(CCur("0.125"),"Percent")<>"12,50%" Then Err.Raise 5
+
 End Sub
 )VBA";AccessFormPreview caller("format-reference-caller",source,code,db,&window);const auto application=makePreviewApplicationObject(caller);const auto accessEval=[&](const QString& expression) {return application->member("Eval",{linaccess::VbaValue::string(expression.toStdString())});};
         QFile reference(QFileInfo(QString::fromUtf8(__FILE__)).absoluteDir().filePath("access2003_reference/expression-observations.json"));assert(reference.open(QIODevice::ReadOnly));const auto root=QJsonDocument::fromJson(reference.readAll()).object();int checked=0;
