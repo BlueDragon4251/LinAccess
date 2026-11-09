@@ -1,4 +1,5 @@
 #include "vba_condition.hpp"
+#include "vba_conditional.hpp"
 #include "native_object_types.hpp"
 #include "native_file_operations.hpp"
 #include "vba_array.hpp"
@@ -402,6 +403,7 @@ std::string inlineStatementLines(const std::string& source,bool preserveLabels=f
 }
 
 int moduleArrayBase(std::string_view module) {
+    const auto activeSource=preprocessVbaConditional(module);module=activeSource;
     std::istringstream source{std::string(module)}; std::string line;
     const std::regex option(R"(^\s*Option\s+Base\s+([01])\s*(?:'.*)?$)",std::regex::icase);
     int result=0; while(std::getline(source,line)) { std::smatch match; if(std::regex_match(line,match,option)) result=match[1].str()=="1" ? 1 : 0; }
@@ -415,6 +417,7 @@ public:
     void saveRecord() override { throw VbaRuntimeError(3251,"A constant cannot save records"); }
 };
 VbaCompareMode moduleCompareMode(std::string_view module) {
+    const auto activeSource=preprocessVbaConditional(module);module=activeSource;
     std::istringstream stream{std::string(module)}; std::string line;
     static const std::regex option(R"(^\s*Option\s+Compare\s+(Binary|Text|Database)\s*(?:'.*)?$)",std::regex::icase);
     auto mode=VbaCompareMode::Binary;
@@ -497,6 +500,7 @@ std::vector<ConstantDeclaration> constantDeclarations(const std::string& text,Vb
 }
 struct ModuleConstantDeclaration { ConstantDeclaration value; bool publicValue{}; int line{}; std::string qualifiedName; };
 std::vector<ModuleConstantDeclaration> moduleConstantDeclarations(std::string_view module) {
+    const auto activeSource=preprocessVbaConditional(module);module=activeSource;
     static const std::regex procedure(R"(^\s*(?:(?:Public|Private|Friend|Static)\s+)?(?:Sub|Function|Property)\s+)",std::regex::icase);
     static const std::regex declaration(R"(^\s*(?:(Public|Private)\s+)?Const\s+(.+)$)",std::regex::icase);
     static const std::regex enumStart(R"(^\s*(?:(Public|Private)\s+)?Enum\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*$)",std::regex::icase);
@@ -582,6 +586,9 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
 VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_view name,
                                   std::vector<Statement>& statements, bool& isFunction, bool& hasCancel,
                                   std::vector<Parameter>* parameters = nullptr,bool resolveLabels=true,std::string* resultType=nullptr,bool inheritedWith=false) {
+    std::string activeSource;
+    try {activeSource=preprocessVbaConditional(module);module=activeSource;}
+    catch(const VbaConditionalError& error) {VbaExecutionResult result{VbaExecutionStatus::Unsupported,error.what(),error.line};result.errorNumber=error.number;return result;}
     VbaVariables declarationConstants; const auto constantMode=moduleCompareMode(module);
     try { declarationConstants=moduleConstantValues(module); }
     catch(const VbaRuntimeError& error) { VbaExecutionResult result{VbaExecutionStatus::Unsupported,"Module constant declaration unsupported",0}; result.errorNumber=error.number; return result; }
@@ -1408,6 +1415,7 @@ VbaExecutionResult parseProcedure(std::string_view module,std::string_view name,
     return result;
 }
 std::unordered_set<std::string> moduleProcedureNames(std::string_view module) {
+    const auto activeSource=preprocessVbaConditional(module);module=activeSource;
     static const std::regex declaration(R"(^\s*(?:(?:Public|Private|Friend|Static)\s+)?(?:Sub|Function|Property\s+(?:Get|Let|Set))\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))",std::regex::icase);
     std::unordered_set<std::string> names; std::istringstream source{std::string(module)}; std::string line;
     while(std::getline(source,line)) {
@@ -1450,6 +1458,7 @@ VbaExecutionResult validateVbaProcedure(std::string_view module, std::string_vie
 }
 
 std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module) {
+    const auto activeSource=preprocessVbaConditional(module);module=activeSource;
     auto state=std::make_shared<VbaModuleState>();
     state->procedures=moduleProcedureNames(module); state->procedureInventoryComplete=true;
     const std::regex procedure(R"(^\s*(?:(?:Public|Private|Friend|Static)\s+)?(?:Sub|Function|Property)\s+)",std::regex::icase);
@@ -2156,18 +2165,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         if(!signature) throw VbaRuntimeError(3251,"Declared local procedure binding is unsupported");
         return signatureCache.emplace(key,std::move(signature)).first->second;
     };
-    auto compareMode=VbaCompareMode::Binary;
-    {
-        std::istringstream source{std::string(module)}; std::string line;
-        const std::regex option(R"(^\s*Option\s+Compare\s+(Binary|Text|Database)\s*(?:'.*)?$)",std::regex::icase);
-        while (std::getline(source,line)) {
-            std::smatch match;
-            if (std::regex_match(line,match,option)) {
-                const auto mode=lower(match[1].str());
-                compareMode=mode=="database" ? VbaCompareMode::Database : mode=="text" ? VbaCompareMode::Text : VbaCompareMode::Binary;
-            }
-        }
-    }
+    const auto compareMode=moduleCompareMode(module);
     const auto evaluate = [&](std::string_view expression) {
         return evaluateVbaExpression(expression, host, locals, resolver,withFrames.empty() ? nullptr : &withFrames.back().value,compareMode,arrayBase);
     };

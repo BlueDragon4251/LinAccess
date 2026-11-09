@@ -1,3 +1,4 @@
+#include "vba_conditional.hpp"
 #include "execution_capabilities.hpp"
 #include "native_standard_module_host.hpp"
 #include "vba_runtime.hpp"
@@ -71,7 +72,7 @@ std::optional<std::string> NativeStandardModuleHost::moduleForProcedure(std::str
         check();std::optional<std::string> found;const auto target=QString::fromUtf8(procedure.data(),procedure.size());
         for(const auto& bytes:standardVbaModuleSources(db_)) {
             const auto source=decodeVbaSource(bytes);const auto code=source.toUtf8().toStdString();if(isVbaClassModule(code)) continue;
-            const auto analysis=analyzeVba(code);const auto lines=source.split('\n');
+            const auto analysis=analyzeVba(preprocessVbaConditional(code));const auto lines=source.split('\n');
             for(const auto& item:analysis.procedures) {
                 if(QString::fromStdString(item.name).compare(target,Qt::CaseInsensitive)!=0) continue;
                 if(item.line>0 && item.line<=lines.size() && QRegularExpression("^Private\\b",QRegularExpression::CaseInsensitiveOption).match(lines[item.line-1].trimmed()).hasMatch()) continue;

@@ -2185,3 +2185,24 @@ bestanden, Anwendung gebaut; kein neuer CTest/Windows-/Original-/Gesamtsuitenlau
 Letzte geprüfte DEB ist eaaeb73, inklusive Build-ID/MDBTools1.0.1/SQLite3.54.1;
 alle vier Fixture-/drei Uploadhashes unverändert. Diese neue Domänenetappe ist
 noch nicht paketiert. F050/F067/F068/F118/F164 und456/386/70 unverändert.
+
+
+## 2026-11-09: Native bedingte VBA-Kompilierung
+
+Qt-freier nativer Preprocessor für #Const/#If/#ElseIf/#Else/#EndIf/#End If samt
+begrenzter Fortsetzungen. Auch ausgeschlossene Konstanten/Bedingungen werden
+entsprechend MS-VBAL3.4/5.6.16.2 ausgewertet; aktive Modulfelder/Prozeduren,
+OptionBase/Compare, lokale/öffentliche/SQL-Aufrufe und native Ereignisbindungen
+verwenden eingeschlossenen Code. Quellenbytes/Hashes und Debuggeridentitäten
+bleiben ursprünglich; echte Haltepunkte prüfen Originalzeilen. Linux-Hostflags
+und genaue Grenzen in VBA_CONDITIONAL_COMPILATION.md; keine Windows-API-Fiktion.
+Abhängigkeits-/Nesting-/Textbudgets sperren Zyklen und exponentielle Expansion.
+Ein fehlender Array-Header/eine Syntaxklammer wurden beim Build korrigiert. Im
+gebündelten Prüflauf bestanden7/8; Kernelprüfung fand falsches Zahlenfeld beim
+Boolean-Lesen. Exakt auf .boolean korrigiert; danach gezielt Kernel/DAO2/2
+(2,67s) bestanden, echter SQL-UDF-True-Zweig/Typ ebenfalls. GUI12,88s und15,34s
+waren bereits bestanden und wurden für diesen Einzelfix nicht wiederholt.
+Separater Qt-freier Build/Kernlauf ebenfalls bestanden; ldd ohne Qt. Keine neuen
+CTest-IDs/Original-/Windows-/frische Gesamtsuitenbehauptung. Anwendung neu gebaut;
+letzte geprüfte DEB weiterhin eaaeb73. F040/F042/F043/F045/F051/F068 bleiben offen;
+Katalog456/386 bestätigte Teilumfänge/70 offene Vollanforderungen unverändert.

@@ -1,3 +1,4 @@
+#include "vba_conditional.hpp"
 #pragma once
 #include "vba_analyzer.hpp"
 #include "execution_capabilities.hpp"
@@ -79,7 +80,7 @@ inline void refresh(QSqlDatabase db,sqlite3* native,Registry& registry) {
             auto module=std::make_shared<const std::string>(text.toUtf8().toStdString()); bytes+=static_cast<qsizetype>(module->size());
             if(bytes>16*1024*1024) throw VbaRuntimeError(3251,"VBA SQL decoded module limit exceeded");
             if(isVbaClassModule(*module)) continue;
-            const auto analysis=analyzeVba(*module); const auto lines=text.split('\n');
+            const auto analysis=analyzeVba(preprocessVbaConditional(*module)); const auto lines=text.split('\n');
             for(const auto& item:analysis.procedures) {
                 const auto name=QString::fromStdString(item.name),key=name.toCaseFolded();
                 if(!sqlName.match(name).hasMatch() || name.size()>128 || key.startsWith("linaccess_") || key.startsWith("sqlite_")) continue;

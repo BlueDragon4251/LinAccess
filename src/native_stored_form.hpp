@@ -1,5 +1,6 @@
 #pragma once
 #include "vba_analyzer.hpp"
+#include "vba_conditional.hpp"
 #include "native_form_events.hpp"
 #include "native_form_controls.hpp"
 #include "access_query.hpp"
@@ -72,7 +73,7 @@ inline NativeStoredForm nativeStoredForm(QString name,const QJsonObject& definit
     const auto fieldEvents=nativeFieldEventOverrides(definition.value("field_events"),names);
     const auto timerInterval=nativeFormTimerInterval(definition.value("timer_interval"));
     auto code=definition.value("vba").toString(); QSet<QString> procedures;
-    const auto utf8=code.toUtf8(); const auto analysis=analyzeVba(std::string_view(utf8.constData(),static_cast<std::size_t>(utf8.size())));
+    const auto utf8=code.toUtf8(); const auto analysis=analyzeVba(preprocessVbaConditional(std::string_view(utf8.constData(),static_cast<std::size_t>(utf8.size()))));
     for(const auto& procedure:analysis.procedures) procedures.insert(QString::fromStdString(procedure.name).toCaseFolded());
     const auto extra=nativeFormControls(definition.value("controls"),names,schema,procedures);
     for(const auto& name:extra.names) used.insert(name.toCaseFolded());

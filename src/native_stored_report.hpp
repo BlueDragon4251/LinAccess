@@ -1,6 +1,7 @@
 #pragma once
 #include "access_query.hpp"
 #include "vba_analyzer.hpp"
+#include "vba_conditional.hpp"
 #include "vba_runtime.hpp"
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -57,7 +58,7 @@ inline NativeStoredReport nativeStoredReport(QString name,const QJsonObject& def
         throw VbaRuntimeError(5,"Invalid native report footer page break setting");
     if(footerExpression.isEmpty() && footerForce) throw VbaRuntimeError(5,"Report footer page break requires a footer calculation");
     const auto code=definition.value("vba").toString();
-    const auto bytes=code.toUtf8(); const auto analysis=analyzeVba(std::string_view(bytes.constData(),bytes.size()));
+    const auto bytes=code.toUtf8(); const auto analysis=analyzeVba(preprocessVbaConditional(std::string_view(bytes.constData(),bytes.size())));
     QSet<QString> procedures;
     for (const auto& procedure:analysis.procedures) procedures.insert(QString::fromStdString(procedure.name).toCaseFolded());
     const int width=qMax(900,9000/int(columns.size())),reportWidth=width*columns.size();

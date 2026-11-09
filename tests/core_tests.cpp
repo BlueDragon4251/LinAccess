@@ -7,6 +7,9 @@ void testVbaDebugger();
 #include <charconv>
 #include "vba_analyzer.hpp"
 #include "vba_runtime.hpp"
+#include "vba_conditional.hpp"
+#include "vba_debugger.hpp"
+#include <algorithm>
 #include "vba_expression.hpp"
 #include "vba_like.hpp"
 #include "vba_array.hpp"
@@ -920,6 +923,90 @@ End Sub
 }
 
 int main() {
+    {
+        FakeForm host;
+        const std::string module=R"VBA(#Const chosen = later
+#If False Then
+#Const later = Abs(-3)
+#Const text$ = "Then's #Else"
+Unsupported syntax in an excluded block
+Public ignored As UnsupportedType
+Sub ConditionalRun()
+Err.Raise 7011
+End Sub
+#ElseIf chosen = 3 And (Len(text) > 0) Then
+Option Base 1
+Option Compare Text
+Public activeCounter As Long
+Sub ConditionalRun()
+Dim data(2) As Long
+If LBound(data)<>1 Then Err.Raise 7012
+If "A"<>"a" Then Err.Raise 7013
+If ConditionalHelper()<>9 Then Err.Raise 7016
+#If MissingFlag Then
+Err.Raise 7014
+#Else
+activeCounter=activeCounter+1
+#End If
+Me.result=activeCounter
+End Sub
+#Else
+Sub ConditionalRun()
+Err.Raise 7015
+End Sub
+#EndIf
+#If chosen=3 Then
+Function ConditionalHelper() As Long
+ConditionalHelper=9
+End Function
+#Else
+Function ConditionalHelper() As Long
+Err.Raise 7017
+End Function
+#End If
+)VBA";
+        const auto active=linaccess::preprocessVbaConditional(module);
+        assert(std::count(active.begin(),active.end(),'\n')==std::count(module.begin(),module.end(),'\n'));
+        assert(active.find("Unsupported syntax")==std::string::npos && active.find("ignored As")==std::string::npos);
+        auto state=linaccess::createVbaModuleState(module);assert(state->procedures.size()==2 && state->procedures.contains("conditionalrun") && state->values.contains("activecounter") && !state->values.contains("ignored") && !state->values.contains("chosen"));
+        auto result=linaccess::executeVbaProcedure(module,"ConditionalRun",host);
+        if(result.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Conditional fixture: "<<result.errorNumber<<"/"<<result.line<<" "<<result.explanation<<'\n';
+        assert(result.status==linaccess::VbaExecutionStatus::Completed && host.fields["result"]=="1");
+        assert(linaccess::executeVbaProcedure(module,"ConditionalRun",host).status==linaccess::VbaExecutionStatus::Completed && host.fields["result"]=="2");
+        const auto marker=module.find("Me.result=activeCounter");assert(marker!=std::string::npos);
+        const auto expectedLine=1+std::count(module.begin(),module.begin()+marker,'\n');int stops=0;
+        {
+            linaccess::VbaDebuggerSession debugger([&](const linaccess::VbaDebugPause& pause){
+                assert(pause.reason==linaccess::VbaDebugReason::Breakpoint && !pause.frames.empty());
+                assert(pause.frames.back().line==expectedLine && pause.frames.back().source && *pause.frames.back().source==module);++stops;return linaccess::VbaDebugAction::Continue;
+            });
+            debugger.setBreakpoint(module,expectedLine);
+            assert(linaccess::executeVbaProcedure(module,"ConditionalRun",host).status==linaccess::VbaExecutionStatus::Completed);
+        }
+        assert(stops==1 && host.fields["result"]=="3");
+        const auto native=linaccess::preprocessVbaConditional("#If Win32 Or Win64 Or Mac Or VBA7 Then\nWindowsOnly\n#ElseIf VBA6 Then\nNativeLanguage\n#End If\n");
+        assert(native.find("WindowsOnly")==std::string::npos && native.find("NativeLanguage")!=std::string::npos);
+        const auto continued=linaccess::preprocessVbaConditional("#Const Flag = 1 _\n+ 1\n#If Flag = _\n2 Then\nyes\n#End If\n");assert(continued.find("yes")!=std::string::npos && std::count(continued.begin(),continued.end(),'\n')==6);
+        const auto unknown=linaccess::preprocessVbaConditional("#Const A=UnknownName & \"suffix\"\n#If A=\"suffix\" Then\nyes\n#End If\n");assert(unknown.find("yes")!=std::string::npos);
+        for(const auto& entry:std::vector<std::tuple<std::string,int,int>>{
+            {"#If True Then\n#ElseIf 1/0 Then\n#End If\n",11,2},
+            {"#If False Then\n#Const X=1/0\n#End If\n",11,2},
+            {"#If False Then\n#If 1/0 Then\n#End If\n#End If\n",11,2},
+            {"#Const X=1\n#Const x=2\n",5,2},
+            {"#Else\n",3251,1},{"#If True Then\n",3251,1},
+            {"#If True Then\n#Else\n#ElseIf True Then\n#End If\n",3251,3},
+            {"#Const A=B\n#Const B=A\n",3251,1},
+            {"#If CreateObject(\"Scripting.Dictionary\") Then\n#End If\n",3251,1},
+            {"#If Null Then\n#End If\n",94,1}}) {
+            int error=0,line=0;try{(void)linaccess::preprocessVbaConditional(std::get<0>(entry));}catch(const linaccess::VbaConditionalError& failure){error=failure.number;line=failure.line;}
+            assert(error==std::get<1>(entry) && line==std::get<2>(entry));
+        }
+        std::string growth="#Const A0=\"x\"\n";
+        for(int i=1;i<=17;++i) growth+="#Const A"+std::to_string(i)+"=A"+std::to_string(i-1)+" & A"+std::to_string(i-1)+"\n";
+        int growthError=0;try{(void)linaccess::preprocessVbaConditional(growth);}catch(const linaccess::VbaConditionalError& failure){growthError=failure.number;}assert(growthError==3035);
+        const auto invalid=linaccess::executeVbaProcedure("#If True Then\n#ElseIf 1/0 Then\n#End If\nSub MustNotRun()\nMe.result=999\nEnd Sub\n","MustNotRun",host);
+        assert(invalid.status==linaccess::VbaExecutionStatus::Unsupported && invalid.errorNumber==11 && invalid.line==2 && host.fields["result"]=="3");
+    }
     testNativeDecimalVariants();
     {
         FakeForm host;

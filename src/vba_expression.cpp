@@ -1,3 +1,4 @@
+#include "vba_conditional.hpp"
 #include "vba_condition.hpp"
 #include "native_object_types.hpp"
 #include "native_utf.hpp"
@@ -2423,7 +2424,7 @@ VbaValue VbaHost::eval(std::string_view source) {
     const VbaFunctionResolver functions=[&](std::string_view name,std::vector<VbaValue>& arguments,const std::vector<std::string>&) {
         const auto module=moduleForProcedure(name);
         if (!module) throw VbaRuntimeError(2425,"Eval function unavailable");
-        const auto analysis=analyzeVba(*module);
+        const auto analysis=analyzeVba(preprocessVbaConditional(*module));
         bool publicFunction=false;
         for (const auto& procedure:analysis.procedures) {
             if (lower(procedure.name)!=lower(std::string(name)) || lower(procedure.kind)!="function") continue;

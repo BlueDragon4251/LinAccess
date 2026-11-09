@@ -1484,7 +1484,26 @@ NativeNested=NativeScale(value)+1
 End Function
 )VBA");
     store("Form_PrivateContext","VERSION 1.0 CLASS\nPublic Function ClassOnly() As Long\nClassOnly=42\nEnd Function\n");
+    store("ConditionalMath",R"VBA(#If Not VBA7 Then
+Public Function ConditionalScale(ByVal value As Long) As Long
+ConditionalScale=value+5
+End Function
+#Else
+Public Function ConditionalScale(ByVal value As Long) As Currency
+Err.Raise 7091
+End Function
+#End If
+#If Win32 Then
+Public Function WindowsOnlySQL() As Long
+Err.Raise 7092
+End Function
+#End If
+)VBA");
     linaccess::installJetSqlFunctions(db);
+    const auto conditionalTypes=linaccess::nativeVbaSqlFunctionResultTypes(db);
+    assert(conditionalTypes.value("conditionalscale")=="long" && !conditionalTypes.contains("windowsonlysql"));
+    const auto conditionalResult=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT ConditionalScale(2) AS result"),{});
+    assert(conditionalResult.rows.size()==1 && conditionalResult.rows[0][0].toInt()==7 && conditionalResult.columnTypes.value(0)=="INTEGER4");
     assert(!linaccess::nativeVbaSqlFunctionResultTypes(db).contains("fv"));
     const auto builtinFuture=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT FV(0,2,-10) AS future"),{});
     assert(builtinFuture.rows.size()==1 && builtinFuture.rows[0][0].toDouble()==20 && builtinFuture.columnTypes.value(0)!="CURRENCY_REAL");

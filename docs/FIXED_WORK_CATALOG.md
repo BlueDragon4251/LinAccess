@@ -159,7 +159,7 @@ keine Tests oder Teilpunkte allein zur Erhöhung einer Fortschrittszahl anlegen.
 - [x] **F036** — Bounded persistent CodeBehind instance fields and connection-owned standard-module fields; real original public declarations bind across native forms, with recursion, typed alias recovery, visibility and reset tests. See MODULE_STATE_RUNTIME.md.
 - [x] **F037** — Procedure-wide Dim binding, local/control/global lookup precedence and standard-module Me restrictions; complete compiler/class scope remains open.
 - [ ] **F040** — Replace statement regex dispatch with a complete lexer/parser, AST and bound runtime.
-- [ ] **F042** — Modules/classes/CodeBehind, scope/lifetime, static/module variables and references.
+- [ ] **F042** — Modules/classes/CodeBehind, scope/lifetime, static/module variables and references. Bounded native conditional compilation is in VBA_CONDITIONAL_COMPILATION.md; the complete requirement remains open.
 - [ ] **F043** — Calls/returns, ByRef/ByVal, Optional/ParamArray, arrays, properties and collections.
 - [ ] **F118** — Full Access Eval grammar/scope, Unicode identifier validation and locale case folding; full surrounding original record-copy handlers and Access oracle.
 - [x] **F127** — Per-module Option Compare for relational strings; native Qt folding and explicit generic-host non-ASCII limits; original table-existence case failure fixed.

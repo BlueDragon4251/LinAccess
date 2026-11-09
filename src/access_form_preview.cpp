@@ -1,3 +1,4 @@
+#include "vba_conditional.hpp"
 #include "execution_capabilities.hpp"
 #include "native_application_run.hpp"
 #include "native_project_documents.hpp"
@@ -978,7 +979,7 @@ public:
             const auto source=linaccess::decodeVbaSource(bytes);
             const auto code=source.toUtf8().toStdString();
             if (linaccess::isVbaClassModule(code)) continue;
-            const auto analysis=linaccess::analyzeVba(code); const auto lines=source.split('\n');
+            const auto analysis=linaccess::analyzeVba(linaccess::preprocessVbaConditional(code)); const auto lines=source.split('\n');
             for (const auto& item:analysis.procedures) {
                 if (QString::fromStdString(item.name).compare(target,Qt::CaseInsensitive)!=0) continue;
                 if (item.line>0 && item.line<=lines.size() && QRegularExpression("^Private\\b",QRegularExpression::CaseInsensitiveOption).match(lines[item.line-1].trimmed()).hasMatch()) continue;
