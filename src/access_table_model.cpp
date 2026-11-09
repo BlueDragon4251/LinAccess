@@ -383,32 +383,51 @@ bool AccessTableModel::setDataBlock(const QModelIndex& first,const QVector<QVect
     if(metadataError_) return reject(metadataError_);
     if(!first.isValid() || first.model()!=this || values.isEmpty() || values.front().isEmpty()) return reject(5);
     const auto columns=values.front().size();
-    if(values.size()>1000000/columns || static_cast<qint64>(first.row())+values.size()>rowCount()
+    const qint64 endRow=static_cast<qint64>(first.row())+values.size();
+    if(values.size()>1000000/columns || endRow>std::numeric_limits<int>::max()
         || static_cast<qint64>(first.column())+columns>columnCount()) return reject(5);
-    struct Cell { QModelIndex index; QVariant value; };
-    QVector<Cell> checked;
+    // Exhaust the source before appending: an unfetched record is never a new row.
+    while(rowCount()<endRow && canFetchMore()) {
+        const int previous=rowCount();fetchMore();if(rowCount()==previous) break;
+    }
+    const int originalRows=rowCount();
+    const int appended=std::max(0,static_cast<int>(endRow)-originalRows);
+    struct Cell { int row,column; QVariant value; };
+    QVector<Cell> checked;QMap<QString,QVariant> dateDefaults;
     try {
+        if(appended) dateDefaults=nativeTableDateDefaults(database(),tableName());
         checked.reserve(values.size()*columns);
         for(qsizetype row=0;row<values.size();++row) {
             if(values[row].size()!=columns) return reject(5);
             for(qsizetype column=0;column<columns;++column) {
-                const auto target=index(first.row()+row,first.column()+column);
-                if(!(flags(target)&Qt::ItemIsEditable)) return reject(2448);
-                checked.push_back({target,checkedInput(columnType(target.column()),values[row][column])});
+                const int targetRow=first.row()+row,targetColumn=first.column()+column;
+                const auto type=columnType(targetColumn);
+                if(targetRow<originalRows) {
+                    if(!(flags(index(targetRow,targetColumn))&Qt::ItemIsEditable)) return reject(2448);
+                } else if(generated_.contains(record().fieldName(targetColumn).toCaseFolded()) || type.contains("BLOB",Qt::CaseInsensitive)) return reject(2448);
+                checked.push_back({targetRow,targetColumn,checkedInput(type,values[row][column])});
             }
         }
     } catch(const VbaRuntimeError& error) { return reject(error.number); }
       catch(const std::bad_alloc&) { return reject(7); }
     int failure=0;
+    try {if(appended && !QSqlTableModel::insertRows(originalRows,appended)) failure=3251;}
+    catch(const std::bad_alloc&) {failure=7;}
+    catch(const std::exception&) {failure=3251;}
     {
         const QSignalBlocker blocked(this);
         try {
-            for(const auto& cell:checked) if(!QSqlTableModel::setData(cell.index,cell.value,Qt::EditRole)) { failure=3251; break; }
+            if(!failure && appended) for(int row=originalRows;row<endRow;++row) for(auto it=dateDefaults.cbegin();it!=dateDefaults.cend();++it) {
+                const int column=fieldIndex(it.key());
+                if(column>=0 && !QSqlTableModel::setData(index(row,column),it.value(),Qt::EditRole)) {failure=3251;break;}
+            }
+            if(!failure) for(const auto& cell:checked) if(!QSqlTableModel::setData(index(cell.row,cell.column),cell.value,Qt::EditRole)) { failure=3251; break; }
         } catch(const std::bad_alloc&) { failure=7; }
           catch(const std::exception&) { failure=3251; }
-        // The cache was clean on entry; only this block can need reverting.
-        if(failure) QSqlTableModel::revertAll();
+        // The cache was clean on entry; revert inserted rows and changed cells together.
     }
+    if(failure) {QSqlTableModel::revertAll();dirtyRows_.clear();deletedRows_.clear();return reject(failure);}
+    for(int row=originalRows;row<endRow;++row) dirtyRows_.insert(row);
     const auto last=index(first.row()+values.size()-1,first.column()+columns-1);
     if(!failure) setLastError({});
     emit dataChanged(first,last,{Qt::DisplayRole,Qt::EditRole,Qt::CheckStateRole});

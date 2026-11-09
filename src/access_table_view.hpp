@@ -477,7 +477,6 @@ public:
         while(typed->rowCount()<endRow && typed->canFetchMore()) {
             const auto count=typed->rowCount(); typed->fetchMore(); if(typed->rowCount()==count) break;
         }
-        if(typed->rowCount()<endRow) return refuse(3251,"Zum Einfügen sind noch nicht genügend vorhandene Datensätze verfügbar.");
         if(!typed->setDataBlock(first,values)) return false;
         if(selectionModel()) selectionModel()->select(QItemSelection(first,typed->index(endRow-1,first.column()+values.front().size()-1)),QItemSelectionModel::ClearAndSelect);
         return true;

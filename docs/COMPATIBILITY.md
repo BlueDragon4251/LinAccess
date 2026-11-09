@@ -3889,3 +3889,17 @@ Ein veralteter geschlossener Dialogzeiger im Prüffall wurde gezielt korrigiert.
 Keine neue CTest-ID oder Windows-Beobachtung; volle Jet-/Windows-Suchgleichheit
 bleibt offen. FORMATTED_FIND_RUNTIME.md;456/384/72 unverändert.
 Ohne Zwischenabschluss nächste Umsetzung: Bereichseinfügen mit neuen Datensätzen.
+
+Native Tabellen-Bereichseinfügung kann jetzt über das Ende vorhandener Datensätze
+hinaus neue Entwurfszeilen anlegen. Vorher werden noch nicht geladene vorhandene
+Zeilen abgeholt und alle Zellen/Typen vorgeprüft; AutoWert-/Binärziele bleiben
+geschützt. Neue Zeilen nutzen vorhandene Defaults, Datensatz-Undo, Verwerfen und
+transaktionales Speichern mit echter Schlüsselerfassung. SQL-Constraintfehler
+rollen alle SQL-Änderungen zurück; Entwürfe bleiben korrigierbar. Bestehender
+Currency-/Feld-/Clipboard-Prüflauf1/1 (0,44s), App gebaut; Typfehler ohne Teiländerung,
+zusätzliche Zeilen, Undo/Verwerfen, SQL-Defaults, erzeugte Schlüssel und Unique-
+Rollback geprüft. Technische Schutzprüfung auf explizites AUTOINCREMENT korrigiert;
+manuelle INTEGER-Primärschlüssel sind keine behaupteten AutoWerte. Kein neuer
+CTest. Noch kein Einfügen in leere Tabellen/gesonderter Tabellen-Anfügebefehl;
+weitere F340-Anforderungen bleiben offen. CLIPBOARD_APPEND_RUNTIME.md;
+456/384/72 unverändert. Direkt weiterimplementieren.

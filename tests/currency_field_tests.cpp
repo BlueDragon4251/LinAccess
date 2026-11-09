@@ -259,6 +259,29 @@ End Function
     assert(sql.exec("SELECT SUM(amount) FROM grid") && sql.next() && sql.value(0).toDouble()==3.75); sql.finish();
 
     {
+        assert(sql.exec("CREATE TABLE paste_append(id INTEGER PRIMARY KEY AUTOINCREMENT,value INTEGER,stamp TEXT DEFAULT '2003-12-31 18:05:06')"));
+        assert(sql.exec("INSERT INTO paste_append(value) VALUES(10)"));
+        linaccess::AccessTableModel cells(nullptr,db);cells.setTable("paste_append");cells.setEditStrategy(QSqlTableModel::OnManualSubmit);assert(cells.select());
+        linaccess::AccessTableView sheet;sheet.setModel(&cells);sheet.setCurrentIndex(cells.index(0,1));
+        QApplication::clipboard()->setText("11\r\n12\r\nbad");assert(!sheet.pasteSelection() && cells.rowCount()==1 && !cells.isDirty());
+        QApplication::clipboard()->setText("11\r\n12\r\n13");assert(sheet.pasteSelection() && cells.rowCount()==3 && cells.isDirty());
+        assert(cells.clipboardText(cells.index(2,1))=="13");
+        assert(sql.exec("SELECT count(*),sum(value) FROM paste_append") && sql.next() && sql.value(0).toInt()==1 && sql.value(1).toInt()==10);sql.finish();
+        assert(cells.undoPendingRecord(2) && cells.rowCount()==2);
+        cells.revertAll();assert(cells.rowCount()==1 && !cells.isDirty());
+        sheet.setCurrentIndex(cells.index(0,1));assert(sheet.pasteSelection() && cells.submitTransactionally());
+        assert(sql.exec("SELECT count(*),sum(value),count(DISTINCT id),min(stamp) FROM paste_append") && sql.next() && sql.value(0).toInt()==3 && sql.value(1).toInt()==36 && sql.value(2).toInt()==3 && sql.value(3).toString()=="2003-12-31 18:05:06");sql.finish();
+        assert(sql.exec("CREATE UNIQUE INDEX paste_append_unique ON paste_append(value)"));
+        sheet.setCurrentIndex(cells.index(2,1));QApplication::clipboard()->setText("20\r\n11");
+        assert(sheet.pasteSelection() && cells.rowCount()==4 && !cells.submitTransactionally());
+        assert(sql.exec("SELECT count(*),sum(value) FROM paste_append") && sql.next() && sql.value(0).toInt()==3 && sql.value(1).toInt()==36);sql.finish();
+        cells.revertAll();assert(cells.select() && cells.rowCount()==3 && !cells.isDirty());
+        sheet.setCurrentIndex(cells.index(2,0));QApplication::clipboard()->setText("21\r\n22");
+        assert(!sheet.pasteSelection() && cells.rowCount()==3 && !cells.isDirty());
+
+    }
+
+    {
         assert(sql.exec("CREATE TABLE copy_cells(id INTEGER PRIMARY KEY,value TEXT)"));
         assert(sql.exec("WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<300) INSERT INTO copy_cells SELECT i,'row-'||i FROM n"));
         linaccess::AccessTableModel cells(nullptr,db); cells.setTable("copy_cells"); cells.setEditStrategy(QSqlTableModel::OnManualSubmit); assert(cells.select());
