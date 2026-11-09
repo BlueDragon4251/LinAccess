@@ -3575,3 +3575,15 @@ Ergebnisse gegen unabhängiges SQL, Sortierung und Wiederöffnung. Keine neuen
 CTest-IDs oder Windows-/Original-/Gesamtsuiten-/Paketnachweise. Parameter/Oder-
 Etappe als b1b5858 veröffentlicht; letzte geprüfteDEB weiterhin1dafedd.
 Katalog456/386/70 unverändert; keine vollständige Abfrageentwurfsparität behauptet.
+
+
+Gruppierung im visuellen Abfrageentwurf: pro Feld Group By/Where/Count/Sum/Avg/
+Min/Max/Var/StDev, echte GROUP BY-/WHERE-/HAVING-Klauseln mit getrennten ODER-
+Gruppen; Where-Felder nur ausgeblendet/unsortiert. Entwurfsmetadaten behalten
+Funktionen und Modus. Nachträglich hinzugekommene Quellspalten verändern keine
+bestehende Gruppierung. Details: docs/VISUAL_QUERY_DESIGNER.md. Bestehendes GUI-/
+SQL-Bündel2/2 (14,62s) bestanden; nach Korrektur der Schemaerweiterung nur betroffene
+GUI-Prüfung1/1 (14,36s) wiederholt. Anwendung gebaut; keine neuen CTest-IDs oder
+Windows-/Original-/Gesamtsuiten-/Paketnachweise. Berechnete-Felder-Etappe als
+cee05d8 veröffentlicht/verifiziert; letzte geprüfteDEB weiterhin1dafedd.
+F067/F068/F080/F148 sowie fester Katalog456/386/70 bleiben unverändert offen.

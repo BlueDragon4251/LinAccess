@@ -4,6 +4,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QComboBox>
+#include <QCheckBox>
 #include <QDialog>
 #include <QJsonDocument>
 #include <QJsonArray>
@@ -81,6 +82,14 @@ void exerciseVisualQueryDesigner(MainWindow& window,QSqlDatabase database) {
         text->setPlainText("SELECT id FROM builder_input WHERE id=1");editor->findChild<QLineEdit*>("native-query-name")->setText("visual_manual");editor->findChild<QPushButton*>("native-query-save")->click();
     });createQuery(window)->trigger();
     assert(sql.exec("SELECT definition FROM _la_objects WHERE kind='query' AND name='visual_manual'") && sql.next() && !QJsonDocument::fromJson(sql.value(0).toByteArray()).object().contains("visual_query"));sql.finish();
+    const auto totalField=[](const QString& name,const QString& alias,bool visible,const QString& criterion){return QJsonObject{{"name",name},{"alias",alias},{"visible",visible},{"sort",0},{"criteria",criterion}};};
+    auto bucket=totalField("","bucket",true,"");bucket.insert("expression","[score]>=4");bucket.insert("sort",2);
+    QJsonObject grouped{{"version",1},{"table","builder_input"},{"groups",1},{"fields",QJsonArray{totalField("id","n",true,">= 2"),totalField("label","",false,"<> 'rowA'"),totalField("score","total",true,""),bucket}}};
+    QTimer::singleShot(0,&window,[&]{auto* dialog=builder();QTimer::singleShot(0,dialog,[]{auto* totals=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(totals && totals->objectName()=="native-query-totals");totals->findChild<QCheckBox*>("native-query-totals-enabled")->setChecked(true);auto* grid=totals->findChild<QTableWidget*>("native-query-total-fields");const QStringList modes{"Count","Where","Sum","Group By"};assert(grid->rowCount()==4);for(int row=0;row<4;++row)qobject_cast<QComboBox*>(grid->cellWidget(row,1))->setCurrentText(modes[row]);totals->findChild<QPushButton*>("native-query-totals-apply")->click();});dialog->findChild<QPushButton*>("native-query-builder-totals")->click();auto* apply=dialog->findChild<QPushButton*>("native-query-builder-apply");assert(apply->isEnabled() && reads==3);apply->click();});
+    const auto totals=linaccess::editNativeQueryDesign(&window,database,grouped,[]{});assert(totals && totals->sql.contains(" GROUP BY ") && totals->sql.contains(" HAVING ") && totals->sql.contains(" WHERE ") && reads==3);
+    QSqlQuery actualTotals(database),expectedTotals(database);assert(actualTotals.exec(linaccess::compileAccessQuery(totals->sql).sql));assert(expectedTotals.exec("SELECT COUNT(id),SUM(score),(score>=4) FROM builder_input WHERE label<>'rowA' GROUP BY score>=4 HAVING COUNT(id)>=2 ORDER BY (score>=4) DESC"));assert(actualTotals.next() && expectedTotals.next());for(int column=0;column<3;++column)assert(actualTotals.value(column).toString()==expectedTotals.value(column).toString());assert(actualTotals.value(0).toInt()==2 && actualTotals.value(1).toDouble()==10 && !actualTotals.next() && !expectedTotals.next());actualTotals.finish();expectedTotals.finish();
+    assert(sql.exec("ALTER TABLE builder_input ADD COLUMN extra INTEGER"));assert(sql.exec("UPDATE builder_input SET extra=id"));sql.finish();
+    QTimer::singleShot(0,&window,[&]{auto* dialog=builder();QTimer::singleShot(0,dialog,[]{auto* totals=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(totals->findChild<QCheckBox*>("native-query-totals-enabled")->isChecked());auto* grid=totals->findChild<QTableWidget*>("native-query-total-fields");assert(qobject_cast<QComboBox*>(grid->cellWidget(0,1))->currentText()=="Count" && qobject_cast<QComboBox*>(grid->cellWidget(1,1))->currentText()=="Where");totals->reject();});dialog->findChild<QPushButton*>("native-query-builder-totals")->click();assert(dialog->findChild<QPushButton*>("native-query-builder-apply")->isEnabled());const auto preview=dialog->findChild<QPlainTextEdit*>("native-query-builder-sql")->toPlainText();assert(!preview.contains("extra"));dialog->reject();});assert(!linaccess::editNativeQueryDesign(&window,database,totals->state,[]{}));
     assert(sql.exec("SELECT COUNT(*) FROM builder_input") && sql.next() && sql.value(0).toInt()==3);sql.finish();
     assert(sql.exec("DELETE FROM _la_objects WHERE kind='query' AND name IN ('visual_probe','visual_manual')"));assert(linaccess::installAccessQueryViews(database)>=0);assert(sql.exec("DROP TABLE builder_input"));sql.finish();
     assert(sqlite3_create_function_v2(native,"BuilderProbe",0,SQLITE_UTF8,nullptr,nullptr,nullptr,nullptr,nullptr)==SQLITE_OK);

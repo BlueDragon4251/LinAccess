@@ -29,9 +29,8 @@ outside this scope. Imported sources remain outside this
 native-owned authoring path.
 
 Scope is one physical table, fields/literal criteria/native supported functions,
-AND/OR field groups, declared parameters, distinct and ordered output. Joins,
-grouped totals, calculated projection authoring, arbitrary SQL
-round-trip parsing and the complete Access QBE/window/locale oracle remain open.
+AND/OR field groups, declared parameters, calculated scalar projections, grouped
+aggregates, distinct and ordered output. Joins and arbitrary SQL round-trip parsing and the complete Access QBE/window/locale oracle remain open.
 The native 255-field/64-character name and criteria/predicate bounds apply. The
 SQL editor retains its broader existing capabilities. No full designer parity is
 claimed; F067/F068/F080/F148 remain open, fixed catalog456/386/70 unchanged.
@@ -89,9 +88,32 @@ references and supported scalar functions. Aggregates, subqueries, unknown VBA/S
 callbacks and live object/file/clock values are refused in this designer scope;
 manual SQL remains available with its existing explicit runtime boundaries.
 Repeating expressions for criteria/sorting must not introduce external side effects.
-Preview/Apply/restoration remain metadata-only. This does not add joins or grouping.
+Preview/Apply/restoration remain metadata-only. This scalar-field stage adds no joins; grouping is described below.
 
 Validation: existing GUI/SQL bundle2/2 passed (15.09s), application built.
 The same GUI fixture compares calculated values and sorting against independent
 SQL, reopens the saved expression and refuses a callback without invoking it.
 No new CTest ID, Windows/original/full-suite or package proof is claimed.
+
+## Grouping and aggregates
+
+The Gruppierung dialog enables a totals query and assigns each physical or
+calculated row one of Group By, Where, Count, Sum, Avg, Min, Max, Var or StDev.
+Group By expressions form GROUP BY; aggregate rows project the actual aggregate
+and their criteria form HAVING. Where rows must be hidden and unsorted and filter
+input records through WHERE. Each clause combines its own nonempty criteria groups
+with OR, and fields within each group with AND. WHERE and HAVING apply together;
+this is not a single OR spanning input and aggregate predicates. Both clauses and
+GROUP BY are visible in the generated SQL before Apply.
+
+Sorting applies to the group expression or aggregate. Alias, parameters, row order
+and grouping choices persist in the same visual metadata; disabling totals keeps
+the choices in the draft. Native SQL/DAO aggregate type, Currency and unsupported
+expression boundaries still apply. There is no alternate aggregation engine,
+record calculation in the preview, new CTest ID or claimed Windows oracle result.
+
+Validation: GUI/SQL2/2 passed (14.62s), application built. Schema extension
+review found that newly hidden columns must not change an existing GROUP BY;
+they now default to Where with no criterion. Only affected GUI1/1 was repeated
+(14.36s), including reopening after an actual added/updated technical column.
+Results of grouping, Count, Sum, WHERE and HAVING match independent SQL.
