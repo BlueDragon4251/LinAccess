@@ -1,3 +1,4 @@
+#include <QTextBrowser>
 #include "native_schema_editor.hpp"
 #include "native_macro.hpp"
 #include "native_module_definition.hpp"
@@ -2672,6 +2673,19 @@ End Function
 Public Function NativeFailure() As Long
 Err.Raise 7001, "NativeRun", "deliberate failure"
 End Function
+Public Sub NativeExecute()
+CurrentDb.Execute "INSERT INTO editor_module_effects VALUES(" & NativeSupport(NativeAdd(1)) & ")"
+End Sub
+Public Sub NativeInvalidContext()
+Me.Tag=1
+End Sub
+Public Function NativePrompt() As Long
+NativePrompt=MsgBox("Module execution",vbYesNo,"Module")
+End Function
+Public Sub NativePreflight()
+CurrentDb.Execute "INSERT INTO editor_module_effects VALUES(999)"
+GoSub MissingLabel
+End Sub
 Public Function NativeRecursive() As Long
 NativeRecursive=Application.Run("NativeRecursive")
 End Function)VBA";
@@ -2745,6 +2759,24 @@ End Function)VBA",db,&window);eventCode.show();QApplication::processEvents();
     const int collision=artifact(db,"vba","NATIVEMATH",body);error=0;try {(void)linaccess::standardVbaModuleSources(db);}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==5 && !sql.exec("SELECT NativeAdd(5)"));sql.prepare("DELETE FROM _la_access_artifacts WHERE id=?");sql.addBindValue(collision);assert(sql.exec());sql.finish();assert(archive()==originalArchive);
     QTimer::singleShot(0,&window,[&] {auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-module-editor");dialog->findChild<QLineEdit*>("native-module-name")->setText("MacroConditions");dialog->findChild<QPlainTextEdit*>("native-module-source")->setPlainText(QString::fromUtf8(body));QTimer::singleShot(0,&window,[&] {auto* message=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(message);message->accept();});dialog->findChild<QPushButton*>("native-module-save")->click();assert(dialog->isVisible());dialog->reject();});action(window,"+ Modul")->trigger();assert(archive()==originalArchive);
     error=0;try {(void)linaccess::nativeModuleSource(QJsonObject{{"version",1},{"vba","VERSION 1.0 CLASS\n"}});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==3251);
+    assert(sql.exec("CREATE TABLE editor_module_effects(n INTEGER)"));
+    sql.prepare("INSERT INTO _la_objects(kind,name,definition) VALUES('module','NativeSupportModule',?)");sql.addBindValue(QJsonDocument(QJsonObject{{"version",1},{"vba","Public Function NativeSupport(value As Long) As Long\nNativeSupport=value*2\nEnd Function"}}).toJson(QJsonDocument::Compact));assert(sql.exec());sql.finish();
+    open([&](QDialog* dialog) {
+        auto* choices=dialog->findChild<QComboBox*>("native-module-procedure");auto* run=dialog->findChild<QPushButton*>("native-module-run");auto* result=dialog->findChild<QTextBrowser*>("native-module-result");auto* editor=dialog->findChild<QPlainTextEdit*>("native-module-source");assert(choices && run && result && editor);
+        const auto select=[&](const QString& name) {const int index=choices->findData(name);assert(index>=0);choices->setCurrentIndex(index);};
+        select("NativeExecute");QApplication::setActiveWindow(dialog);dialog->activateWindow();editor->setFocus();QApplication::processEvents();QTest::keyClick(editor,Qt::Key_F5);QApplication::processEvents();assert(result->toPlainText().startsWith("Prozedur ausgeführt."));
+        assert(sql.exec("SELECT n FROM editor_module_effects") && sql.next() && sql.value(0).toInt()==22 && !sql.next());sql.finish();
+        assert(application->member("Run",{VbaValue::string("NativeCounter")}).number==44);
+        select("NativeCounter");run->click();assert(result->toPlainText().contains("Rückgabewert: 44"));
+        select("NativePrompt");QTimer::singleShot(0,dialog,[] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(box);box->button(QMessageBox::Yes)->click();});run->click();assert(result->toPlainText().contains("Rückgabewert: 6"));
+        select("NativeAdd");run->click();assert(result->toPlainText().startsWith("Fehler 450"));
+        select("NativeInvalidContext");run->click();assert(result->toPlainText().startsWith("Fehler 438"));
+        select("NativePreflight");run->click();assert(result->toPlainText().startsWith("Fehler 3251"));
+        assert(sql.exec("SELECT COUNT(*) FROM editor_module_effects") && sql.next() && sql.value(0).toInt()==1);sql.finish();
+        editor->appendPlainText("'unsaved");assert(!run->isEnabled());dialog->findChild<QPushButton*>("native-module-analyze")->click();select("NativeExecute");run->click();assert(result->toPlainText().startsWith("Fehler 3251"));
+        assert(application->member("Run",{VbaValue::string("NativeCounter")}).number==44);dialog->reject();
+    });
+    assert(sql.exec("DELETE FROM _la_objects WHERE kind='module' AND name='NativeSupportModule'"));
     open([&](QDialog* dialog) {QTimer::singleShot(0,&window,[&] {auto* message=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(message);message->button(QMessageBox::Yes)->click();});dialog->findChild<QPushButton*>("native-module-delete")->click();});
     assert(modules->member("Count",{}).number==baseline && !descriptor->member("IsLoaded",{}).truthy() && archive()==originalArchive);assert(!prepared.exec());assert(context.close());
 }

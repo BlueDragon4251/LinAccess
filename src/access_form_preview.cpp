@@ -513,6 +513,8 @@ QString AccessFormPreview::controlMemberName(const QString& name) const {
 
 AccessFormPreview* activePreviewDocument() { return activeDocument().data(); }
 
+int nativeModuleMessageBox(QWidget* owner,std::string_view prompt,int style,const std::optional<std::string>& title) {return nativeMessageBox(owner,prompt,style,title);}
+
 class PreviewVbaHost final : public linaccess::VbaHost {
 public:
     explicit PreviewVbaHost(AccessFormPreview& preview) : preview_(preview) {}

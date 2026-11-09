@@ -59,3 +59,30 @@ and imported/native-name collision refusal, native deletion/stale prepared-query
 refusal and unchanged pre-existing archive bytes throughout. No new CTest target,
 fresh full-suite/platform matrix or Windows Access2003 oracle. F042/F050/F068/
 F118/F130/F155 remain open; fixed456/384/72 unchanged.
+
+## Execute a saved module in the editor
+
+The native module editor lists analyzed procedures and provides a Run button/F5.
+It executes the selected saved procedure with zero supplied arguments. Existing
+Optional defaults apply; required arguments produce the runtime arity error.
+Saving refreshes the inventory; typing source disables Run until Analyze/Save.
+Unsaved source is refused, and the stored source is rechecked against the guarded
+shared module catalog before execution. Selecting a procedure is transient UI
+state and does not mark the module source dirty.
+
+This is a real editor/database host. CurrentDb and DBEngine use the current native
+project; public standard-module calls and module/Static state share the same
+connection-owned frames as form/VBA/SQL calls. Supported locale-aware comparison,
+numeric/date formatting, MsgBox and InputBox reuse existing native implementations.
+Dialogs and module entry recheck project identity/generation. There is no hidden
+or fabricated form. Me/current-record operations and unavailable application/UI
+members fail explicitly. This initial editor host does not supply a complete
+Access Application/Forms/Reports object model or debugger.
+
+Results show actual completion/typed scalar return text, or runtime error number,
+line and diagnostic. Syntax inventory remains distinct from actual execution;
+unsupported procedure syntax must fail preflight before its prefix SQL effects.
+
+Validation: existing GUI1/1 passed (7.20s), matching app build. Actual F5,
+DAO write and public call into a second module, shared counter, return value,
+MsgBox response and arity/context/preflight/unsaved refusal were exercised.

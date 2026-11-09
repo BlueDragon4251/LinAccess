@@ -2534,3 +2534,21 @@ JOIN/NULL-/Counter-Backendcheck bestanden. Keine Wiederholung der GUI-Prüfungen
 Originalupload-Hashes3/3 und Fixtures4/4 unverändert. Keine neue CTest-ID,
 Gesamtsuite/Windows-Beobachtung. NATIVE_MACROS_RUNTIME.md; F088/F042/F050/F057/F148
 und456/384/72 unverändert. Weiterprogrammieren, kein Gesamtabschluss.
+
+
+Eigene gespeicherte Standardmodule können im realen Editor mit Prozedurauswahl,
+Ausführen/F5 direkt laufen. Neuer NativeStandardModuleHost nutzt tatsächliches
+CurrentDb/DBEngine, gemeinsamen Modul-/Staticzustand und öffentliche Modulaufrufe,
+bestehende Qt-Vergleichs-/Format-/MsgBox-/InputBox-Pfade, keinen Formularattrappen-
+kontext. Me/current-record und fehlende Application-Objekte bleiben abgegrenzt.
+Projekt-/Generationsprüfung bei Modulentry/DB/Dialog; gespeicherte Definition
+gegen gemeinsamen Katalog geprüft, ungespeicherter Text verweigert. Auswahl ist
+transient und markiert Quelle nicht dirty; Edit deaktiviert Run bis Analyze/Save.
+Neue gemeinsame MsgBox-Brücke korrigiert zunächst gefundenen Linkagefehler der
+anonymen Hilfsfunktion; fehlenden QTextBrowser-Testinclude ergänzt. App gebaut,
+bestehendes GUI1/1 (7,20s) bestanden: tatsächliches F5, DAO-Effekt und zweites Modul,
+mit Formular geteilter Counter44, Rückgabewert, MsgBox-Ja6, Arity450, Me438,
+GoSub-Preflight3251 ohne Präfix-SQL und Unsaved-Sperre. Keine neue CTest-ID oder
+Gesamtsuite/Windows-Beobachtung; aktuelles DEB gehört vorherigem d36ca9f-Stand.
+NATIVE_STANDARD_MODULES_RUNTIME.md; F042/F043/F050/F060/F118/F148 und456/384/72
+unverändert. Direkt weiter mit formularfreiem Application.Run/Eval-Kontext.
