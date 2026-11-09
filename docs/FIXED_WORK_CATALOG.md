@@ -8,8 +8,8 @@ Keine neuen F-IDs anlegen, keine Punkte löschen oder durch Zerlegung vermehren.
 
 `[x]` bestätigt nur den ausdrücklich beschriebenen Teilumfang. `[ ]` bedeutet
 offen; darunter liegen breite Vollanforderungen. Die Punkte haben sehr
-unterschiedlichen Aufwand. 384 bestätigte Teilumfänge und 72 offene Punkte
-sind daher **keine 84-Prozent-Parität mit Access 2003**. Der feste Katalog ist
+unterschiedlichen Aufwand. 385 bestätigte Teilumfänge und 71 offene Punkte
+belegen daher **keinen gewichteten Gesamtfortschritt oder Access-2003-Parität**. Der feste Katalog ist
 eine Arbeitsstruktur und kein Beweis einer lückenlosen Microsoft-Spezifikation.
 Neue entdeckte Access-Details müssen innerhalb der bestehenden Vollanforderungen
 berücksichtigt werden; fehlende Details dürfen nicht als erledigt gelten.
@@ -34,8 +34,8 @@ keine Tests oder Teilpunkte allein zur Erhöhung einer Fortschrittszahl anlegen.
 | 03 Oberfläche und Dokumente | Fenster, Menüs und Access-2003-Darstellung | 34 | 26 | 8 |
 | 04 Integration und Lieferung | Access-Integration, Makros und externe Schnittstellen | 4 | 1 | 3 |
 | 04 Integration und Lieferung | Linux, Paketierung und Betrieb | 13 | 11 | 2 |
-| 05 Gesamtauftrag | Ende-zu-Ende-Parität und verbleibende Querschnittsanforderungen | 32 | 24 | 8 |
-| **Gesamt** | **F001–F456** | **456** | **384** | **72** |
+| 05 Gesamtauftrag | Ende-zu-Ende-Parität und verbleibende Querschnittsanforderungen | 32 | 25 | 7 |
+| **Gesamt** | **F001–F456** | **456** | **385** | **71** |
 
 ## 01 Daten und Dateien
 
@@ -518,7 +518,7 @@ keine Tests oder Teilpunkte allein zur Erhöhung einer Fortschrittszahl anlegen.
 - [x] **F012** — Reproduce 9/29 even with CLI 1.0.0 by changing only its loaded MDB library; tie all 20 rejected schemas to standalone PK clauses; current full test passes all four version/library combinations.
 - [ ] **F013** — Independently reproduce/explain the remaining historical intermittent EOF reports.
 - [x] **F027** — Empty/Null distinction, tested Boolean/bitwise rules and CLng tie-to-even rounding.
-- [ ] **F060** — Breakpoints, locals, stack frames, runtime errors and recovery.
+- [x] **F060** — Breakpoints, locals, stack frames, runtime errors and recovery. Native supported-runtime scope and boundaries: [debugger](NATIVE_VBA_DEBUGGER_RUNTIME.md).
 - [x] **F061** — Imported QueryDefs, typed bound Parameters, temporary CreateQueryDef, SELECT/action execution.
 - [x] **F062** — Basic ANSI-89 strings/LIKE, single-table DISTINCTROW and TOP boundary ties.
 - [ ] **F090** — Per-artifact and per-procedure capability/execution classification, including failures.

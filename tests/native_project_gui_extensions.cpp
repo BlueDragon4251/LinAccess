@@ -22,6 +22,10 @@
 #include <QSqlRecord>
 #include <QTabWidget>
 #include <QTableWidget>
+#include <QTreeWidget>
+#include <QTextBlock>
+#include <QTextBrowser>
+#include <QLabel>
 #include <QTest>
 #include <QTimer>
 #ifdef NDEBUG
@@ -257,6 +261,41 @@ End
 End)FORM";AccessFormPreview report("SQL Property Report",reportSource,{},db,&window);model.execute(db,"SELECT Berichte![SQL Property Report].Caption AS title, Reports![SQL Property Report]!Value.Name AS control_name");assert(model.data(model.index(0,0)).toString()=="Report property header" && model.data(model.index(0,1)).toString()=="Value");assert(report.close());reject("SELECT Reports![SQL Property Report].Caption",2451);root->member("Undo",{});assert(form.close());reject("SELECT Forms![SQL Property Form].Caption",2450);
 }
 
+void testNativeModuleDebugger(MainWindow& window,QSqlDatabase db) {
+    QSqlQuery sql(db);assert(sql.exec("CREATE TABLE debugger_audit(n INTEGER)"));
+    const QString code=R"VBA(Public Sub DebugEntry()
+Dim n As Long
+Dim a(0 To 299) As Long
+Dim text As String
+n=1
+a(299)=9
+text=String(600,"x")
+DebugChild n
+CurrentDb.Execute "INSERT INTO debugger_audit VALUES(" & n & ")"
+n=1/0
+CurrentDb.Execute "INSERT INTO debugger_audit VALUES(99)"
+End Sub
+Private Sub DebugChild(ByRef n As Long)
+n=n+2
+End Sub)VBA";
+    const auto audit=[&] {QSqlQuery query(db);assert(query.exec("SELECT n FROM debugger_audit ORDER BY rowid"));QList<int> values;while(query.next()) values.append(query.value(0).toInt());return values;};
+    QTimer::singleShot(0,&window,[&] {auto* editor=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(editor && editor->objectName()=="native-module-editor");editor->findChild<QLineEdit*>("native-module-name")->setText("NativeDebuggerProbe");auto* source=editor->findChild<QPlainTextEdit*>("native-module-source");source->setPlainText(code);QApplication::setActiveWindow(editor);source->setFocus();QApplication::processEvents();QTest::keyClick(source,Qt::Key_S,Qt::ControlModifier);QApplication::processEvents();assert(!editor->isWindowModified());
+        const auto mark=[&] {source->setTextCursor(QTextCursor(source->document()->findBlockByNumber(7)));source->setFocus();QApplication::processEvents();QTest::keyClick(source,Qt::Key_F9);QApplication::processEvents();};mark();assert(editor->findChild<QLabel*>("native-module-breakpoint-status")->text().contains("gesetzt") && !editor->isWindowModified());
+        const auto local=[&](QDialog* debugger,const QString& name) {auto* values=debugger->findChild<QTreeWidget*>("native-debugger-locals");assert(values);const auto found=values->findItems(name,Qt::MatchExactly,0);assert(found.size()==1);return found.front();};const auto openValue=[&](QDialog* debugger,QTreeWidgetItem* item) {auto* values=debugger->findChild<QTreeWidget*>("native-debugger-locals");values->doItemsLayout();values->scrollToItem(item);values->setCurrentItem(item);const auto rectangle=values->visualItemRect(item);assert(rectangle.isValid());QTest::mouseClick(values->viewport(),Qt::LeftButton,Qt::NoModifier,rectangle.center());QTest::mouseDClick(values->viewport(),Qt::LeftButton,Qt::NoModifier,rectangle.center());};
+        int stage=0;bool inspecting=false;QTimer probe;probe.setInterval(1);QObject::connect(&probe,&QTimer::timeout,&window,[&] {if(inspecting) return;auto* debugger=qobject_cast<QDialog*>(QApplication::activeModalWidget());if(!debugger || debugger->objectName()!="native-module-debugger") return;auto* into=debugger->findChild<QPushButton*>("native-debugger-step-into");auto* skip=debugger->findChild<QPushButton*>("native-debugger-skip-error");if(!into->isEnabled() && !skip->isEnabled()) return;auto* stack=debugger->findChild<QTreeWidget*>("native-debugger-stack");assert(stack);
+            if(stage==0) {assert(stack->topLevelItemCount()==1 && stack->topLevelItem(0)->text(1)=="8" && local(debugger,"n")->text(3)=="1" && audit().isEmpty() && !source->isEnabled());assert(!window.close() && db.isOpen());inspecting=true;bool textRead=false;QTimer textProbe;textProbe.setInterval(1);QObject::connect(&textProbe,&QTimer::timeout,&window,[&] {auto* inspector=qobject_cast<QDialog*>(QApplication::activeModalWidget());if(!inspector || inspector->objectName()!="native-debugger-value-inspector") return;assert(inspector->findChild<QPlainTextEdit*>("native-debugger-inspector-text")->toPlainText()==QString(600,'x'));textRead=true;inspector->accept();});textProbe.start();openValue(debugger,local(debugger,"text"));textProbe.stop();assert(textRead);bool arrayRead=false;QTimer arrayProbe;arrayProbe.setInterval(1);QObject::connect(&arrayProbe,&QTimer::timeout,&window,[&] {auto* inspector=qobject_cast<QDialog*>(QApplication::activeModalWidget());if(!inspector || inspector->objectName()!="native-debugger-value-inspector") return;auto* next=inspector->findChild<QPushButton*>("native-debugger-array-next");next->click();next->click();auto* items=inspector->findChild<QTreeWidget*>("native-debugger-array-items");assert(items->topLevelItemCount()==44 && items->topLevelItem(43)->text(0)=="#299" && items->topLevelItem(43)->text(2)=="9");arrayRead=true;inspector->accept();});arrayProbe.start();openValue(debugger,local(debugger,"a"));arrayProbe.stop();assert(arrayRead);inspecting=false;stage=1;into->click();}
+            else if(stage==1) {assert(stack->topLevelItemCount()==2 && stack->topLevelItem(0)->text(0).endsWith(".DebugChild") && local(debugger,"n")->text(3)=="1");stage=2;debugger->findChild<QPushButton*>("native-debugger-step-out")->click();}
+            else if(stage==2) {assert(stack->topLevelItemCount()==1 && stack->topLevelItem(0)->text(1)=="9" && local(debugger,"n")->text(3)=="3");stage=3;debugger->findChild<QPushButton*>("native-debugger-step-over")->click();}
+            else if(stage==3) {assert(stack->topLevelItem(0)->text(1)=="10" && audit()==QList<int>({3}));stage=4;debugger->findChild<QPushButton*>("native-debugger-continue")->click();}
+            else if(stage==4) {assert(skip->isEnabled() && debugger->findChild<QLabel*>("native-debugger-status")->text().contains("11") && local(debugger,"n")->text(3)=="3");stage=5;skip->click();}
+            else {assert(stage==5 && stack->topLevelItem(0)->text(1)=="11" && local(debugger,"err")->child(0)->text(3)=="11" && audit()==QList<int>({3}));stage=6;debugger->findChild<QPushButton*>("native-debugger-continue")->click();}
+        });probe.start();editor->findChild<QPushButton*>("native-module-run")->click();probe.stop();assert(stage==6 && audit()==QList<int>({3,99}) && !editor->isWindowModified() && source->isEnabled());auto* result=editor->findChild<QTextBrowser*>("native-module-result");assert(result->toPlainText().startsWith("Prozedur ausgeführt."));
+        assert(sql.exec("DELETE FROM debugger_audit"));bool aborted=false;QTimer abortProbe;abortProbe.setInterval(1);QObject::connect(&abortProbe,&QTimer::timeout,&window,[&] {auto* debugger=qobject_cast<QDialog*>(QApplication::activeModalWidget());if(debugger && debugger->objectName()=="native-module-debugger" && debugger->findChild<QPushButton*>("native-debugger-continue")->isEnabled()) {aborted=true;debugger->findChild<QPushButton*>("native-debugger-stop")->click();}});abortProbe.start();editor->findChild<QPushButton*>("native-module-run")->click();abortProbe.stop();assert(aborted && audit().isEmpty() && result->toPlainText().contains("im Debugger beendet"));mark();if(!editor->findChild<QLabel*>("native-module-breakpoint-status")->text().contains("entfernt")) qFatal("Debugger F9 after stop: status=%s focus=%d active=%d enabled=%d",qPrintable(editor->findChild<QLabel*>("native-module-breakpoint-status")->text()),source->hasFocus(),editor->isActiveWindow(),source->isEnabled());
+        int errors=0;QTimer errorProbe;errorProbe.setInterval(1);QObject::connect(&errorProbe,&QTimer::timeout,&window,[&] {auto* debugger=editor->findChild<QDialog*>("native-module-debugger");if(!debugger || !debugger->isVisible()) return;auto* skip=debugger->findChild<QPushButton*>("native-debugger-skip-error");auto* resume=debugger->findChild<QPushButton*>("native-debugger-continue");if(skip->isEnabled()) {++errors;resume->click();}else if(resume->isEnabled()) resume->click();else if(debugger->findChild<QPushButton*>("native-debugger-close")->isEnabled()) {assert(!debugger->findChild<QTreeWidget*>("native-debugger-stack")->isEnabled() && !debugger->findChild<QTreeWidget*>("native-debugger-locals")->isEnabled());debugger->findChild<QPushButton*>("native-debugger-close")->click();}});errorProbe.start();editor->findChild<QPushButton*>("native-module-run")->click();errorProbe.stop();assert(errors==1 && audit()==QList<int>({3}) && result->toPlainText().contains("Fehler 11"));
+        auto fixed=code;fixed.replace("n=1/0","n=4");source->setPlainText(fixed);source->setFocus();QApplication::processEvents();QTest::keyClick(source,Qt::Key_S,Qt::ControlModifier);QApplication::processEvents();assert(!editor->isWindowModified());assert(sql.exec("DELETE FROM debugger_audit"));editor->findChild<QPushButton*>("native-module-run")->click();assert(audit()==QList<int>({3,99}) && result->toPlainText().startsWith("Prozedur ausgeführt."));editor->reject();
+    });action(window,"+ Modul")->trigger();
+}
+
 void testNativeProjectGuiExtensions(MainWindow& window,QSqlDatabase db) {
     testNativeRepaintObject(window,db);
     testNativeSetValueDoubleEvaluation(window,db);
@@ -265,4 +304,5 @@ void testNativeProjectGuiExtensions(MainWindow& window,QSqlDatabase db) {
     testNativeWindowStateCommands(window,db);
     testNativeMacroContinuations(window,db);
     testNativeSqlObjectProperties(window,db);
+    testNativeModuleDebugger(window,db);
 }

@@ -677,3 +677,5 @@ einschließlich quantisierter Datenblatt-/DAO-Werte und Literalstandardwerte.
 
 Gespeicherte native Makros lassen sich im Datenbankfenster auswählen und über
 **Ansicht → Ausgewähltes Makro ausführen** starten; [Umfang](docs/NATIVE_MACROS_RUNTIME.md).
+
+Native VBA-Debugger im Modul-Editor: F9-Haltepunkte, F5/F8 und echte lokale Werte/Aufrufrahmen sowie Fehlerfortsetzung; [Umfang und Grenzen](docs/NATIVE_VBA_DEBUGGER_RUNTIME.md).

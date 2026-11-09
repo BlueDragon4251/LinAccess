@@ -2,6 +2,8 @@
 #include "native_field_defaults.hpp"
 #include "mainwindow.hpp"
 #include "native_macro.hpp"
+#include "native_module_debugger.hpp"
+#include "vba_debugger.hpp"
 #include "native_macro_editor_draft.hpp"
 #include "native_macro_argument_editor.hpp"
 #include "native_macro_storage.hpp"
@@ -2243,14 +2245,15 @@ void MainWindow::editModule(const QString& existingName) {
     auto* source=new QPlainTextEdit(&dialog);source->setObjectName("native-module-source");source->setPlainText(old.value("vba").toString());source->setPlaceholderText("VBA-Quelltext für ein Standardmodul");layout->addWidget(source,1);
     auto* note=new QLabel("Öffentliche Funktionen stehen unterstützten VBA-, Eval- und SQL-Aufrufen zur Verfügung. Ausführen verwendet das gespeicherte Modul ohne Pflichtargumente. Die native VBA-Sprache ist eingeschränkt; Klassenmodule und ein Formularkontext werden hier nicht bereitgestellt.",&dialog);note->setWordWrap(true);layout->addWidget(note);
     auto* row=new QHBoxLayout;auto* analyze=addButton(row,"Analysieren");analyze->setObjectName("native-module-analyze");auto* save=addButton(row,"Speichern");save->setObjectName("native-module-save");auto* remove=addButton(row,"Modul löschen");remove->setObjectName("native-module-delete");remove->setEnabled(!existingName.isEmpty());layout->addLayout(row);installDesignerSaveShortcut(dialog,save);
-    auto* execution=new QHBoxLayout;auto* procedures=new QComboBox(&dialog);procedures->setObjectName("native-module-procedure");procedures->setProperty("la_designer_transient",true);execution->addWidget(procedures,1);auto* run=addButton(execution,"Prozedur ausführen (F5)");run->setObjectName("native-module-run");layout->addLayout(execution);
+    auto* execution=new QHBoxLayout;auto* procedures=new QComboBox(&dialog);procedures->setObjectName("native-module-procedure");procedures->setProperty("la_designer_transient",true);execution->addWidget(procedures,1);auto* run=addButton(execution,"Prozedur ausführen (F5)");run->setObjectName("native-module-run");auto* debug=addButton(execution,"Debuggen (F8)");debug->setObjectName("native-module-debug");layout->addLayout(execution);auto breakpoints=std::make_shared<NativeModuleBreakpoints>();installNativeModuleBreakpoints(dialog,*source,breakpoints);
     auto* runShortcut=new QShortcut(QKeySequence(Qt::Key_F5),&dialog);connect(runShortcut,&QShortcut::activated,run,&QPushButton::click);
-    const auto updateProcedures=[&] {const auto selected=procedures->currentData();procedures->clear();for(const auto& procedure:linaccess::analyzeVba(source->toPlainText().toUtf8().toStdString()).procedures) procedures->addItem(QString::fromStdString(procedure.kind)+" "+QString::fromStdString(procedure.name),QString::fromStdString(procedure.name));const int index=procedures->findData(selected);if(index>=0) procedures->setCurrentIndex(index);run->setEnabled(procedures->count()>0);};
+    auto* debugShortcut=new QShortcut(QKeySequence(Qt::Key_F8),source);debugShortcut->setContext(Qt::WidgetShortcut);connect(debugShortcut,&QShortcut::activated,debug,&QPushButton::click);
+    const auto updateProcedures=[&] {const auto selected=procedures->currentData();procedures->clear();for(const auto& procedure:linaccess::analyzeVba(source->toPlainText().toUtf8().toStdString()).procedures) procedures->addItem(QString::fromStdString(procedure.kind)+" "+QString::fromStdString(procedure.name),QString::fromStdString(procedure.name));const int index=procedures->findData(selected);if(index>=0) procedures->setCurrentIndex(index);run->setEnabled(procedures->count()>0);debug->setEnabled(procedures->count()>0);};
     updateProcedures();connect(analyze,&QPushButton::clicked,&dialog,updateProcedures);
-    connect(source,&QPlainTextEdit::textChanged,&dialog,[run] {run->setEnabled(false);});
+    connect(source,&QPlainTextEdit::textChanged,&dialog,[run,debug] {run->setEnabled(false);debug->setEnabled(false);});
     auto* result=new QTextBrowser(&dialog);result->setObjectName("native-module-result");result->setMaximumHeight(140);layout->addWidget(result);
     connect(analyze,&QPushButton::clicked,&dialog,[&] {const auto analysis=linaccess::analyzeVba(source->toPlainText().toUtf8().toStdString());QStringList lines{QString("Syntaxinventar: %1 Prozeduren; kein Ausführungsnachweis.").arg(analysis.procedures.size())};for(const auto& flag:analysis.compatibilityFlags) lines.append(QString::fromStdString(flag));result->setPlainText(lines.join('\n'));});
-    connect(run,&QPushButton::clicked,&dialog,[&] {
+    const auto executeModule=[&](bool stepping) {
         try {
             checkProject();const auto saved=dialog.property("la_editor_saved_name").toString();const auto current=saved.isEmpty() ? existingName : saved;
             if(current.isEmpty() || dialog.isWindowModified()) throw linaccess::VbaRuntimeError(3251,"Modul vor der Ausführung speichern und analysieren.");
@@ -2258,13 +2261,15 @@ void MainWindow::editModule(const QString& existingName) {
             const auto catalog=linaccess::standardVbaModuleSources(db_);
             if(!catalog.contains(current.toCaseFolded()) || catalog.value(current.toCaseFolded())!=code) throw linaccess::VbaRuntimeError(3420,"Gespeicherter Modulkatalog hat sich geändert.");
             if(code!=source->toPlainText().toUtf8()) throw linaccess::VbaRuntimeError(3251,"Die gespeicherte Modulrevision hat sich geändert. Modul neu öffnen.");
-            run->setEnabled(false);const auto restore=qScopeGuard([run] {run->setEnabled(true);});
-            linaccess::NativeStandardModuleHost host(&dialog,db_,checkProject);
-            const auto outcome=linaccess::executeVbaProcedure(code.toStdString(),procedures->currentData().toString().toStdString(),host);
-            if(outcome.status==linaccess::VbaExecutionStatus::Completed) result->setPlainText("Prozedur ausgeführt."+(outcome.returnValue ? " Rückgabewert: "+QString::fromStdString(*outcome.returnValue) : QString{}));
+            const QList<QWidget*> protectedWidgets{run,debug,save,remove,analyze,name,source,procedures};for(auto* widget:protectedWidgets) widget->setEnabled(false);runShortcut->setEnabled(false);debugShortcut->setEnabled(false);const auto restore=qScopeGuard([&] {for(auto* widget:protectedWidgets) widget->setEnabled(true);remove->setEnabled(!current.isEmpty());name->setReadOnly(!current.isEmpty());runShortcut->setEnabled(true);debugShortcut->setEnabled(true);if(dialog.isVisible()) {dialog.raise();dialog.activateWindow();source->setFocus(Qt::OtherFocusReason);}});
+            linaccess::VbaExecutionResult outcome;bool stopped=false;QString debuggerError;
+            const auto inspected=runNativeModuleDebugger(dialog,db_,current,code,procedures->currentData().toString(),*breakpoints,stepping,checkProject);outcome=inspected.execution;stopped=inspected.stopped;debuggerError=inspected.debuggerError;
+            if(stopped) result->setPlainText("Ausführung im Debugger beendet. Bereits ausgeführte Datenbankänderungen bleiben erhalten."+(debuggerError.isEmpty() ? QString{} : "\n"+debuggerError));
+            else if(outcome.status==linaccess::VbaExecutionStatus::Completed) result->setPlainText("Prozedur ausgeführt."+(outcome.returnValue ? " Rückgabewert: "+QString::fromStdString(*outcome.returnValue) : QString{}));
             else result->setPlainText(QString("Fehler %1 in Zeile %2: %3").arg(outcome.errorNumber ? outcome.errorNumber : 3251).arg(outcome.line).arg(QString::fromStdString(outcome.explanation)));
         }catch(const linaccess::VbaRuntimeError& error) {result->setPlainText(QString("Fehler %1: %2").arg(error.number).arg(QString::fromUtf8(error.what())));}
-    });
+    };
+    connect(run,&QPushButton::clicked,&dialog,[&] {executeModule(false);});connect(debug,&QPushButton::clicked,&dialog,[&] {executeModule(true);});
     connect(save,&QPushButton::clicked,&dialog,[&] {
         try {
             checkProject();
@@ -2752,6 +2757,7 @@ bool MainWindow::canCloseDataPage(QWidget* page) {
 }
 bool MainWindow::allowProjectClose(const QString& connection) {
     if(!connection.isEmpty() && connection!=db_.connectionName()) return true;
+    if(linaccess::vbaDebuggerBusy()) {statusBar()->showMessage("Debugger fortsetzen oder beenden, bevor das Projekt geschlossen wird.",10000);return false;}
     if(queryExecutionDepth_>0) { statusBar()->showMessage("Projektwechsel während einer laufenden Abfrage ist noch nicht verfügbar.",10000); return false; }
     if(macroExecutionDepth_>0 || linaccess::nativeProjectMacrosActive(db_)) {statusBar()->showMessage("Projektwechsel während eines laufenden Makros ist nicht verfügbar.",10000);return false;}
     for(int i=0;i<tabs_->count();++i) if(!canCloseDataPage(tabs_->widget(i))) return false;

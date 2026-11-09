@@ -3203,6 +3203,7 @@ End Function)VBA"}}).toJson(QJsonDocument::Compact));assert(sql.exec());sql.fini
     open([&](QDialog* dialog) {
         auto* choices=dialog->findChild<QComboBox*>("native-module-procedure");auto* run=dialog->findChild<QPushButton*>("native-module-run");auto* result=dialog->findChild<QTextBrowser*>("native-module-result");auto* editor=dialog->findChild<QPlainTextEdit*>("native-module-source");assert(choices && run && result && editor);
         const auto select=[&](const QString& name) {const int index=choices->findData(name);assert(index>=0);choices->setCurrentIndex(index);};
+        QTimer debugErrors;debugErrors.setInterval(1);QObject::connect(&debugErrors,&QTimer::timeout,dialog,[&] {auto* debugger=dialog->findChild<QDialog*>("native-module-debugger");if(!debugger || !debugger->isVisible()) return;if(auto* resume=debugger->findChild<QPushButton*>("native-debugger-continue");resume && resume->isEnabled()) resume->click();else if(auto* close=debugger->findChild<QPushButton*>("native-debugger-close");close && close->isEnabled()) close->click();});debugErrors.start();
         select("NativeExecute");QApplication::setActiveWindow(dialog);dialog->activateWindow();editor->setFocus();QApplication::processEvents();QTest::keyClick(editor,Qt::Key_F5);QApplication::processEvents();assert(result->toPlainText().startsWith("Prozedur ausgeführt."));
         assert(sql.exec("SELECT n FROM editor_module_effects") && sql.next() && sql.value(0).toInt()==22 && !sql.next());sql.finish();
         assert(application->member("Run",{VbaValue::string("NativeCounter")}).number==44);
@@ -3211,13 +3212,13 @@ End Function)VBA"}}).toJson(QJsonDocument::Compact));assert(sql.exec());sql.fini
         select("NativeApplicationObjectArg");run->click();assert(result->toPlainText().contains("Rückgabewert: 22"));
         select("NativeRecursive");run->click();assert(result->toPlainText().startsWith("Fehler 28"));
         select("NativeKeepApplication");run->click();assert(result->toPlainText().startsWith("Prozedur ausgeführt."));
-        select("NativePrompt");QTimer::singleShot(0,dialog,[] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(box);box->button(QMessageBox::Yes)->click();});run->click();assert(result->toPlainText().contains("Rückgabewert: 6"));
+        select("NativePrompt");QTimer promptAnswer;promptAnswer.setInterval(1);QObject::connect(&promptAnswer,&QTimer::timeout,dialog,[] {if(auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) box->button(QMessageBox::Yes)->click();});promptAnswer.start();run->click();promptAnswer.stop();assert(result->toPlainText().contains("Rückgabewert: 6"));
         select("NativeAdd");run->click();assert(result->toPlainText().startsWith("Fehler 450"));
         select("NativeInvalidContext");run->click();assert(result->toPlainText().startsWith("Fehler 438"));
         select("NativePreflight");run->click();assert(result->toPlainText().startsWith("Fehler 3251"));
         assert(sql.exec("SELECT COUNT(*) FROM editor_module_effects") && sql.next() && sql.value(0).toInt()==1);sql.finish();
         editor->appendPlainText("'unsaved");assert(!run->isEnabled());dialog->findChild<QPushButton*>("native-module-analyze")->click();select("NativeExecute");run->click();assert(result->toPlainText().startsWith("Fehler 3251"));
-        assert(application->member("Run",{VbaValue::string("NativeCounter")}).number==44);dialog->reject();
+        assert(application->member("Run",{VbaValue::string("NativeCounter")}).number==44);debugErrors.stop();dialog->reject();
     });
     const auto heldApplication=application->member("Run",{VbaValue::string("SavedModuleApplication")}).object;assert(heldApplication);
     assert(heldApplication->member("Run",{VbaValue::string("NativeOptional"),VbaValue::longInteger(8)}).number==8);

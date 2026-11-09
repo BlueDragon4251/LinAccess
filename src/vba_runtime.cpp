@@ -2,6 +2,7 @@
 #include "native_file_operations.hpp"
 #include "vba_array.hpp"
 #include "vba_runtime.hpp"
+#include "vba_debugger.hpp"
 #include "vba_expression.hpp"
 #include "vba_decimal.hpp"
 #include "vba_currency.hpp"
@@ -71,6 +72,13 @@ struct Statement {
     int sourceStatementEnd{-1};
     std::vector<BranchDestination> destinations;
 };
+
+bool debugExecutable(const Statement& statement) {
+    switch(statement.type) {
+    case Statement::Type::Dim:case Statement::Type::Label:case Statement::Type::EndIf:case Statement::Type::EndSelect:case Statement::Type::EndWith:case Statement::Type::Else:return false;
+    default:return true;
+    }
+}
 
 std::string trim(std::string text) {
     const auto first = text.find_first_not_of(" \t\r\n");
@@ -1422,6 +1430,10 @@ std::optional<VbaArgumentSignature> nativeVbaProcedureSignature(std::string_view
     return localProcedureSignature(module,procedure);
 }
 
+std::vector<int> vbaDebugExecutableLines(std::string_view source,std::string_view procedure) {
+    if(source.size()>1024*1024) throw VbaRuntimeError(3035,"Debugger source exceeds one MiB");std::vector<Statement> statements;bool function=false,cancel=false;const auto parsed=parseProcedure(source,procedure,statements,function,cancel);if(parsed.status!=VbaExecutionStatus::Completed) return {};std::vector<int> lines;for(const auto& statement:statements) if(debugExecutable(statement)) lines.push_back(statement.line);std::sort(lines.begin(),lines.end());lines.erase(std::unique(lines.begin(),lines.end()),lines.end());return lines;
+}
+
 VbaExecutionResult validateVbaProcedure(std::string_view module, std::string_view procedure) {
     if (module.size() > 1024 * 1024)
         return {VbaExecutionStatus::Unsupported, "VBA-Modul größer als 1 MiB", 0};
@@ -1650,6 +1662,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                                        std::string_view procedure,
                                        VbaHost& host, std::vector<VbaValue>& arguments,
                                        const std::vector<ReferenceBinding>* references = nullptr) {
+    if(vbaDebuggerBusy()) {VbaExecutionResult failure{VbaExecutionStatus::Error,"VBA-Ausführung während eines Debugger-Halts nicht verfügbar",0};failure.errorNumber=3251;return failure;}
     VbaExecutionScope executionFrame;
     ArrayElementRootScope arrayElementScope;
     if(vbaExecutionStopRequested()) return {VbaExecutionStatus::Completed,{},0,true};
@@ -2159,6 +2172,8 @@ static VbaExecutionResult executeProcedure(std::string_view module,
     int currentLine = 0;
     int steps = 0;
     int effects = 0;
+    std::optional<VbaDebugFrameScope> debugger;
+    if(vbaDebuggerActive()) debugger.emplace(module,procedure,locals,[&](std::string_view variable) {const auto name=std::string(variable);if(const auto type=localTypes.find(name);type!=localTypes.end()) return type->second;for(const auto& alias:aliases) if(alias.name==name) return alias.type;return name=="err" ? std::string("ErrObject") : std::string("variant");},[&] {return resumeNext || (handler>=0 && !handlingError);},[&] {return VbaDebugError{errorState->number,errorState->description,errorState->source,errorState->helpFile,errorState->helpContext};});
     try {
         for (std::size_t ip = 0; ip < instructions.size(); ++ip) {
             if(vbaExecutionStopRequested()) throw VbaExecutionStopped{};
@@ -2168,6 +2183,11 @@ static VbaExecutionResult executeProcedure(std::string_view module,
             if (++steps > 10000)
                 return {VbaExecutionStatus::Error, "VBA-Ausführungsbudget (10.000 Schritte) erreicht", currentLine};
             refreshAliases();
+            if(debugger) {
+                bool executable=active && debugExecutable(instruction);
+                if(instruction.type==Statement::Type::ElseIf || instruction.type==Statement::Type::Case) executable=!frames.empty() && frames.back().parent && !frames.back().condition && !frames.back().pending;
+                debugger->checkpoint(currentLine,executingIp,executable);
+            }
             try {
             switch (instruction.type) {
             case Statement::Type::With:
@@ -2804,14 +2824,19 @@ static VbaExecutionResult executeProcedure(std::string_view module,
             } catch (const std::exception& exception) {
                 if(vbaExecutionStopRequested()) throw VbaExecutionStopped{};
                 storeAliases();
-                if (!resumeNext && (handler < 0 || handlingError)) throw;
                 const auto* typed = dynamic_cast<const VbaRuntimeError*>(&exception);
+                bool debuggerResume=false;
+                if(!resumeNext && (handler<0 || handlingError)) {
+                    const VbaDebugError failure{typed ? typed->number : 5,exception.what(),typed ? typed->source : std::string{},typed ? typed->helpFile : std::string{},typed ? typed->helpContext : 0};
+                    if(debugger) debuggerResume=debugger->unhandled(failure,true,currentLine);
+                    if(!debuggerResume) throw;
+                }
                 errorState->number = typed ? typed->number : 5;
                 errorState->description = exception.what();
                 errorState->source=typed ? typed->source : std::string{};
                 errorState->helpFile=typed ? typed->helpFile : std::string{};
                 errorState->helpContext=typed ? typed->helpContext : 0;
-                if (!resumeNext) {
+                if (!resumeNext && !debuggerResume) {
                     handlingError = true; faultInstruction = instruction.sourceStatementEnd>=0 ? executingIp : ip;
                     faultFrames = frames; faultLoops = loops; faultWithFrames=withFrames; faultActive = active;
                     faultSubroutines=subroutines;
@@ -2833,6 +2858,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
         const auto* typed = dynamic_cast<const VbaRuntimeError*>(&exc);
         failure.errorNumber = typed ? typed->number : 5;
         if(typed) { failure.errorSource=typed->source; failure.errorHelpFile=typed->helpFile; failure.errorHelpContext=typed->helpContext; }
+        if(debugger) try {(void)debugger->unhandled({failure.errorNumber,failure.explanation,failure.errorSource,failure.errorHelpFile,failure.errorHelpContext},false,currentLine);}catch(const VbaExecutionStopped&) {return {VbaExecutionStatus::Completed,{},currentLine,true};}
         return failure;
     }
     return completed(0, false);

@@ -4911,3 +4911,24 @@ Verbindungsisolation/Mehrdeutigkeit, Getterverweigerung ohne Undo, Form-/
 Reportfehler2450/2451. Original-F129/3075 bleibt erwartete Grenze.
 Keine neue CTest-ID/Gesamtsuite/Windows-Beobachtung/Paketprüfung; DEB72ed466.
 F067/F068/F118/F164/F050/F052 und456/384/72 unverändert.
+
+
+## 2026-11-09: nativer VBA-Debugger, F060
+
+Implementiert: tatsächliche gespeicherte Standardmodul-Ausführung mit F9/F5/F8,
+StepInto/Over/Out, lebenden Aufrufrahmen/ByRef-Locals, paginierter Array- und
+vollständiger Stringinspektion ohne Objektgetter, unbehandelten Fehlern auch
+bei normalem F5, Resume-Next-Überspringen und explizitem Abbruch. Keine erneute
+Ausführung bereits erfolgter SQL-Aktionen zum Fehlerhalt. Quelle/Projektwechsel
+sind während des Halts geschützt; beendete Rahmen werden nicht weiter gelesen.
+Details und Grenzen: docs/NATIVE_VBA_DEBUGGER_RUNTIME.md.
+
+Nachweise in bestehenden Zielen: Kern1/1 (2,18s), Layout1/1 (11,80s), originales
+Kassa-Ziel1/1 (118,52s), abschließender GUI-Ablauf1/1 (9,06s) sowie separat frisch
+GUI-freier Kern1/1 (1,89s). Abschließendes DEB/Build-ID/MDBTools1.0.1/SQLite3.54.1
+und vier Fixture-/drei Uploadhashes bestanden. Kein neuer Vollsuite-, Windows-,
+Distributionsmatrix- oder GitHub-CI-Nachweis. Original-F129/3075 bleibt offen.
+F060 bestätigt diesen beschriebenen nativen Teilumfang; vollständige IDE-,
+Makrodebugger-, Sprach-, COM- und Ereignisparität bleibt in den übrigen offenen
+Anforderungen. Fester Katalog456:385 bestätigte Teilumfänge/71 offene
+Vollanforderungen, ausschließlich theoretisch und ungewichtet. Kein Gesamtabschluss.
