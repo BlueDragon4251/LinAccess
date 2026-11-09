@@ -2933,3 +2933,15 @@ umgeordnete Zwischenablage zunächst geschützt3251; als nächste zusammenhänge
 Etappe echte sichtbare Spaltenabbildung für Kopieren/Ausschneiden/Einfügen/Undo
 implementieren. F079/F340/F373/456/386/70 bleiben offen/unverändert. Vorstufe03b3de2
 privat veröffentlicht, Remote/Baum geprüft; ohne Zwischenabschluss weiterarbeiten.
+
+
+Sichtbare Zwischenablage-Spaltenabbildung: PROJECTED_GRID_CLIPBOARD.md ersetzt die
+vorherige mehrspaltige Projektionsverweigerung. Kopieren/Ausschneiden/Einfügen und
+Undo/Redo verwenden dieselben geprüften realen Spalten, verborgene Schlüssel/
+ausgelassene Werte bleiben geschützt; mapped Append bewahrt tatsächliche SQL-
+Defaults. Vorhandenes GUI/Currency-Feld/Modell-Bündel im ersten Lauf3/3 (18,69s:
+18,11/0,48/0,11), App gebaut. Reale SQL-/Undo-/Cut-/MIME-/Negativfälle, keine neuen
+CTest-/Original-/Windows-/Vollsuiten-/Paketbehauptungen.456/386/70 unverändert;
+vollständige F079/F340 bleiben offen. Vorstufe2d95062 privat remote/Baum geprüft.
+Ohne Zwischenabschluss den tatsächlichen Makroreferenz-Blocker über die bestehende
+Codex-Call-Schnittstelle prüfen und unabhängig weitere Anforderungen implementieren.

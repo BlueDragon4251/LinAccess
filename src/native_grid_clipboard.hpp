@@ -1,6 +1,7 @@
 #pragma once
 #include "vba_runtime.hpp"
 #include <QTableView>
+#include <QHeaderView>
 #include <QItemSelectionModel>
 #include <limits>
 
@@ -19,18 +20,23 @@ QString nativeGridClipboardText(const QTableView& view,CellText cellText) {
     const auto selected=view.selectionModel()->selectedIndexes();
     if(selected.isEmpty()) throw VbaRuntimeError(2046,"No selected cells");
     if(selected.size()>1000000) throw VbaRuntimeError(3251,"Clipboard selection exceeds the cell limit");
-    int top=std::numeric_limits<int>::max(),left=top,bottom=-1,right=-1;
+    QVector<int> columns,ranks(view.model()->columnCount(),-1);
+    for(int visual=0;visual<view.horizontalHeader()->count();++visual) {const int column=view.horizontalHeader()->logicalIndex(visual);if(column>=0 && column<ranks.size() && !view.isColumnHidden(column)) {ranks[column]=columns.size();columns.push_back(column);}}
+    int top=std::numeric_limits<int>::max(),left=top,bottom=-1,right=-1;qsizetype visibleCells=0;
     for(const auto& index:selected) {
-        if(view.isRowHidden(index.row()) || view.isColumnHidden(index.column())) throw VbaRuntimeError(3251,"Hidden clipboard cells are unsupported");
-        top=qMin(top,index.row()); bottom=qMax(bottom,index.row()); left=qMin(left,index.column()); right=qMax(right,index.column());
+        if(view.isRowHidden(index.row())) throw VbaRuntimeError(3251,"Hidden clipboard rows are unsupported");
+        if(view.isColumnHidden(index.column())) {if(view.property("la_projected_query").toBool()) continue;throw VbaRuntimeError(3251,"Hidden clipboard cells are unsupported");}
+        const int rank=ranks[index.column()];if(rank<0) throw VbaRuntimeError(3251,"Clipboard column layout changed");
+        ++visibleCells;top=qMin(top,index.row());bottom=qMax(bottom,index.row());left=qMin(left,rank);right=qMax(right,rank);
     }
-    if(static_cast<qint64>(bottom-top+1)*(right-left+1)!=selected.size()) throw VbaRuntimeError(3251,"Select a contiguous rectangle");
+    if(!visibleCells) throw VbaRuntimeError(2046,"No visible clipboard selection");
+    if(static_cast<qint64>(bottom-top+1)*(right-left+1)!=visibleCells) throw VbaRuntimeError(3251,"Select a contiguous visible rectangle");
     QString output;
     for(int row=top;row<=bottom;++row) {
         if(row>top) output+="\r\n";
         for(int column=left;column<=right;++column) {
             if(column>left) output+='\t';
-            auto text=cellText(view.model()->index(row,column));
+            auto text=cellText(view.model()->index(row,columns[column]));
             if(text.contains(QChar(0))) throw VbaRuntimeError(3251,"Clipboard NUL characters are unsupported");
             if(text.contains('\t') || text.contains('\r') || text.contains('\n') || text.contains('"')) {
                 text.replace("\"","\"\""); text='"'+text+'"';

@@ -50,10 +50,6 @@ public:
         for(int visual=0;visual<header->count();++visual) {const int column=header->logicalIndex(visual);if(column>=0 && column<model()->columnCount() && !isColumnHidden(column)) columns.push_back(column);}
         return columns;
     }
-    bool reorderedProjectionSelection() const {
-        if(!property("la_projected_query_reordered").toBool() || !selectionModel()) return false;
-        int column=-1;for(const auto& index:selectionModel()->selectedIndexes()) {if(column>=0 && column!=index.column()) return true;column=index.column();}return false;
-    }
     void setRecordNavigationGuard(std::function<bool()> guard) { recordNavigationGuard_=std::move(guard); }
     void setRecordNavigationHandler(std::function<bool(RecordMove,int)> handler) { recordNavigationHandler_=std::move(handler); }
     bool openReplaceDialog() { return openFindDialog(true); }
@@ -448,9 +444,9 @@ public:
     }
     bool canCutSelection() const {
         const auto* typed=qobject_cast<AccessTableModel*>(model());
-        if(reorderedProjectionSelection() || !typed || typed->isReadOnly() || typed->isDirty() || typed->editStrategy()!=QSqlTableModel::OnManualSubmit || hasPendingEditor() || !selectionModel() || !selectionModel()->hasSelection()) return false;
+        if(!typed || typed->isReadOnly() || typed->isDirty() || typed->editStrategy()!=QSqlTableModel::OnManualSubmit || hasPendingEditor() || !selectionModel() || !selectionModel()->hasSelection()) return false;
         for(const auto& range:selectionModel()->selection()) for(int column=range.left();column<=range.right();++column)
-            if(isColumnHidden(column) || !typed->isPasteColumn(column,true)) return false;
+            if((isColumnHidden(column) && !property("la_projected_query").toBool()) || (!isColumnHidden(column) && !typed->isPasteColumn(column,true))) return false;
         return true;
     }
     bool cutSelection() {
@@ -459,11 +455,12 @@ public:
         if(typed->isReadOnly()) return refuse(2448,"Die Datenquelle ist schreibgeschützt.");
         if(typed->isDirty()) return refuse(2501,"Vor dem Ausschneiden eines Bereichs Änderungen speichern oder verwerfen.");
         if(typed->editStrategy()!=QSqlTableModel::OnManualSubmit) return refuse(3251,"Bereichsausschneiden ist in dieser Ansicht nicht verfügbar.");
-        QVector<QVector<QVariant>> cleared;QVector<QVariant> cells;int previous=-1;QPersistentModelIndex first;
+        QVector<QVector<QVariant>> cleared;QVector<QVariant> cells;QVector<int> columns;int previous=-1;QPersistentModelIndex first;
         try {
             (void)nativeGridClipboardText(*this,[&](const QModelIndex& index) {
                 if(!typed->isPasteColumn(index.column(),true)) throw VbaRuntimeError(2448,"Cut target is protected");
                 if(!first.isValid()) first=index;
+                if(index.row()==first.row()) columns.push_back(index.column());
                 if(previous>=0 && previous!=index.row()) {cleared.push_back(cells);cells.clear();}
                 previous=index.row();cells.push_back(QVariant{});return QString{};
             });
@@ -471,12 +468,11 @@ public:
         } catch(const VbaRuntimeError& error) {return refuse(error.number,"Die Auswahl kann nicht als zusammenhängender Bereich ausgeschnitten werden.");}
           catch(const std::bad_alloc&) {return refuse(7,"Der Bereich konnte nicht im Speicher vorbereitet werden.");}
         if(!copySelection() || !self || !typed || !first.isValid()) return false;
-        return typed->setTypedDataBlock(first.row(),first.column(),cleared);
+        return typed->setTypedDataBlock(first.row(),columns,cleared);
     }
     bool copySelection() {
         auto* typed=qobject_cast<AccessTableModel*>(model());
         if(!typed || !selectionModel() || !finishEditing()) return false;
-        if(reorderedProjectionSelection()) return refuse(3251,"Mehrspaltige Zwischenablage für umgeordnete Abfragefelder ist noch nicht unterstützt.");
         try {
             QJsonArray rows,cells,fields;int previous=-1;
             const auto output=nativeGridClipboardText(*this,[&](const QModelIndex& index) {
@@ -601,23 +597,24 @@ public:
           catch(const std::exception&) { return refuse(5,"Die Zwischenablage enthält kein gültiges Tabellenformat."); }
         const auto rows=typedMime ? typedValues.size() : values.size();
         const auto columns=namedRecord ? typed->columnCount() : typedMime ? typedValues.front().size() : values.front().size();
-        if(columns>1 && !namedRecord && property("la_projected_query_reordered").toBool()) return refuse(3251,"Mehrspaltiges Einfügen in umgeordnete Abfragefelder ist noch nicht unterstützt.");
+        QVector<int> targetColumns;
+        if(!namedRecord) {const auto visible=visibleModelColumns();const int start=visible.indexOf(firstColumn);if(start<0 || columns>visible.size()-start) return refuse(5,"Der Bereich passt nicht in die sichtbaren Zielspalten.");targetColumns=visible.mid(start,columns);}
         const auto endRow=static_cast<qint64>(firstRow)+rows;
-        if(endRow>std::numeric_limits<int>::max() || static_cast<qint64>(firstColumn)+columns>typed->columnCount())
+        if(endRow>std::numeric_limits<int>::max() || (namedRecord && static_cast<qint64>(firstColumn)+columns>typed->columnCount()))
             return refuse(5,"Der einzufügende Bereich passt nicht in die vorhandenen Spalten.");
         while(typed->rowCount()<endRow && typed->canFetchMore()) {
             const auto count=typed->rowCount(); typed->fetchMore(); if(typed->rowCount()==count) break;
         }
-        for(int column=firstColumn;column<firstColumn+columns;++column) if(isColumnHidden(column)) {
+        if(namedRecord) for(int column=firstColumn;column<firstColumn+columns;++column) if(isColumnHidden(column)) {
             const auto name=typed->record().fieldName(column);const bool supplied=std::any_of(recordFields.cbegin(),recordFields.cend(),[&](const auto& field) {return field.compare(name,Qt::CaseInsensitive)==0;});
             if(!namedRecord || (supplied && !typed->isGeneratedColumn(column))) return refuse(3251,"Verdeckte Zielspalten werden nicht überschrieben.");
         }
         for(int row=firstRow;row<qMin<qint64>(endRow,typed->rowCount());++row) if(isRowHidden(row)) return refuse(3251,"Verdeckte Zieldatensätze werden nicht überschrieben.");
-        if(!(namedRecord ? typed->setTypedRecordBlock(firstRow,recordFields,typedValues) : typedMime ? typed->setTypedDataBlock(firstRow,firstColumn,typedValues) : typed->setDataBlock(firstRow,firstColumn,values))) return false;
+        if(!(namedRecord ? typed->setTypedRecordBlock(firstRow,recordFields,typedValues) : typedMime ? typed->setTypedDataBlock(firstRow,targetColumns,typedValues) : typed->setDataBlock(firstRow,targetColumns,values))) return false;
         const bool projectedRecord=namedRecord && property("la_projected_query").toBool();
         const auto first=typed->index(firstRow,projectedRecord ? firstPasteColumn(typed,typedMime) : firstColumn);
         setCurrentIndex(first);
-        if(selectionModel()) selectionModel()->select(QItemSelection(first,projectedRecord ? first : typed->index(endRow-1,firstColumn+columns-1)),QItemSelectionModel::ClearAndSelect);
+        if(selectionModel()) {QItemSelection selected;if(namedRecord) selected.select(first,projectedRecord ? first : typed->index(endRow-1,firstColumn+columns-1));else for(const int column:targetColumns) selected.select(typed->index(firstRow,column),typed->index(endRow-1,column));selectionModel()->select(selected,QItemSelectionModel::ClearAndSelect);}
         return true;
     }
     void setModel(QAbstractItemModel* model) override {

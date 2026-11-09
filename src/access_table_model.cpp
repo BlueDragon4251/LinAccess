@@ -501,6 +501,15 @@ bool AccessTableModel::setDataBlock(int firstRow,int firstColumn,const QVector<Q
 bool AccessTableModel::setTypedDataBlock(int firstRow,int firstColumn,const QVector<QVector<QVariant>>& values) {
     return applyDataBlock(firstRow,firstColumn,values,true);
 }
+bool AccessTableModel::setDataBlock(int firstRow,const QVector<int>& columns,const QVector<QVector<QString>>& values) {
+    if(columns.isEmpty()) return reject(5);QVector<QVector<QVariant>> prepared;
+    try {for(const auto& row:values) {QVector<QVariant> cells;for(const auto& cell:row) cells.push_back(cell);prepared.push_back(std::move(cells));}}
+    catch(const std::bad_alloc&) {return reject(7);}
+    return applyDataBlock(firstRow,columns.front(),prepared,false,nullptr,false,nullptr,&columns);
+}
+bool AccessTableModel::setTypedDataBlock(int firstRow,const QVector<int>& columns,const QVector<QVector<QVariant>>& values) {
+    if(columns.isEmpty()) return reject(5);return applyDataBlock(firstRow,columns.front(),values,true,nullptr,false,nullptr,&columns);
+}
 bool AccessTableModel::setTypedRecordBlock(int firstRow,const QStringList& fields,const QVector<QVector<QVariant>>& values) {
     if(firstRow!=rowCount() || canFetchMore()) return reject(3251);
     if(fields.isEmpty() || fields.size()>columnCount() || values.isEmpty()) return reject(13);
@@ -518,7 +527,7 @@ bool AccessTableModel::setTypedRecordBlock(int firstRow,const QStringList& field
         return applyDataBlock(firstRow,0,mapped,true,nullptr,true,&supplied);
     } catch(const std::bad_alloc&) {return reject(7);}
 }
-bool AccessTableModel::applyDataBlock(int firstRow,int firstColumn,const QVector<QVector<QVariant>>& values,bool typed,const QMap<QString,QVariant>* restoredDefaults,bool skipGenerated,const QSet<int>* suppliedColumns) {
+bool AccessTableModel::applyDataBlock(int firstRow,int firstColumn,const QVector<QVector<QVariant>>& values,bool typed,const QMap<QString,QVariant>* restoredDefaults,bool skipGenerated,const QSet<int>* suppliedColumns,const QVector<int>* mappedColumns) {
     if(saving_ || changing_) return reject(2501);
     if(readOnly_) return reject(2448);
     const QScopedValueRollback<bool> changing(changing_,true);
@@ -529,9 +538,10 @@ bool AccessTableModel::applyDataBlock(int firstRow,int firstColumn,const QVector
     if(metadataError_) return reject(metadataError_);
     if(firstRow<0 || firstRow>rowCount() || firstColumn<0 || firstColumn>=columnCount() || values.isEmpty() || values.front().isEmpty()) return reject(5);
     const auto columns=values.front().size();
+    if(mappedColumns) {if(skipGenerated || mappedColumns->size()!=columns) return reject(5);QSet<int> unique;for(const int column:*mappedColumns) {if(column<0 || column>=columnCount() || unique.contains(column)) return reject(5);unique.insert(column);}}
     const qint64 endRow=static_cast<qint64>(firstRow)+values.size();
     if(values.size()>1000000/columns || endRow>std::numeric_limits<int>::max()
-        || static_cast<qint64>(firstColumn)+columns>columnCount()) return reject(5);
+        || (!mappedColumns && static_cast<qint64>(firstColumn)+columns>columnCount())) return reject(5);
     // Exhaust the source before appending: an unfetched record is never a new row.
     while(rowCount()<endRow && canFetchMore()) {
         const int previous=rowCount();fetchMore();if(rowCount()==previous) break;
@@ -540,7 +550,7 @@ bool AccessTableModel::applyDataBlock(int firstRow,int firstColumn,const QVector
     const int appended=std::max(0,static_cast<int>(endRow)-originalRows);
     struct Cell { int row,column; QVariant value; };
     QVector<Cell> checked;QMap<QString,QVariant> dateDefaults;BlockHistory history;
-    history.firstRow=firstRow;history.firstColumn=firstColumn;history.originalRows=originalRows;history.applied=true;history.skipGenerated=skipGenerated;if(suppliedColumns) history.suppliedColumns=*suppliedColumns;
+    history.firstRow=firstRow;history.firstColumn=firstColumn;history.originalRows=originalRows;history.applied=true;history.skipGenerated=skipGenerated;if(mappedColumns) history.columns=*mappedColumns;if(suppliedColumns) history.suppliedColumns=*suppliedColumns;
     const auto previousHistory=blockHistory_;
     try {
         history.before=captureUpdates();
@@ -551,7 +561,7 @@ bool AccessTableModel::applyDataBlock(int firstRow,int firstColumn,const QVector
             if(values[row].size()!=columns) return reject(5);
             QVector<QVariant> historyRow;historyRow.reserve(columns);
             for(qsizetype column=0;column<columns;++column) {
-                const int targetRow=firstRow+row,targetColumn=firstColumn+column;
+                const int targetRow=firstRow+row,targetColumn=mappedColumns ? (*mappedColumns)[column] : firstColumn+column;
                 const auto type=columnType(targetColumn);
                 if(skipGenerated && (generated_.contains(record().fieldName(targetColumn).toCaseFolded()) || (suppliedColumns && !suppliedColumns->contains(targetColumn)))) {historyRow.push_back(QVariant{});continue;}
                 if(targetRow<originalRows) {
@@ -599,9 +609,11 @@ bool AccessTableModel::applyDataBlock(int firstRow,int firstColumn,const QVector
     if(failure) {const bool restored=restoreUpdates(history.before,originalRows);blockHistory_=previousHistory;return reject(restored ? failure : 3251);}
     for(int row=originalRows;row<endRow;++row) dirtyRows_.insert(row);
     blockHistory_=std::move(history);
-    const auto last=index(firstRow+values.size()-1,firstColumn+columns-1);
+    const int firstChanged=mappedColumns ? *std::min_element(mappedColumns->cbegin(),mappedColumns->cend()) : firstColumn;
+    const int lastChanged=mappedColumns ? *std::max_element(mappedColumns->cbegin(),mappedColumns->cend()) : firstColumn+columns-1;
+    const auto last=index(firstRow+values.size()-1,lastChanged);
     if(!failure) setLastError({});
-    emit dataChanged(index(firstRow,firstColumn),last,{Qt::DisplayRole,Qt::EditRole,Qt::CheckStateRole});
+    emit dataChanged(index(firstRow,firstChanged),last,{Qt::DisplayRole,Qt::EditRole,Qt::CheckStateRole});
     emit headerDataChanged(Qt::Vertical,firstRow,last.row());
     if(failure) return reject(failure);
     return true;
@@ -670,7 +682,7 @@ bool AccessTableModel::undoBlock() {
 }
 bool AccessTableModel::redoBlock() {
     if(!canRedoBlock()) return rejectEdit(2046,"Kein eingefügter Bereich zum Wiederherstellen vorhanden.");
-    try {const auto history=*blockHistory_;return applyDataBlock(history.firstRow,history.firstColumn,history.values,true,&history.dateDefaults,history.skipGenerated,history.skipGenerated ? &history.suppliedColumns : nullptr);}
+    try {const auto history=*blockHistory_;return applyDataBlock(history.firstRow,history.firstColumn,history.values,true,&history.dateDefaults,history.skipGenerated,history.skipGenerated ? &history.suppliedColumns : nullptr,history.columns.isEmpty() ? nullptr : &history.columns);}
     catch(const std::bad_alloc&) {return reject(7);}
 }
 bool AccessTableModel::insertRowIntoTable(const QSqlRecord& row) {

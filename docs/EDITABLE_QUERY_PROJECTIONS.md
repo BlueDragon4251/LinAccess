@@ -24,10 +24,10 @@ a qualified sort name denotes the source field. Header/visibility bindings are
 reapplied after model reset/sort/Requery; aliases are cleared when changing the
 underlying model table. Visible field search uses header order.
 
-Native clipboard limits remain explicit: reordered multi-column query blocks
-refuse3251 before writes rather than writing physical neighbours; hidden target
-fields retain existing guards. Single cells use their real selected field.
-General projected block clipboard mapping is the next implementation scope.
+The subsequent native clipboard implementation maps visible columns for copy,
+cut, paste and Undo/Redo, including reordered nonadjacent fields; see
+PROJECTED_GRID_CLIPBOARD.md. Hidden keys/omitted data stay out of projected row
+copy. Other native clipboard/format/limit guards remain.
 Full joined/projection/form-recordset/Access caption/identifier equivalence is
 not claimed; F079/F175/F340/F373 remain open.
 

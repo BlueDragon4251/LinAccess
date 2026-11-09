@@ -49,6 +49,8 @@ public:
     bool isPasteColumn(int column,bool binary=false) const;
     bool isGeneratedColumn(int column) const;
     bool setTypedDataBlock(int firstRow,int firstColumn,const QVector<QVector<QVariant>>& values);
+    bool setDataBlock(int firstRow,const QVector<int>& columns,const QVector<QVector<QString>>& values);
+    bool setTypedDataBlock(int firstRow,const QVector<int>& columns,const QVector<QVector<QVariant>>& values);
     bool setTypedRecordBlock(int firstRow,const QStringList& fields,const QVector<QVector<QVariant>>& values);
     bool canPasteOverUpdates() const;
     bool canUndoBlock() const;
@@ -62,7 +64,7 @@ protected:
     QString orderByClause() const override;
     bool insertRowIntoTable(const QSqlRecord& record) override;
 private:
-    bool applyDataBlock(int firstRow,int firstColumn,const QVector<QVector<QVariant>>& values,bool typed,const QMap<QString,QVariant>* restoredDefaults=nullptr,bool skipGenerated=false,const QSet<int>* suppliedColumns=nullptr);
+    bool applyDataBlock(int firstRow,int firstColumn,const QVector<QVector<QVariant>>& values,bool typed,const QMap<QString,QVariant>* restoredDefaults=nullptr,bool skipGenerated=false,const QSet<int>* suppliedColumns=nullptr,const QVector<int>* mappedColumns=nullptr);
     bool refreshTypes();
     bool reject(int number);
     QString columnType(int column) const;
@@ -84,7 +86,7 @@ private:
     bool restoreUpdates(const QVector<CachedUpdate>& updates,int originalRows);
     struct BlockHistory {
         int firstRow{},firstColumn{},originalRows{};bool applied{},skipGenerated{};
-        QVector<QVector<QVariant>> values;QMap<QString,QVariant> dateDefaults;QVector<CachedUpdate> before;QSet<int> suppliedColumns;
+        QVector<QVector<QVariant>> values;QVector<int> columns;QMap<QString,QVariant> dateDefaults;QVector<CachedUpdate> before;QSet<int> suppliedColumns;
     };
     std::optional<BlockHistory> blockHistory_;
     bool blockMutation_{};
