@@ -2706,7 +2706,7 @@ void MainWindow::editForm(const QString& existingName) {
     connect(fields->model(),&QAbstractItemModel::rowsMoved,history,record);
     connect(sourceDesign,&QPushButton::clicked,&dialog,[this,source,visual,hash,checkProject,history,&dialog]{
         try{checkProject();const auto initial=visual->value("sql_sha256").toString()==hash(source->currentText()) ? visual->value("design").toObject() : QJsonObject{};
-            const auto edited=linaccess::editNativeQueryDesign(&dialog,db_,initial,checkProject,false);checkProject();if(!edited)return;
+            const auto edited=linaccess::editNativeQueryDesign(&dialog,db_,initial,checkProject,false,false);checkProject();if(!edited)return;
             const QJsonObject metadata{{"sql_sha256",hash(edited->sql)},{"design",edited->state}};if(*visual==metadata && source->currentText()==edited->sql)return;
             *visual=metadata;source->setCurrentText(edited->sql);if(history)history->record();
         }catch(const std::exception& error){messageError(&dialog,QString::fromUtf8(error.what()));}
@@ -2750,7 +2750,7 @@ void MainWindow::editReport(const QString& existingName) {
     auto* design=new QPushButton("Datenquelle entwerfen…",&dialog);design->setObjectName("native-report-source-design");outer->addWidget(design);
     connect(design,&QPushButton::clicked,&dialog,[this,sql,visual,checkProject,hash,&dialog]{
         try{checkProject();const auto initial=visual->value("sql_sha256").toString()==hash(sql->toPlainText()) ? visual->value("design").toObject() : QJsonObject{};
-            const auto edited=linaccess::editNativeQueryDesign(&dialog,db_,initial,checkProject,false);checkProject();if(!edited)return;
+            const auto edited=linaccess::editNativeQueryDesign(&dialog,db_,initial,checkProject,false,false);checkProject();if(!edited)return;
             auto cursor=sql->textCursor();cursor.beginEditBlock();cursor.select(QTextCursor::Document);cursor.insertText(edited->sql);cursor.endEditBlock();
             *visual=QJsonObject{{"sql_sha256",hash(edited->sql)},{"design",edited->state}};
         }catch(const std::exception& error){messageError(&dialog,QString::fromUtf8(error.what()));}

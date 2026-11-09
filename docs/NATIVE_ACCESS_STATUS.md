@@ -199,3 +199,28 @@ Original-/Windows-/Gesamtsuiten-/Paketnachweise. Details VISUAL_QUERY_DESIGNER.m
 Alias-Etappe9953a83 veröffentlicht; letzte geprüfteDEB weiterhinfe01e1d; jetzt
 aktuelles Paket nach dieser zusammenhängenden Entwurfserweiterung prüfen.
 F067/F068/F080/F148 und fester Katalog456/386/70 unverändert.
+
+
+Visuelle Aktionsabfragen implementiert: Auswahl/Tabellenerstellung/Anfügen sowie
+Aktualisieren/Löschen für einzelne physische Tabellen ohne Joins/Summen/DISTINCT/
+Sortierung. Expliziter freier neuer Tabellenname bzw. reale Zielspaltenzuordnung;
+Updatefelder mit begrenzten skalaren SQL-Ausdrücken und deklarierten Parametern,
+WHERE aus tatsächlichen Kriterien. Vorschau/Übernahme erzeugen nur SQL und
+Metadaten; ausschließlich Ausführen verwendet den bestehenden nativen DAO-
+QueryDef-/Bindungs-/Aktionspfad. Reale Tabellen/Zeilen/Anfüge-Standardwerte sowie
+Parameteraktualisierung und kriteriumsgebundene Löschung nachgewiesen. Speichern/
+Wiederöffnung behalten Modus/Ziel/Zuordnung/Ausdrücke; Formular-/Berichtsquellen
+bleiben Auswahl-only. Entwurfsformat schreibtVersion3, liestVersion1/2/3.
+Initiales bestehendes GUI-/SQL-Bündel2/2 (16,23s) für Make/Append bestanden. Nach
+Update/Delete nur betroffenes GUI-Ziel: Qt-Iterator-Baufehler und DELETE-*-Vorschau
+korrigiert; endgültig1/1 (15,79s), Anwendung gebaut. Der zunächst fälschlich dem
+Update zugeordnete Fehler lag bei der DELETE-Vorbereitung. Keine neuen CTests
+oder neue Kern-/Original-/Windows-/Gesamtsuiten-/Paketnachweise für diese Stufe.
+Details VISUAL_QUERY_DESIGNER.md; native Laufzeit-/Typ-/Metadatengrenzen bleiben.
+
+Zusammengesetzte Joins als44b1f70 veröffentlicht/verifiziert. Geprüftes DEB dieses
+Standes /workspace/work/visual-query-composite/package/linaccess-0.7.0-Linux.deb:
+Build-ID, MDBTools1.0.1/SQLite3.54.1, Payload/Berechtigungen/keine Fixtures bestanden;
+dieses Paket enthält noch nicht die anschließenden Aktionsentwürfe. F067/F068/
+F080/F148 und fester Katalog456/386/70 unverändert. Weiter mit nativer TOP-Auswahl
+im visuellen Entwurf; kein Gesamtabschluss, kein Abschlussanruf.

@@ -1,4 +1,4 @@
-# Native visual selection-query designer
+# Native visual query and source designer
 
 The existing SQL query editor now has an Entwurf action. Its actual Qt dialog
 lists real project tables and fields from schema metadata. Output checkboxes,
@@ -13,7 +13,7 @@ or invented records are introduced.
 
 The preview prepares columns without stepping records or executing SQL/VBA value
 callbacks. It never runs an action query. Applying transfers SQL to the existing
-editor as one native text undo operation; only its explicit Run action reads rows.
+editor as one native text undo operation; only its explicit Run action executes the selected query type.
 Cancel leaves editor text unchanged. Invalid/empty selections, duplicate output
 names, malformed criteria or source changes disable Apply. Reload explicitly
 rebuilds from the current source. No table is fabricated or chosen when no source
@@ -256,7 +256,8 @@ Neue Verknüpfung verwerfen discards only the unadded draft. OK refuses an
 unadded source/condition draft. The existing FROM preview contains exactly the
 added joins. Buttons share a compact row and labels wrap within the dialog.
 
-Visual metadata now writes version2 and still reads version1, including its
+The composite-join stage introduced version2; the current action stage writes
+version3 and still reads versions1/2, including the
 legacy single-equality join representation. Older designers that support only
 version1 will not silently reinterpret version2 composite join metadata. Manual
 SQL and its exact hash remain the authoritative stored query/source.
@@ -267,3 +268,50 @@ keys match an independent reversed LEFT query including Nulls. Restored INNER
 metadata with <= also matches independent SQL. Earlier version1 designs, aliases,
 query/form/report persistence and preview non-execution remain in the same target.
 No new CTest ID or new original/Windows/full-suite/package proof.
+
+## Native action-query authoring
+
+Abfrageart offers selection, make-table, append, update and delete drafts. The
+query/source SQL remains authoritative; applying the draft changes only editor
+text. Metadata preparation never executes an action or reads its records. The
+existing SQL editor Run uses the actual native DAO QueryDef/parameter/execution
+path. No alternative DML or record-copy engine is introduced.
+
+Make-table emits SELECT ... INTO with an explicit unused project table name;
+existing targets are refused rather than overwritten. Append emits INSERT INTO
+with an explicit one-to-one mapping from actual prepared output columns to real
+existing target fields. Duplicate/missing mappings are refused. Omitted target
+fields retain the native default/required/type/AutoNumber rules at execution.
+Both derive from the current real selection, including its supported parameters,
+criteria, calculations, grouping and joins. Native SELECT INTO metadata/precision
+propagation boundaries remain those of the existing DAO engine.
+
+Update/delete require a single physical project source without joins, totals,
+DISTINCT or sorting. Update explicitly selects fields and bounded scalar SET
+expressions (up to4096 characters), including declared parameter references.
+Delete uses the actual criteria as WHERE. Both change the selected physical
+source only on explicit Run; no affected-row count is invented during preview.
+The source/output selection must remain valid for schema preparation. Joined or
+saved-query updates and more general expressions retain their existing manual
+SQL/DAO support boundaries; this is not full Access updateability.
+
+The action mode, target/mapping or update expressions persist under the exact-SQL
+hash. Visual metadata writes version3 and reads versions1/2/3. Older designers
+will not silently reinterpret the new action format. Form/report source entries
+remain selection-only and hide the action chooser as well as parameter declarations.
+Saving and reopening action designs does not execute them. SQL text undo keeps
+its existing behavior; complete visual/SQL reverse parsing remains outside scope.
+
+
+Validation: the initial make-table/append GUI/SQL bundle passed2/2 (16.23s).
+Their real source/target schema and records were unchanged during design/Apply;
+actual editor Run created/copied the expected records and target defaults. Saved
+modes, target and mappings restore without execution; duplicate mapping is refused.
+After extending update/delete, only the affected GUI target was run. A Qt JSON
+iterator build error was corrected. The failure initially attributed to update
+was localized to delete preparation: DELETE * FROM was changed to native
+DELETE FROM. Final GUI1/1 passed (15.79s), application built. The same fixture
+executes a declared Long update parameter, checks only matching rows change,
+reopens its expression metadata and executes a criterion-limited delete. These
+are existing targets, not new CTest IDs. No new core/original/Windows/full-suite
+or package proof is attributed to the actions.

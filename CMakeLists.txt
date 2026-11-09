@@ -36,7 +36,7 @@ if(LINACCESS_BUILD_GUI)
     # Share the identical desktop translation units and Qt metaobjects between
     # the app and its window integration test; no additional runtime DSO.
     add_library(linaccess_desktop STATIC
-        src/native_designer_history.cpp src/native_query_builder.cpp src/native_query_sources.cpp
+        src/native_designer_history.cpp src/native_query_builder.cpp src/native_query_sources.cpp src/native_query_action.cpp
         src/mainwindow.cpp
         src/mainwindow.hpp
         src/access_inspector.cpp
