@@ -91,11 +91,12 @@ QAction* action(MainWindow& window,const QString& text) {
     for(auto* candidate:window.findChildren<QAction*>()) if(candidate->text()==text) return candidate;
     assert(false); return nullptr;
 }
-void openProject(MainWindow& window,const QString& path,QWidget* shortcutTarget=nullptr) {
+void openProject(MainWindow& window,const QString& path,QWidget* shortcutTarget=nullptr,bool holdShift=false) {
     bool selected=false;
     QTimer::singleShot(0,&window,[&] {
         auto* dialog=qobject_cast<QFileDialog*>(QApplication::activeModalWidget()); assert(dialog);
         dialog->selectFile(path); selected=true;
+        if(holdShift) QTest::keyPress(dialog,Qt::Key_Shift,Qt::ShiftModifier);
         static_cast<QDialog*>(dialog)->accept();
     });
     if(shortcutTarget) { QTest::keyPress(shortcutTarget,Qt::Key_O,Qt::ControlModifier); QTest::keyRelease(&window,Qt::Key_O,Qt::ControlModifier); }
@@ -2648,6 +2649,33 @@ void testNativeMacroDesigner(MainWindow& window,QSqlDatabase db) {
     unknown=definition;unknown.insert("timer_interval",-1);error=0;try {(void)linaccess::nativeStoredForm("Invalid timer",unknown,db);}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==5);
 }
 
+void testNativeAutoExec(MainWindow& window,QSqlDatabase db) {
+    using linaccess::VbaValue;const auto original=db.databaseName();assert(original!=":memory:");QTemporaryDir temporary;assert(temporary.isValid());const auto path=temporary.filePath("startup.linaccess");
+    {
+        auto setup=QSqlDatabase::addDatabase("QSQLITE","native-autoexec-setup");setup.setDatabaseName(path);assert(setup.open());
+        {QSqlQuery sql(setup);assert(sql.exec("CREATE TABLE _la_objects(kind TEXT NOT NULL,name TEXT NOT NULL,definition TEXT NOT NULL,PRIMARY KEY(kind,name))"));assert(sql.exec("CREATE TABLE startup_effects(id INTEGER PRIMARY KEY,n INTEGER)"));
+        const auto store=[&](QString kind,QString name,QJsonObject definition) {sql.prepare("INSERT INTO _la_objects VALUES(?,?,?)");sql.addBindValue(kind);sql.addBindValue(name);sql.addBindValue(QJsonDocument(definition).toJson(QJsonDocument::Compact));assert(sql.exec());sql.finish();};
+        store("module","StartupCode",{{"version",1},{"vba",R"VBA(Public Function StartupFunction() As Long
+CurrentDb.Execute "INSERT INTO startup_effects(n) VALUES(2)"
+StartupFunction=2
+End Function)VBA"}});
+        store("macro","aUtOeXeC",{{"version",1},{"actions",QJsonArray{QJsonObject{{"action","RunSQL"},{"arguments",QJsonArray{"INSERT INTO startup_effects(n) VALUES(1)"}}},QJsonObject{{"action","RunCode"},{"arguments",QJsonArray{"StartupFunction()"}}},QJsonObject{{"action","OpenTable"},{"arguments",QJsonArray{"startup_effects",0,1}}}}}});}
+        setup.close();
+    }QSqlDatabase::removeDatabase("native-autoexec-setup");
+    const auto generation=window.property("la_project_generation");linaccess::NativeStandardModuleHost host(&window,db,[&] {if(window.property("la_project_generation")!=generation) throw linaccess::VbaRuntimeError(3420,"Project changed");});auto heldApplication=host.applicationObject();
+    openProject(window,path);assert(window.property("la_startup_macro_status").toString()=="completed");
+    const auto count=[&] {QSqlQuery query(db);assert(query.exec("SELECT COUNT(*) FROM startup_effects") && query.next());return query.value(0).toInt();};assert(count()==2);
+    int stale=0;try {(void)heldApplication->member("Eval",{VbaValue::string("1")});}catch(const linaccess::VbaRuntimeError& error) {stale=error.number;}assert(stale==3420);
+    openProject(window,path);assert(window.property("la_startup_macro_status").toString()=="completed" && count()==4);
+    openProject(window,path,nullptr,true);QTest::keyRelease(&window,Qt::Key_Shift);assert(window.property("la_startup_macro_status").toString()=="bypassed" && count()==4);
+    {QSqlQuery sql(db);assert(sql.exec("DELETE FROM _la_objects WHERE kind='macro'"));}
+    const auto source=QByteArray("archived_macro_source_only");const int archived=artifact(db,"macro","AutoExec",source);openProject(window,path);assert(window.property("la_startup_macro_status").toString()=="none" && count()==4);
+    {QSqlQuery sql(db);sql.prepare("SELECT source_bytes FROM _la_access_artifacts WHERE id=?");sql.addBindValue(archived);assert(sql.exec() && sql.next() && sql.value(0).toByteArray()==source);sql.finish();sql.prepare("INSERT INTO _la_objects VALUES('macro','AutoExec',?)");sql.addBindValue(QJsonDocument(QJsonObject{{"version",1},{"actions",QJsonArray{QJsonObject{{"action","RunSQL"},{"arguments",QJsonArray{"INSERT INTO startup_effects(n) VALUES(7)"}}},QJsonObject{{"action","RunCode"},{"arguments",QJsonArray{"MissingStartupFunction()"}}}}}}).toJson(QJsonDocument::Compact));assert(sql.exec());}
+    bool observedError=false;QTimer dismiss;dismiss.setInterval(1);QObject::connect(&dismiss,&QTimer::timeout,&window,[&] {if(auto* message=qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) {assert(message->text().contains("AutoExec") && message->text().contains("2517"));observedError=true;message->accept();}});dismiss.start();openProject(window,path);dismiss.stop();assert(observedError && window.property("la_startup_macro_status").toString()=="failed" && db.isOpen() && count()==5);
+    openProject(window,path,nullptr,true);QTest::keyRelease(&window,Qt::Key_Shift);assert(window.property("la_startup_macro_status").toString()=="bypassed" && count()==5);
+    openProject(window,original);assert(db.databaseName()==original && window.property("la_startup_macro_status").toString()=="none");
+}
+
 void testStandaloneMacroExecution(MainWindow& window,QSqlDatabase db) {
     using linaccess::VbaValue;QSqlQuery sql(db);assert(sql.exec("CREATE TABLE standalone_macro_effects(id INTEGER PRIMARY KEY,n INTEGER)"));
     const auto store=[&](const QString& kind,const QString& name,const QJsonObject& definition) {QSqlQuery save(db);save.prepare("INSERT INTO _la_objects(kind,name,definition) VALUES(?,?,?)");save.addBindValue(kind);save.addBindValue(name);save.addBindValue(QJsonDocument(definition).toJson(QJsonDocument::Compact));assert(save.exec());};
@@ -3760,6 +3788,7 @@ End Sub
     testNativeMacroDesigner(window,db);
     testNativeModuleEditor(window,db);
     testStandaloneMacroExecution(window,db);
+    testNativeAutoExec(window,db);
     assert(window.close()); dispose(); watchdog.stop();
     std::cout<<"Main window: native project/explorer opening, independent nonmodal form/report lifetime, deduplication, modal metadata, cancellation, SQL save and retained close/MsgBox passed\n";
 }

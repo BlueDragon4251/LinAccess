@@ -6932,3 +6932,23 @@ App-/Helper-BuildIDs, MDBTools1.0.1 und bytegleiches SQLite3.54.1 samt tatsächl
 JOIN/NULL-/Counter-Backendcheck bestanden. Keine Gesamtsuite/Windows-Beobachtung.
 NATIVE_MACROS_RUNTIME.md; F088/F042/F050/F057/F114/F148 und456/384/72 unverändert.
 Direkt weiter, keine Gesamtabschlussmeldung.
+
+
+Native AutoExec beim tatsächlichen Projektöffnen implementiert: nach Schema/
+QueryViews/Explorer-Initialisierung einmal pro neuem Öffnen, CI-Katalogauflösung;
+nur gespeicherte native _la_objects-Makros, keine Archiv-only-Access-Makros.
+Gehaltener Shift-Zustand überspringt Startmakro. Menü/Startup nutzen gemeinsamen
+Projektstarter mit Generations-/Verbindungs-/Modal-/Ausführungsschutz und Refresh
+auch nach Teilfehlern; neue Generation leert schwachen Modul-Application-Cache.
+AutoExec-Fehler bleiben sichtbar, Projekt offen, bereits abgeschlossene Effekte
+werden nicht erfunden zurückgerollt; Shift erlaubt nächsten Start ohne Wiederholung.
+AllowBypassKey=False/Startup-Formular/Trust-/Access-Makroimport bleiben offen.
+App gebaut; nur bestehende GUI1/1 (7,30s) bestanden. Erste Shift-Prüfung hatte
+synthetische Taste ohne Modifier-Zustand; korrigiert auf echte Qt-Shift-KeyPress
+mit ShiftModifier im geöffneten Dateidialog, nur betroffene GUI erneut. Reale
+Dateiprojekte: SQL+RunCode+Table beim ersten/erneuten Öffnen je einmal, Shift ohne
+Effekte, unveränderte Archiv-only-Makrobytes ohne Ausführung, Fehler2517 mit
+persistiertem Vorläufer und erfolgreichem Shift-Neustart, gehaltene Application
+nach tatsächlichem Projektwechsel3420. Keine neue CTest-ID/Windows-Beobachtung/
+Gesamtsuite; Paket gehört vorherigem db892cc-Stand. NATIVE_AUTOEXEC_RUNTIME.md;
+F088/F042/F050/F121/F148 und456/384/72 unverändert. Direkt weiter.

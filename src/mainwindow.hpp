@@ -54,6 +54,7 @@ private:
     bool datasheetOutputActive_{};
     QSet<QString> executingQueries_;
 
+    QVariantMap runProjectMacro(const QString& name);
     QVariantMap outputDatasheetInternal(int mode,const QString& path);
     bool finishActiveDataEditors();
     bool activateDataPage(QWidget* page);

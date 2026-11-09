@@ -209,3 +209,6 @@ A real menu invocation exercises SQL/Function effects, nested StopMacro, conditi
 Table/Query/Form/Report/Requery/RunCommand, event SQL and actual bound row count.
 Later-action persistence, recursion cleanup, SELECT refusal and real cancelled
 Form_Open are exercised. No new test target or Windows Access2003 oracle.
+
+Native project [AutoExec and Shift bypass](NATIVE_AUTOEXEC_RUNTIME.md) are now
+implemented for stored native macros; archive macro importing remains open.

@@ -389,14 +389,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     const auto updateRunMacro=[runMacro,canRunMacro] {runMacro->setEnabled(canRunMacro());};updateRunMacro();
     connect(viewMenu,&QMenu::aboutToShow,this,updateRunMacro);connect(explorer_,&QTreeWidget::currentItemChanged,this,updateRunMacro);
     connect(runMacro,&QAction::triggered,this,[this,canRunMacro] {
-        if(!canRunMacro()) return;const auto name=explorer_->currentItem()->text(0);const QPointer<MainWindow> owner=this;const auto identity=db_.databaseName(),connection=db_.connectionName();const auto generation=property("la_project_generation");
-        const auto check=[owner,identity,connection,generation] {if(!owner || !owner->db_.isOpen() || owner->db_.databaseName()!=identity || owner->db_.connectionName()!=connection || owner->property("la_project_generation")!=generation) throw linaccess::VbaRuntimeError(3420,"Makro gehört nicht mehr zum aktuellen Projekt.");};
-        try {
-            QScopedValueRollback<int> execution(queryExecutionDepth_,queryExecutionDepth_+1);
-            linaccess::NativeStandardModuleHost host(this,db_,check);(void)host.applicationObject()->member("DoCmd",{}).object->member("RunMacro",{linaccess::VbaValue::string(name.toStdString())});check();statusBar()->showMessage("Makro ausgeführt: "+name);
-        }catch(const linaccess::VbaExecutionStopped&) {if(owner) statusBar()->showMessage("Makroausführung beendet.");}
-        catch(const linaccess::VbaRuntimeError& error) {if(owner) messageError(this,QString("Fehler %1: %2").arg(error.number).arg(QString::fromUtf8(error.what())));}
-        catch(const std::exception& error) {if(owner) messageError(this,QString::fromUtf8(error.what()));}
+        if(!canRunMacro()) return;const auto name=explorer_->currentItem()->text(0);const auto result=runProjectMacro(name);
+        if(const int error=result.value("error").toInt()) messageError(this,QString("Fehler %1: %2").arg(error).arg(result.value("description").toString()));
+        else statusBar()->showMessage(result.value("stopped").toBool() ? "Makroausführung beendet." : "Makro ausgeführt: "+name);
     });
     auto* editRelations=viewMenu->addAction("&Beziehungen bearbeiten...");editRelations->setObjectName("native-relations-edit");
     connect(editRelations,&QAction::triggered,this,[this] {
@@ -591,6 +586,19 @@ QVariantMap MainWindow::saveDataPage(QWidget* page,bool interactive,bool current
         }
     }
     return {{"handled",true},{"error",0}};
+}
+
+QVariantMap MainWindow::runProjectMacro(const QString& name) {
+    if(!db_.isOpen()) return tableCommandFailure(3420,"Projekt ist geschlossen.");
+    if(QApplication::activeModalWidget() || queryExecutionDepth_>0) return tableCommandFailure(2046,"Makro kann in diesem Kontext nicht gestartet werden.");
+    const QPointer<MainWindow> owner=this;const auto identity=db_.databaseName(),connection=db_.connectionName();const auto generation=property("la_project_generation");
+    const auto check=[owner,identity,connection,generation] {if(!owner || !owner->db_.isOpen() || owner->db_.databaseName()!=identity || owner->db_.connectionName()!=connection || owner->property("la_project_generation")!=generation) throw linaccess::VbaRuntimeError(3420,"Makro gehört nicht mehr zum aktuellen Projekt.");};
+    QScopedValueRollback<int> execution(queryExecutionDepth_,queryExecutionDepth_+1);
+    const auto refresh=qScopeGuard([owner] {if(owner && owner->db_.isOpen()) owner->refreshExplorer();});
+    try {linaccess::NativeStandardModuleHost host(this,db_,check);(void)host.applicationObject()->member("DoCmd",{}).object->member("RunMacro",{linaccess::VbaValue::string(name.toStdString())});check();return {{"handled",true},{"error",0}};}
+    catch(const linaccess::VbaExecutionStopped&) {return {{"handled",true},{"error",0},{"stopped",true}};}
+    catch(const linaccess::VbaRuntimeError& error) {auto result=tableCommandFailure(error.number,QString::fromUtf8(error.what()));result.insert("source",QString::fromStdString(error.source));result.insert("help_file",QString::fromStdString(error.helpFile));result.insert("help_context",error.helpContext);return result;}
+    catch(const std::exception& error) {return tableCommandFailure(3146,QString::fromUtf8(error.what()));}
 }
 
 QVariantMap MainWindow::renameDatabaseObject(const QString& newName,int objectType,const QString& oldName) {
@@ -1465,10 +1473,13 @@ void MainWindow::openDatabase(const QString& path) {
                            "Sie dürfen nicht als SQLite-Projekt geöffnet werden.");
         return;
     }
+    const bool bypassStartup=QApplication::keyboardModifiers().testFlag(Qt::ShiftModifier);
     const auto projectPath=QFileInfo(path).absoluteFilePath();
     if (!AccessFormPreview::closeProjectDocuments(db_)) return;
     setProperty("la_project_generation",QVariant::fromValue<qulonglong>(property("la_project_generation").toULongLong()+1));
     setProperty("la_native_current_projects",QVariant{});
+    setProperty("la_native_module_applications",QVariant{});
+    setProperty("la_startup_macro_status","none");
     while (tabs_->count()) {
         auto* widget = tabs_->widget(0);
         tabs_->removeTab(0);
@@ -1506,6 +1517,17 @@ void MainWindow::openDatabase(const QString& path) {
     statusBar()->showMessage(projectPath);
     refreshExplorer();
     if(explorer_->hasFocus()) AccessFormPreview::activateDatabaseWindow(db_,this);
+    try {
+        const auto startup=linaccess::nativeMacroCatalogName(db_,"AutoExec");
+        if(!startup.isEmpty()) {
+            if(bypassStartup) {setProperty("la_startup_macro_status","bypassed");statusBar()->showMessage("AutoExec mit Umschalttaste übersprungen.");}
+            else {
+                const auto outcome=runProjectMacro(startup);
+                if(const int error=outcome.value("error").toInt()) throw linaccess::VbaRuntimeError(error,outcome.value("description").toString().toStdString());
+                const bool stopped=outcome.value("stopped").toBool();setProperty("la_startup_macro_status",stopped ? "stopped" : "completed");statusBar()->showMessage(stopped ? "AutoExec beendet." : "AutoExec ausgeführt.");
+            }
+        }
+    }catch(const linaccess::VbaRuntimeError& error) {setProperty("la_startup_macro_status","failed");statusBar()->showMessage(QString("AutoExec fehlgeschlagen: Fehler %1").arg(error.number));messageError(this,QString("AutoExec: Fehler %1: %2").arg(error.number).arg(QString::fromUtf8(error.what())));}
 }
 
 QStringList MainWindow::tableNames() {
