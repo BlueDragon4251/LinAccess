@@ -1,5 +1,6 @@
 void testVbaDebugOutput();
 void testVbaProperties();
+void testVbaStaticProcedures();
 void testVbaFixedStrings();
 void testVbaConditions();
 void testVbaDebugger();
@@ -4167,7 +4168,7 @@ End Function
     std::vector<VbaValue> staticDepth{VbaValue::longInteger(2)};
     const auto recursiveStatic=executeVbaProcedureWithArguments(staticLocals,"RecursiveStatic",staticHost,staticDepth);
     assert(recursiveStatic.status==VbaExecutionStatus::Completed && recursiveStatic.typedReturnValue->asNumber()==3);
-    const auto staticProcedure=executeVbaProcedure("Static Sub UnsupportedStatic()\nMe!UnexpectedStatic=1\nEnd Sub","UnsupportedStatic",staticHost);
+    const auto staticProcedure=executeVbaProcedure("Static Sub UnsupportedStatic() Static\nMe!UnexpectedStatic=1\nEnd Sub","UnsupportedStatic",staticHost);
     assert(staticProcedure.status==VbaExecutionStatus::Unsupported && !staticHost.fields.contains("UnexpectedStatic"));
 
     const std::string typedDictionary=R"VBA(Private retained As Scripting.Dictionary
@@ -5015,6 +5016,7 @@ End Function
     testVbaDebugger();
     testVbaDebugOutput();
     testVbaProperties();
+    testVbaStaticProcedures();
     testVbaConditions();
     std::cout << "Core tests passed\n";
 }

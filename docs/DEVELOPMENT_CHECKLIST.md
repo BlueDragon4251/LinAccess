@@ -3795,3 +3795,22 @@ keine zusätzliche Originalausführung behauptet. Vorstufe Debug.Print als469ad6
 veröffentlicht und Remote-Baum/privat verifiziert. Letzte geprüfteDEB0e4f084 liegt
 vor Debug.Print/Properties. F042/F043/F050 und Katalog456/386/70 unverändert;
 anschließend statische Prozedurlebensdauer umsetzen, ohne Zwischenabschluss.
+
+
+Statische Sub-/Function-/Property-Prozeduren besitzen jetzt tatsächliche lokale
+Modullebensdauer: Dim-Skalare/Objekte/feste und dynamische Arrays/feste Strings,
+implizite Variant-Bindungen ohne Option Explicit, Alias-Synchronisierung bei
+ByRef/Rekursion/Fehlern. Parameter, Rückgabe, Err und Konstanten bleiben proAufruf.
+Initial-/Trailing-Static unterstützt, doppelte Angabe vor Effekten abgelehnt.
+Def-Typ-Direktiven vor Effekten und implizite Typzeichen ausdrücklich3251 statt
+falschem Variant-Erfolg; vollständige Compile-/Klassen-/Reset-Parität bleibt offen.
+Details STATIC_LOCAL_RUNTIME.md/NATIVE_VBA_PROPERTIES.md. Anwendung gebaut;
+bestehender Kern3,02s und GUI1/1 16,68s nach Korrektur des ungültigen null-Fenster-
+besitzers im technischen Host bestanden. Spätere Typgrenzen nur im betroffenen
+Kern1/1 (2,95s) geprüft; kein zusätzlicher GUI-/Original-/Windows-/Gesamtsuitenlauf.
+Originalinventar32 VBA-Artefakte/0 statische Prozedurkandidaten. Keine neuen CTests.
+Vorstufe Properties39e3cb2 auf privatem Branch veröffentlicht/Remote-Baum verifiziert.
+F042/F043 und Katalog456/386/70 unverändert; jetzt Paket aktualisieren und danach
+parameterlose Prozedur-/Property-Deklarationen ohne Klammern implementieren.
+Kein Zwischenabschluss. Letzte geprüfteDEB0e4f084 liegt vor Debug.Print/Properties/
+statischen Prozeduren; Original-/Fixture-Hashes7/7 zuvor unverändert nachgewiesen.

@@ -96,6 +96,7 @@ void exerciseStoredForm(MainWindow& window,QSqlDatabase db);
 void exerciseVisualQueryDesigner(MainWindow& window,QSqlDatabase db);
 void exerciseNativeDebugOutput(MainWindow& window,QSqlDatabase db);
 void exerciseNativeProperties(QSqlDatabase db);
+void exerciseNativeStaticProcedures(QSqlDatabase db);
 
 namespace {
 QAction* action(MainWindow& window,const QString& text) {
@@ -3562,6 +3563,7 @@ int main(int argc,char** argv) {
     exerciseVisualQueryDesigner(window,db);
     exerciseNativeDebugOutput(window,db);
     exerciseNativeProperties(db);
+    exerciseNativeStaticProcedures(db);
     exerciseTableSave(window,db);
     exerciseReferenceDatasheet();
     exerciseDatasheetOutput(window,db);

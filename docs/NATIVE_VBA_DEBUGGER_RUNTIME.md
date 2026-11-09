@@ -47,7 +47,8 @@ folgt daraus nicht. Der Einstieg liegt im nativen Standardmodul-Editor; importie
 und native gerufene Prozeduren verwenden dieselben Interpreterrahmen, soweit
 sie vom vorhandenen Interpreter unterstützt werden. Unbekannte Modulquellen
 werden als unbekannt beschriftet. Sprach- und Ausführungsgrenzen bleiben explizit;
-insbesondere ist der ursprüngliche Kassa-F129-Fehler3075 weiterhin offen.
+insbesondere bleibt der vollständige Kassa-F129-Ablauf offen. Die aktuelle
+dokumentierte Grenze ist fehlende Makroquelle2485/1023 (siehe festen Katalog).
 
 
 ## Explicit Stop and Debug.Assert

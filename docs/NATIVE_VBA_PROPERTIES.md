@@ -32,8 +32,9 @@ This is a bounded F042/F043/F050 extension, not complete class support. Generic
 user class construction/lifecycle, default-property attributes/implicit default
 forwarding, arbitrary cross-module property binding, ByRef index copy-back,
 ParamArray, optional setter indices, named setters and complete visibility/COM
-semantics remain open. Supported declarations currently use parentheses; static
-property declarations and complete declaration grammar remain open. Private
+semantics remain open. Supported declarations currently use parentheses; static property declaration
+lifetimes are now supported as documented in STATIC_LOCAL_RUNTIME.md. Complete
+declaration grammar remains open. Private
 indexed/object writes should use same-module unqualified access; a public object
 facade does not grant private access. Existing native value/coercion limits apply.
 No Windows Access property/event/locale oracle is claimed.

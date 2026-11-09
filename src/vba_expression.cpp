@@ -2385,6 +2385,7 @@ private:
                 }
             }
             if (auto value=host_->resolveIdentifier(tok.value,objectContext || nextSymbol(".") || nextSymbol("!"))) return *value;
+            if(resolver_.undeclaredIdentifier) if(auto value=resolver_.undeclaredIdentifier(tok.value)) return *value;
             throw error("VBA-Variable nicht deklariert: " + tok.value);
         }
         return variable->second;

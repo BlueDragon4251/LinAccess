@@ -19,7 +19,7 @@ VbaAnalysis analyzeVba(std::string_view source) {
     const std::regex declaration(
         // UTF-8 non-ASCII bytes also occur in legal VBA identifiers, e.g.
         // German form event handlers such as Mengenänderung_Click.
-        R"(^\s*(?:(?:Public|Private|Friend|Static)\s+)?(Sub|Function|Property\s+(?:Get|Let|Set))\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*(?:\(|$))",
+        R"(^\s*(?:(?:Public|Private|Friend)\s+)?(?:Static\s+)?(Sub|Function|Property\s+(?:Get|Let|Set))\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*(?:\(|$))",
         std::regex_constants::icase);
     const std::vector<std::pair<std::string, std::regex>> dependencies = {
         {"Windows-API/Declare", std::regex(R"(\bDeclare\s+(?:PtrSafe\s+)?(?:Function|Sub)\b)", std::regex_constants::icase)},

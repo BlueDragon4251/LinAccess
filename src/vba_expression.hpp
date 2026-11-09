@@ -159,6 +159,8 @@ class VbaFunctionResolver {
     Callback callback_;
 public:
     std::function<std::optional<VbaArgumentSignature>(std::string_view)> argumentSignature;
+    // Used only by a real static procedure frame, after normal name resolution.
+    std::function<std::optional<VbaValue>(std::string_view)> undeclaredIdentifier;
     VbaFunctionResolver()=default;
     VbaFunctionResolver(std::nullptr_t) {}
     template<class Function> requires (!std::is_same_v<std::remove_cvref_t<Function>,VbaFunctionResolver>
