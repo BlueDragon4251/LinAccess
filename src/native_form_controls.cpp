@@ -1,6 +1,7 @@
 #include "native_form_controls.hpp"
 #include "native_form_events.hpp"
 #include "native_column_widths.hpp"
+#include "native_control_default.hpp"
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QComboBox>
@@ -15,7 +16,7 @@
 namespace linaccess {
 namespace {
 const QStringList types{"TextBox","Label","CommandButton","CheckBox","ComboBox","ListBox"};
-const QStringList keys{"type","name","caption","control_source","left","top","width","height","row_source_type","row_source","onclick","column_count","bound_column","column_widths"};
+const QStringList keys{"type","name","caption","control_source","left","top","width","height","row_source_type","row_source","onclick","column_count","bound_column","column_widths","default_value","format","input_mask"};
 QString quoted(const QString& value) {
     if(value.size()>65536 || !value.isValidUtf16() || value.contains(QChar(0)) || value.contains('\r') || value.contains('\n')) throw VbaRuntimeError(5,"Invalid native control property text");
     auto text=value;text.replace('"',"\"\"");return '"'+text+'"';
@@ -54,6 +55,14 @@ NativeFormControls nativeFormControls(const QJsonValue& definition,const QString
             int matches=0;for(const auto& column:schema) matches+=column.compare(field,Qt::CaseInsensitive)==0;
             if(matches!=1) throw VbaRuntimeError(matches ? 3251 : 3265,"ControlSource field unavailable or ambiguous");
         }
+        const auto defaultValue=string("default_value"),format=string("format"),inputMask=string("input_mask");
+        if(defaultValue.size()>255 || format.size()>1024) throw VbaRuntimeError(5,"Native default/format property exceeds its limit");
+        if(!defaultValue.isEmpty()) {
+            if(type=="Label" || type=="CommandButton" || source.startsWith('=')) throw VbaRuntimeError(5,"This control has no editable default value");
+            (void)nativeControlDefaultLiteral(defaultValue);
+        }
+        if((!format.isEmpty() || !inputMask.isEmpty()) && type!="TextBox") throw VbaRuntimeError(5,"Format and InputMask require a TextBox");
+        if(!inputMask.isEmpty() && inputMask.compare("Password",Qt::CaseInsensitive)!=0) throw VbaRuntimeError(3251,"Only native Password input masks are implemented");
         const auto integer=[&](const QString& key,int fallback,int minimum) {
             const auto value=object.value(key);if(value.isUndefined()) return fallback;const auto number=value.toDouble(-1);
             if(!value.isDouble() || !std::isfinite(number) || number!=std::floor(number) || number<minimum || number>30000) throw VbaRuntimeError(5,"Invalid native control twip geometry");return static_cast<int>(number);
@@ -70,6 +79,9 @@ NativeFormControls nativeFormControls(const QJsonValue& definition,const QString
             <<"            Left = "+QString::number(left)<<"            Top = "+QString::number(top)<<"            Width = "+QString::number(width)<<"            Height = "+QString::number(height)<<"            TabIndex = "+QString::number(ordinal++);
         if(!caption.isEmpty()) lines<<"            Caption = "+quoted(caption);
         if(!source.isEmpty()) lines<<"            ControlSource = "+quoted(source);
+        if(!defaultValue.isEmpty()) lines<<"            DefaultValue = "+quoted(defaultValue);
+        if(!format.isEmpty()) lines<<"            Format = "+quoted(format);
+        if(!inputMask.isEmpty()) lines<<"            InputMask = "+quoted(inputMask);
         if(list) lines<<"            RowSourceType = "+quoted(rowType)<<"            RowSource = "+quoted(rows)
             <<"            ColumnCount = "+QString::number(columns)<<"            BoundColumn = "+QString::number(bound)<<"            ColumnWidths = "+quoted(columnWidths);
         const auto click=string("onclick");QMap<QString,QString> overrides;
@@ -86,8 +98,8 @@ NativeFormControls nativeFormControls(const QJsonValue& definition,const QString
 bool editNativeFormControls(QWidget* parent,QJsonArray& controls,const QStringList& fields,const QStringList& schema) {
     (void)nativeFormControls(controls,fields,schema,{});
     QDialog dialog(parent);dialog.setObjectName("native-form-controls-editor");dialog.setWindowTitle("Steuerelemente");dialog.resize(1020,540);
-    auto* layout=new QVBoxLayout(&dialog);auto* help=new QLabel("Eigene Steuerelemente anlegen. Position und Größe in Twips. Beschriftungen für Label, Schaltfläche und Checkbox; andere Eingabefelder erhalten bei Bedarf ein separates Label. Spaltenbreiten: Twips oder cm/mm/in/pt, mit Semikolon getrennt; 0 blendet eine Spalte aus. Gebundene Spalte: 1-basiert, 0 für Zeilennummer. Leeres Klickereignis verwendet eine vorhandene VBA-Prozedur automatisch.",&dialog);help->setWordWrap(true);layout->addWidget(help);
-    auto* grid=new QTableWidget(0,keys.size(),&dialog);grid->setObjectName("native-form-controls-grid");grid->setHorizontalHeaderLabels({"Typ","Name","Beschriftung","Steuerelementinhalt","Links","Oben","Breite","Höhe","Herkunftsart","Datensatzherkunft","Beim Klicken","Spaltenanzahl","Gebundene Spalte","Spaltenbreiten"});grid->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);layout->addWidget(grid);
+    auto* layout=new QVBoxLayout(&dialog);auto* help=new QLabel("Eigene Steuerelemente anlegen. Position und Größe in Twips. Beschriftungen für Label, Schaltfläche und Checkbox; andere Eingabefelder erhalten bei Bedarf ein separates Label. Spaltenbreiten: Twips oder cm/mm/in/pt, mit Semikolon getrennt; 0 blendet eine Spalte aus. Gebundene Spalte: 1-basiert, 0 für Zeilennummer. Standardwerte: Zahlen, Wahrheitswerte, Null oder Text in doppelten Anführungszeichen. Eingabemaske: leer oder Password. Leeres Klickereignis verwendet eine vorhandene VBA-Prozedur automatisch.",&dialog);help->setWordWrap(true);layout->addWidget(help);
+    auto* grid=new QTableWidget(0,keys.size(),&dialog);grid->setObjectName("native-form-controls-grid");grid->setHorizontalHeaderLabels({"Typ","Name","Beschriftung","Steuerelementinhalt","Links","Oben","Breite","Höhe","Herkunftsart","Datensatzherkunft","Beim Klicken","Spaltenanzahl","Gebundene Spalte","Spaltenbreiten","Standardwert","Format","Eingabemaske"});grid->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);layout->addWidget(grid);
     const auto append=[&](const QJsonObject& object) {
         const int row=grid->rowCount();grid->insertRow(row);
         for(int column=0;column<keys.size();++column) {

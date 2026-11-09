@@ -7690,3 +7690,16 @@ behalten ihre Standardwerte. Native Save/Reload-/ValueList-/SQL-Modelle und echt
 Mausauswahl im bestehenden GUI/Layoutlauf2/2 (13,83/12,51s) bestanden.
 Details FREE_FORM_CONTROLS.md. Kein neuer CTest/Windows-/Original-/Gesamtsuite-/
 DEB-Lauf; letzte DEB15131f0. F080/F083/F162 und456/386/70 bleiben offen/unverändert.
+
+
+## 2026-11-09: eigene Standardwerte, TextBox-Format und Passwortmaske
+
+Steuerelementdialog speichert DefaultValue/Format/InputMask mit bestehenden
+Typ-/Längen-/Kontextgrenzen. Designer und tatsächliche Initialisierung verwenden
+denselben nativen Literalparser; keine berechneten Standardwerte im Designer
+ausführen. Format bleibt Darstellung bei unverändert typisiertem Value, Password
+ist native Echo-Policy. Echte Create/Save/Reload-/Default-/Wert-vs-Anzeige-/SQL-
+Nachweise gebündelt im bestehenden GUI/Layout2/2 (14,98/12,78s) bestanden.
+Details FREE_FORM_CONTROLS.md. Kein neuer CTest, kein Kern-/Windows-/Original-/
+Gesamtsuite-/DEB-Lauf; letzte DEB15131f0. F015/F071/F080/F081/F115 und456/386/70
+bleiben offen/unverändert. Allgemeine Steuerelementeigenschaften folgen.

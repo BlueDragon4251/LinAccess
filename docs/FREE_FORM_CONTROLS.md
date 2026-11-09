@@ -62,3 +62,27 @@ SQL list hides the first column and selects the actual computed second value 34
 after the real button wrote 17. Save/reload, actual item models and mouse selection
 are used. No new CTest, full Windows/original-workflow/full-suite or refreshed DEB
 proof is claimed. F080/F083/F162 remain broad open requirements.
+
+## Authored defaults, textbox formats and password masks
+
+The control editor stores literal DefaultValue, TextBox Format and InputMask.
+Default preflight and actual initialization share the same native literal parser:
+finite numbers, quoted strings, Null and English True/False/Yes/No, optionally
+prefixed with =. Defaults are capped at 255 UTF-16 units and are refused for
+labels/buttons/calculated controls. Unsupported computed defaults are not executed
+by the designer. Imported/runtime default behavior remains the existing bounded
+contract (CONTROL_DEFAULT_RUNTIME.md).
+
+Format and InputMask apply only to TextBox. Format metadata has the existing
+1024-unit limit; full mask semantics are checked when an actual value is formatted,
+not by inventing a validation value. InputMask accepts blank or Password; other
+patterns remain an explicit boundary. This is display/echo policy, while Value
+retains its actual typed content. The existing CONTROL_FORMAT_RUNTIME.md and
+PASSWORD_INPUT_MASK.md limits still apply.
+
+The existing GUI/layout bundle passed 2/2 (14.98 / 12.78 seconds), covering actual
+creation/save/reload, initial numeric/Boolean defaults, zero SQL insertion from
+defaults, computed padded display versus numeric Value, masked display versus
+actual technical text and the subsequent real VBA/SQL/list interaction. No new
+CTest, core/Windows/original/full-suite/installer execution is claimed. Full
+F015/F071/F080/F081/F115 requirements and catalog totals remain unchanged.

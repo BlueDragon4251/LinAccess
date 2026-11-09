@@ -902,14 +902,16 @@ End Sub
         QTimer::singleShot(0,&window,[&] {
             auto* editor=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(editor && editor->objectName()=="native-form-controls-editor");
             auto* grid=editor->findChild<QTableWidget*>("native-form-controls-grid");auto* add=editor->findChild<QPushButton*>("native-form-controls-add");assert(grid && add);
-            const QStringList types{"TextBox","TextBox","Label","CommandButton","CheckBox","ComboBox","ListBox"};
-            const QStringList names{"EntryValue","ComputedValue","ResultLabel","ApplyValue","EnabledFlag","Choice","Listing"};
+            const QStringList types{"TextBox","TextBox","Label","CommandButton","CheckBox","ComboBox","ListBox","TextBox"};
+            const QStringList names{"EntryValue","ComputedValue","ResultLabel","ApplyValue","EnabledFlag","Choice","Listing","MaskedValue"};
             for(int row=0;row<names.size();++row) {add->click();qobject_cast<QComboBox*>(grid->cellWidget(row,0))->setCurrentText(types[row]);grid->item(row,1)->setText(names[row]);}
             grid->item(1,3)->setText("=[EntryValue]*2");grid->item(2,2)->setText("Bereit");grid->item(3,2)->setText("Übernehmen");grid->item(4,2)->setText("Aktiv");
             qobject_cast<QComboBox*>(grid->cellWidget(5,8))->setCurrentText("Value List");grid->item(5,9)->setText("alpha;1;beta;2");
             grid->item(5,11)->setText("2");grid->item(5,12)->setText("2");grid->item(5,13)->setText("1800;0");
             grid->item(6,9)->setText("SELECT value,value*2 AS doubled FROM free_control_effects");grid->item(6,7)->setText("700");
             grid->item(6,11)->setText("2");grid->item(6,12)->setText("2");grid->item(6,13)->setText("0;3cm");
+            grid->item(0,14)->setText("3");grid->item(1,15)->setText("0000");grid->item(4,14)->setText("False");
+            grid->item(7,14)->setText("\"mask-value\"");grid->item(7,16)->setText("Password");
             grid->item(1,1)->setText("EntryValue");editor->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
             assert(editor->isVisible() && editor->findChild<QLabel*>("native-form-controls-status")->text().contains("(5)"));
             grid->item(1,1)->setText("ComputedValue");editor->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
@@ -921,15 +923,19 @@ End Sub
     create->trigger();dispose();
     assert(sql.exec("SELECT definition FROM main._la_objects WHERE kind='form' AND name='Free Controls Form'") && sql.next());
     const auto freeDefinition=QJsonDocument::fromJson(sql.value(0).toByteArray()).object();sql.finish();
-    assert(freeDefinition.value("table").toString().isEmpty() && freeDefinition.value("fields").toArray().isEmpty() && freeDefinition.value("controls").toArray().size()==7);
+    assert(freeDefinition.value("table").toString().isEmpty() && freeDefinition.value("fields").toArray().isEmpty() && freeDefinition.value("controls").toArray().size()==8);
     selected=nullptr;for(QTreeWidgetItemIterator item(explorer);*item;++item) if((*item)->data(0,Qt::UserRole).toString()=="form" && (*item)->text(0)=="Free Controls Form") selected=*item;
     assert(selected);explorer->setCurrentItem(selected);open();auto freeForm=locate("Free Controls Form");assert(freeForm && !freeForm->hasDataSource());
     auto freeObject=makePreviewFormObject(*freeForm);
     auto* entry=freeForm->findChild<QLineEdit*>("access-control-EntryValue");auto* computed=freeForm->findChild<QLineEdit*>("access-control-ComputedValue");
     auto* button=freeForm->findChild<QPushButton*>("access-control-ApplyValue");auto* check=freeForm->findChild<QCheckBox*>("access-control-EnabledFlag");auto* choice=freeForm->findChild<QComboBox*>("access-control-Choice");
     assert(entry && computed && button && check && choice && !entry->isReadOnly() && computed->isReadOnly() && choice->count()==2);
-    QApplication::setActiveWindow(freeForm);entry->setFocus();QTest::keyClicks(entry,"17");entry->clearFocus();QApplication::processEvents();
-    assert(computed->text()=="34");QStyleOptionButton checkboxStyle;checkboxStyle.initFrom(check);const auto indicator=check->style()->subElementRect(QStyle::SE_CheckBoxIndicator,&checkboxStyle,check);QTest::mouseClick(check,Qt::LeftButton,Qt::NoModifier,indicator.center());assert(check->isChecked() && freeObject->item("EnabledFlag").truthy());choice->setCurrentIndex(1);assert(choice->currentText()=="beta" && freeObject->item("Choice").asText()=="2");
+    auto* masked=freeForm->findChild<QLineEdit*>("access-control-MaskedValue");assert(masked && masked->echoMode()==QLineEdit::Password && masked->text()=="mask-value" && masked->displayText()!=masked->text());
+    assert(freeObject->item("MaskedValue").asText()=="mask-value" && entry->text()=="3" && computed->text()=="0006");
+    assert(!check->isChecked() && freeObject->item("EnabledFlag").kind==linaccess::VbaValue::Kind::Boolean);
+    assert(sql.exec("SELECT COUNT(*) FROM free_control_effects") && sql.next() && sql.value(0).toInt()==0);sql.finish();
+    QApplication::setActiveWindow(freeForm);entry->setFocus();entry->selectAll();QTest::keyClicks(entry,"17");entry->clearFocus();QApplication::processEvents();
+    assert(computed->text()=="0034" && freeObject->item("ComputedValue").asNumber()==34);QStyleOptionButton checkboxStyle;checkboxStyle.initFrom(check);const auto indicator=check->style()->subElementRect(QStyle::SE_CheckBoxIndicator,&checkboxStyle,check);QTest::mouseClick(check,Qt::LeftButton,Qt::NoModifier,indicator.center());assert(check->isChecked() && freeObject->item("EnabledFlag").truthy());choice->setCurrentIndex(1);assert(choice->currentText()=="beta" && freeObject->item("Choice").asText()=="2");
     auto* choiceView=qobject_cast<QTreeView*>(choice->view());assert(choiceView && choiceView->isColumnHidden(1));
     QTest::mouseClick(button,Qt::LeftButton);QApplication::processEvents();
     const auto clicked=freeForm->eventResult("control:ApplyValue:Click");assert(clicked && clicked->status==linaccess::VbaExecutionStatus::Completed);
