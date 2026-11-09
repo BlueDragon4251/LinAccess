@@ -6172,3 +6172,20 @@ nach tatsächlich geprüften flags.make bei -O3. Keine neue Testregistrierung.
 DOCMD_RENAME_RUNTIME.md; F052/F055/F080/F121 offen,456/384/72 unverändert.
 Fortsetzung: tatsächliches Entfernen eigener Datenbankobjekte samt abgeleiteten
 Ansichten und Seitenmetadaten prüfen/umsetzen; kontinuierlich weiterarbeiten.
+
+Eigene Tabellen/Abfragen können jetzt über Ansicht→Ausgewähltes Objekt löschen
+(mit Nein als Vorgabe und über Dialog gehaltenem DAO-Handle) oder ausdrückliches
+DoCmd.DeleteObject entfernt werden. Benannte Argumente/Missing/Null und passende
+offene Dokumente geschützt; importierte Objekte im Fensterpfad deaktiviert.
+QueryDefs.Delete entfernt Definition, vorhandene Seitenmetadaten und verwaltete
+Views im selben Savepoint; Fehler stellt fünf Registrywerte wieder her, eigene
+Workspace-Rücknahme bleibt erhalten. Native DROP/TableDefs.Delete räumt ebenso
+Seitenmetadaten auf, damit Neuanlage keine Altzustände erbt. Unbekannte Katalogform
+bricht gesamte Mutation ab; Roh-SQL-Rename mit Seitenzustand verweigert ohne
+Rebinding. Keine automatische Löschung/Umschreibung abhängiger gespeicherter
+Bindings; Relationenschutz bleibt. Bestehende DAO/GUI2/2 (8,06s), App gebaut:
+echter VBA-Aufruf, Offen-/Missing-/Null-Schutz, GUI Nein/Ja, Views/Seiten/Objekte
+wirklich entfernt, Namenswiederverwendung, Teilfehlerrücknahme, andere Daten gleich.
+DELETE_OBJECT_RUNTIME.md; F052/F055/F080/F121 offen,456/384/72 unverändert.
+Fortsetzung: vorhandene echte Access-Eval-Beobachtungen für allgemeine typisierte
+Ausdrücke nutzen; VBA-/Eval-Kontext unterscheiden, keine pauschale Oracle-Parität.

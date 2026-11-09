@@ -39,6 +39,7 @@ public:
     Q_INVOKABLE QVariantMap setupDatasheetPage();
     Q_INVOKABLE int selectDatabaseObject(int objectType,const QString& name,bool activate);
     Q_INVOKABLE QVariantMap renameDatabaseObject(const QString& newName,int objectType,const QString& oldName);
+    Q_INVOKABLE QVariantMap deleteDatabaseObject(int objectType,const QString& name);
 
 private:
     bool eventFilter(QObject* watched,QEvent* event) override;

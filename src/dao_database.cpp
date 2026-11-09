@@ -92,6 +92,8 @@ QString physicalRowIdentity(QSqlDatabase db,const QString& table) {
 QStringList nativeTableNames(QSqlDatabase db);
 void observeNativeTableCatalog(QSqlDatabase db,const QStringList& before);
 void checkReservedCounterSchemaAction(QSqlDatabase db);
+bool checkedDatasheetPageCatalog(QSqlDatabase db);
+void removeDatasheetPageCatalog(QSqlDatabase db,const QString& kind,const QString& name);
 void removeDroppedTableMetadata(QSqlDatabase db,const QStringList& before) {
     const auto after=nativeTableNames(db); const auto catalog=db.tables();
     QStringList removed,added;
@@ -100,6 +102,8 @@ void removeDroppedTableMetadata(QSqlDatabase db,const QStringList& before) {
     // A rename needs rebinding of defaults, index identities and source metadata.
     // Refuse it atomically for managed/imported tables until that is implemented.
     for(const auto& name:removed) {
+        if(added.isEmpty()) removeDatasheetPageCatalog(db,"table",name);
+        else if(checkedDatasheetPageCatalog(db)) {QSqlQuery pages(db);pages.prepare("SELECT 1 FROM main._la_datasheet_page_setup WHERE kind='table' AND name=?");pages.addBindValue(name.toCaseFolded());if(!pages.exec()) queryFailure(pages);if(pages.next()) throw VbaRuntimeError(3251,"DAO: Rename requires datasheet page rebinding");}
         if(catalog.contains("_la_access_relations",Qt::CaseInsensitive)) {
             QSqlQuery relations(db);relations.prepare("SELECT 1 FROM main._la_access_relations WHERE child_table=? COLLATE NOCASE OR parent_table=? COLLATE NOCASE");relations.addBindValue(name);relations.addBindValue(name);
             if(!relations.exec()) queryFailure(relations);if(relations.next()) throw VbaRuntimeError(3251,"DAO: Remove dependent relations before dropping/renaming a table");
@@ -1237,10 +1241,16 @@ void Field::assign(std::string_view name, const VbaValue& value) {
     require(lower(name) == "value", "DAO: Field property is read-only");
     owner_->set(name_, value);
 }
-// Caller owns the surrounding rename savepoint. This metadata has no QtGui dependency.
+// Callers own a surrounding mutation savepoint; no QtGui dependency.
+bool checkedDatasheetPageCatalog(QSqlDatabase db) {
+    QSqlQuery query(db);if(!query.exec("SELECT type FROM main.sqlite_schema WHERE name='_la_datasheet_page_setup'")) queryFailure(query);if(!query.next()) return false;if(query.value(0).toString()!="table" || query.next()) throw VbaRuntimeError(3251,"DAO: Datasheet page catalog invalid");query.finish();
+    if(!query.exec("PRAGMA main.table_info('_la_datasheet_page_setup')")) queryFailure(query);const QStringList shape{"kind","name","layout"};int count=0;while(query.next()) {if(count>=3 || query.value(1).toString()!=shape[count] || query.value(2).toString().toUpper()!="TEXT" || query.value(3).toInt()!=1 || query.value(5).toInt()!=(count<2 ? count+1 : 0)) throw VbaRuntimeError(3251,"DAO: Datasheet page catalog shape invalid");++count;}if(count!=3) throw VbaRuntimeError(3251,"DAO: Datasheet page catalog shape invalid");return true;
+}
+void removeDatasheetPageCatalog(QSqlDatabase db,const QString& kind,const QString& name) {
+    if(!checkedDatasheetPageCatalog(db)) return;QSqlQuery query(db);query.prepare("DELETE FROM main._la_datasheet_page_setup WHERE kind=? AND name=?");query.addBindValue(kind);query.addBindValue(name.toCaseFolded());if(!query.exec()) queryFailure(query);
+}
 void renameDatasheetPageCatalog(QSqlDatabase db,const QString& kind,const QString& oldName,const QString& newName) {
-    QSqlQuery query(db);if(!query.exec("SELECT type FROM main.sqlite_schema WHERE name='_la_datasheet_page_setup'")) queryFailure(query);if(!query.next()) return;if(query.value(0).toString()!="table" || query.next()) throw VbaRuntimeError(3251,"DAO: Datasheet page catalog invalid");query.finish();
-    if(!query.exec("PRAGMA main.table_info('_la_datasheet_page_setup')")) queryFailure(query);const QStringList shape{"kind","name","layout"};int count=0;while(query.next()) {if(count>=3 || query.value(1).toString()!=shape[count] || query.value(2).toString().toUpper()!="TEXT" || query.value(3).toInt()!=1 || query.value(5).toInt()!=(count<2 ? count+1 : 0)) throw VbaRuntimeError(3251,"DAO: Datasheet page catalog shape invalid");++count;}if(count!=3) throw VbaRuntimeError(3251,"DAO: Datasheet page catalog shape invalid");query.finish();
+    if(!checkedDatasheetPageCatalog(db)) return;QSqlQuery query(db);
     const auto oldKey=oldName.toCaseFolded(),newKey=newName.toCaseFolded();if(oldKey==newKey) return;
     query.prepare("SELECT 1 FROM main._la_datasheet_page_setup WHERE kind=? AND name=?");query.addBindValue(kind);query.addBindValue(newKey);if(!query.exec()) queryFailure(query);if(query.next()) throw VbaRuntimeError(3251,"DAO: Target datasheet page settings already exist");query.finish();
     query.prepare("UPDATE main._la_datasheet_page_setup SET name=? WHERE kind=? AND name=?");query.addBindValue(newKey);query.addBindValue(kind);query.addBindValue(oldKey);if(!query.exec()) queryFailure(query);
@@ -1572,16 +1582,20 @@ public:
             if(args.size()!=1 || args[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"DAO: QueryDefs.Delete requires a name");
             const auto value=scalarVbaValue(args[0]);
             if(value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Invalid Null QueryDef name");
+            if(!connectionUpdatable(db_)) throw VbaRuntimeError(3027,"DAO: Database or object is read-only");
+            QVariantMap registry;for(const auto* key:WorkspaceState::queryViewProperties) registry.insert(key,db_.driver()->property(key));
             QSqlQuery query(db_); const auto savepoint="la_delete_query_"+QUuid::createUuid().toString(QUuid::Id128);
             if(!query.exec("SAVEPOINT "+savepoint)) queryFailure(query);
             bool completed=false;
-            const auto rollback=qScopeGuard([&] { if(!completed) { query.exec("ROLLBACK TO "+savepoint); query.exec("RELEASE "+savepoint); } });
+            const auto rollback=qScopeGuard([&] { if(!completed) { query.exec("ROLLBACK TO "+savepoint); query.exec("RELEASE "+savepoint);for(auto it=registry.cbegin();it!=registry.cend();++it) db_.driver()->setProperty(it.key().toUtf8().constData(),it.value()); } });
             QString canonical; bool owned=false; (void)accessQuerySource(db_,text(value.asText()),&canonical,&owned,true);
             if(!owned) throw VbaRuntimeError(3251,"DAO: Imported query deletion requires an archive-preserving overlay");
             auto& generation=workspace_->queryGenerations[canonical.toCaseFolded()];
             query.prepare("DELETE FROM main._la_objects WHERE kind='query' AND name=?"); query.addBindValue(canonical);
             if(!query.exec()) queryFailure(query);
             if(query.numRowsAffected()!=1) throw VbaRuntimeError(3265,"DAO: QueryDef no longer exists"); query.finish();
+            removeDatasheetPageCatalog(db_,"query",canonical);
+            if(installAccessQueryViews(db_)<0) throw VbaRuntimeError(3251,"DAO: Query views are busy");
             if(!query.exec("RELEASE "+savepoint)) queryFailure(query);
             ++generation; objects_.remove(canonical.toCaseFolded()); completed=true; return {};
         }

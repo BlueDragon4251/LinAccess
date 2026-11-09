@@ -1356,6 +1356,7 @@ public:
         if(key=="opentable") return Signature{{"TableName","View","DataMode"},1};
         if(key=="openquery") return Signature{{"QueryName","View","DataMode"},1};
         if(key=="rename") return Signature{{"NewName","ObjectType","OldName"},1};
+        if(key=="deleteobject") return Signature{{"ObjectType","ObjectName"},0};
         if(key=="openform") return Signature{{"FormName","View","FilterName","WhereCondition","DataMode","WindowMode","OpenArgs"},1};
         if(key=="openreport") return Signature{{"ReportName","View","FilterName","WhereCondition","WindowMode","OpenArgs"},1};
         if(key=="close") return Signature{{"ObjectType","ObjectName","Save"},0};
@@ -1380,6 +1381,14 @@ public:
             if(args.size()!=1 || args[0].kind==linaccess::VbaValue::Kind::Missing) throw linaccess::VbaRuntimeError(450,"Hourglass requires one Boolean argument");
             linaccess::nativeHourglass(linaccess::coerceVbaModuleValue(linaccess::scalarVbaValue(args[0]),"boolean").boolean);
             return {};
+        }
+        if(key=="deleteobject") {
+            if(args.size()>2) throw linaccess::VbaRuntimeError(450,"DeleteObject accepts at most two arguments");const QPointer<AccessFormPreview> guard=&preview;std::vector<linaccess::VbaValue> values;
+            for(const auto& argument:args) {const auto value=linaccess::scalarVbaValue(argument);if(!guard) throw linaccess::VbaRuntimeError(3420,"DeleteObject caller is no longer available");if(value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null DeleteObject argument");values.push_back(value);}
+            if(values.size()!=2 || values[0].kind==linaccess::VbaValue::Kind::Missing || values[1].kind==linaccess::VbaValue::Kind::Missing) throw linaccess::VbaRuntimeError(3251,"DeleteObject currently requires explicit ObjectType and ObjectName");
+            const auto name=text(values[1].asText());const int type=static_cast<int>(linaccess::coerceVbaModuleValue(values[0],"long").number);QWidget* owner=nullptr;for(auto* ancestor=guard->parentWidget();ancestor;ancestor=ancestor->parentWidget()) if(qobject_cast<QMainWindow*>(ancestor)) {owner=ancestor;break;}
+            QVariantMap result;if(!owner || owner->metaObject()->indexOfMethod("deleteDatabaseObject(int,QString)")<0 || !QMetaObject::invokeMethod(owner,"deleteDatabaseObject",Qt::DirectConnection,Q_RETURN_ARG(QVariantMap,result),Q_ARG(int,type),Q_ARG(QString,name))) throw linaccess::VbaRuntimeError(3251,"Native object deletion is unavailable");
+            if(linaccess::vbaExecutionStopRequested()) throw linaccess::VbaExecutionStopped{};if(const int error=result.value("error").toInt()) throw linaccess::VbaRuntimeError(error,result.value("description").toString().toStdString());return {};
         }
         if(key=="rename") {
             if(args.empty() || args.size()>3 || args[0].kind==linaccess::VbaValue::Kind::Missing) throw linaccess::VbaRuntimeError(450,"Rename requires a new name and at most three arguments");

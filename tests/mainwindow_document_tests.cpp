@@ -2936,14 +2936,30 @@ End Sub
 Sub NullName()
 DoCmd.Rename Null, acQuery, "Command query"
 End Sub
+Sub DeleteQuery()
+DoCmd.DeleteObject ObjectName:="Command query", ObjectType:=acQuery
+End Sub
+Sub MissingDeleteType()
+DoCmd.DeleteObject ObjectName:="Command query"
+End Sub
+Sub NullDeleteName()
+DoCmd.DeleteObject acQuery, Null
+End Sub
 )VBA";
         AccessFormPreview caller("rename-command-caller",source,code,db,&window);std::vector<VbaValue> arguments;
         const auto renamed=caller.executeProcedure("RenameQuery",arguments);if(renamed.status!=VbaExecutionStatus::Completed) std::cerr<<"DoCmd.Rename error="<<renamed.errorNumber<<" "<<renamed.explanation<<"\n";assert(renamed.status==VbaExecutionStatus::Completed);
         assert(caller.executeProcedure("RenameTable",arguments).status==VbaExecutionStatus::Completed);assert(db.tables().contains("renamed_command_table") && !db.tables().contains("rename_command_table"));
         assert(caller.executeProcedure("WrongType",arguments).errorNumber==3251);assert(caller.executeProcedure("MissingType",arguments).errorNumber==3251);assert(caller.executeProcedure("OmittedType",arguments).errorNumber==3251);assert(caller.executeProcedure("NullName",arguments).errorNumber==94);
         assert(accessQuerySource(db,"Command query")=="SELECT qty FROM authored_renamed" && datasheet_page_store::read(db,"query","Command query").present && !datasheet_page_store::read(db,"query","Renamed query Ä").present);
-        QSqlQuery values(db);assert(values.exec("INSERT INTO renamed_command_table VALUES(7)"));assert(values.exec("SELECT value FROM renamed_command_table") && values.next() && values.value(0).toInt()==7);values.finish();assert(caller.close());
+        QSqlQuery values(db);assert(values.exec("INSERT INTO renamed_command_table VALUES(7)"));assert(values.exec("SELECT value FROM renamed_command_table") && values.next() && values.value(0).toInt()==7);values.finish();
+        assert(caller.executeProcedure("MissingDeleteType",arguments).errorNumber==3251 && caller.executeProcedure("NullDeleteName",arguments).errorNumber==94);
+        assert(window.openQueryDocument("Command query",0,2).value("error").toInt()==0);assert(caller.executeProcedure("DeleteQuery",arguments).errorNumber==3251);assert(window.closeQueryDocument(1,"Command query",2).value("error").toInt()==0);
+        assert(caller.executeProcedure("DeleteQuery",arguments).status==VbaExecutionStatus::Completed);assert(!db.tables(QSql::Views).contains("Command query",Qt::CaseInsensitive) && !datasheet_page_store::read(db,"query","Command query").present);assert(caller.close());
     }
+    {const auto before=linaccess::datasheet_page_store::read(db,"table","renamed_command_table");linaccess::datasheet_page_store::save(db,"table","renamed_command_table",before,linaccess::datasheet_page_store::defaults());auto* tree=window.findChild<QTreeWidget*>();bool selected=false;for(auto* item:tree->findItems("renamed_command_table",Qt::MatchExactly|Qt::MatchRecursive,0)) if(item->data(0,Qt::UserRole).toString()=="table") {tree->setCurrentItem(item);selected=true;break;}assert(selected);}
+    QTimer::singleShot(0,&window,[] {auto* question=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(question && question->objectName()=="native-object-delete-confirm");question->done(QMessageBox::No);});window.findChild<QAction*>("native-object-delete")->trigger();assert(db.tables().contains("renamed_command_table"));
+    QTimer::singleShot(0,&window,[] {auto* question=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(question && question->objectName()=="native-object-delete-confirm");question->done(QMessageBox::Yes);});window.findChild<QAction*>("native-object-delete")->trigger();assert(!db.tables().contains("renamed_command_table") && !linaccess::datasheet_page_store::read(db,"table","renamed_command_table").present);
+    {QSqlQuery unchanged(db);assert(unchanged.exec("SELECT COUNT(*) FROM authored_renamed") && unchanged.next() && unchanged.value(0).toInt()==3);}
     assert(window.close()); dispose(); watchdog.stop();
     std::cout<<"Main window: native project/explorer opening, independent nonmodal form/report lifetime, deduplication, modal metadata, cancellation, SQL save and retained close/MsgBox passed\n";
 }

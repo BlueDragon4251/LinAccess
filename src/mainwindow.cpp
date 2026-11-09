@@ -367,6 +367,16 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         }catch(const std::exception& error) {messageError(this,QString::fromUtf8(error.what()));}
     });
     connect(viewMenu,&QMenu::aboutToShow,this,[this,renameQuery] {const auto* item=explorer_->currentItem();bool owned=false;if(db_.isOpen() && item && item->data(0,Qt::UserRole).toString()=="query" && !QApplication::activeModalWidget()) try {(void)linaccess::accessQuerySource(db_,item->text(0),nullptr,&owned,true);}catch(const std::exception&) {}renameQuery->setEnabled(owned);});
+    auto* deleteObject=viewMenu->addAction("Ausgewähltes Objekt löschen...");deleteObject->setObjectName("native-object-delete");
+    const auto selectedOwned=[this] {const auto* item=explorer_->currentItem();if(!db_.isOpen() || !item || QApplication::activeModalWidget()) return false;const auto kind=item->data(0,Qt::UserRole).toString();try {if(kind=="query") {bool owned=false;(void)linaccess::accessQuerySource(db_,item->text(0),nullptr,&owned,true);return owned;}if(kind=="table") {const auto fields=linaccess::nativeTableFieldDisplayProperties(db_,item->text(0));return !fields.isEmpty() && std::all_of(fields.cbegin(),fields.cend(),[](const auto& field) {return field.nativeOwned;});}}catch(const std::exception&) {}return false;};
+    connect(deleteObject,&QAction::triggered,this,[this,selectedOwned] {
+        if(!selectedOwned()) return;const auto* item=explorer_->currentItem();const auto kind=item->data(0,Qt::UserRole).toString(),name=item->text(0);const int type=kind=="table" ? 0 : 1;
+        try {const auto held=linaccess::makeDaoDatabase(db_)->member(type==0 ? "TableDefs" : "QueryDefs",{linaccess::VbaValue::string(name.toStdString())}).object;
+            QMessageBox question(QMessageBox::Question,"Datenbankobjekt löschen","Objekt „"+name+"“ und seine enthaltenen Daten löschen? Gespeicherte Verweise werden nicht automatisch angepasst.",QMessageBox::Yes|QMessageBox::No,this);question.setObjectName("native-object-delete-confirm");question.setDefaultButton(QMessageBox::No);if(question.exec()!=QMessageBox::Yes) return;
+            if(QString::fromStdString(held->member("Name",{}).asText())!=name) throw linaccess::VbaRuntimeError(3420,"Das ausgewählte Objekt hat sich geändert.");const auto result=deleteDatabaseObject(type,name);if(const int error=result.value("error").toInt()) throw linaccess::VbaRuntimeError(error,result.value("description").toString().toStdString());statusBar()->showMessage("Objekt gelöscht: "+name);
+        }catch(const std::exception& error) {messageError(this,QString::fromUtf8(error.what()));}
+    });
+    connect(viewMenu,&QMenu::aboutToShow,this,[deleteObject,selectedOwned] {deleteObject->setEnabled(selectedOwned());});
     auto* editRelations=viewMenu->addAction("&Beziehungen bearbeiten...");editRelations->setObjectName("native-relations-edit");
     connect(editRelations,&QAction::triggered,this,[this] {
         if(!db_.isOpen() || QApplication::activeModalWidget()) return;
@@ -572,6 +582,20 @@ QVariantMap MainWindow::renameDatabaseObject(const QString& newName,int objectTy
         return {{"handled",true},{"error",0}};
     }catch(const linaccess::DaoStoredSchemaChange& error) {refreshExplorer();return tableCommandFailure(3251,"Änderung gespeichert; Projekt neu öffnen. "+QString::fromUtf8(error.what()));}
     catch(const linaccess::VbaRuntimeError& error) {return tableCommandFailure(error.number,QString::fromUtf8(error.what()));}
+    catch(const std::exception& error) {return tableCommandFailure(3146,QString::fromUtf8(error.what()));}
+}
+
+QVariantMap MainWindow::deleteDatabaseObject(int objectType,const QString& name) {
+    if(!db_.isOpen()) return tableCommandFailure(3420,"Das Projekt ist geschlossen.");
+    if(QApplication::activeModalWidget() || queryExecutionDepth_>0) return tableCommandFailure(2046,"Löschen ist in diesem Kontext nicht verfügbar.");
+    if(objectType!=0 && objectType!=1) return tableCommandFailure(3251,"DeleteObject unterstützt hier eigene Tabellen und Abfragen mit ausdrücklichem Objekttyp und Namen.");
+    try {
+        if(objectType==0) {
+            const auto fields=linaccess::nativeTableFieldDisplayProperties(db_,name);if(fields.isEmpty() || std::any_of(fields.cbegin(),fields.cend(),[](const auto& field) {return !field.nativeOwned;})) return tableCommandFailure(3251,"DeleteObject benötigt hier eine selbst angelegte native Tabelle.");
+            for(auto* model:findChildren<linaccess::AccessTableModel*>()) if(model->tableName().compare(name,Qt::CaseInsensitive)==0) return tableCommandFailure(3251,"Tabelle und zugehörige bearbeitbare Abfragen vor dem Löschen schließen.");
+        }else if(findOpenQuery(name)) return tableCommandFailure(3251,"Abfrage vor dem Löschen schließen.");
+        linaccess::makeDaoDatabase(db_)->member(objectType==0 ? "TableDefs" : "QueryDefs",{}).object->member("Delete",{linaccess::VbaValue::string(name.toStdString())});refreshExplorer();return {{"handled",true},{"error",0}};
+    }catch(const linaccess::VbaRuntimeError& error) {return tableCommandFailure(error.number,QString::fromUtf8(error.what()));}
     catch(const std::exception& error) {return tableCommandFailure(3146,QString::fromUtf8(error.what()));}
 }
 
