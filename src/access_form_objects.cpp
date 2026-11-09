@@ -1777,7 +1777,7 @@ public:
     }
     QStringList catalogNames(const QString& kind) const {
         check();
-        if(kind=="module") {QMap<QString,QString> names;const auto sources=linaccess::standardVbaModuleSources(database_,&names);QStringList result;for(auto it=sources.begin();it!=sources.end();++it) if(!linaccess::isVbaClassModule(linaccess::decodeVbaSource(it.value()).toUtf8().toStdString())) result.append(names.value(it.key()));return result;}
+        if(kind=="module") {QMap<QString,QString> names;QSet<QString> classes;const auto sources=linaccess::standardVbaModuleSources(database_,&names,&classes);QStringList result;for(auto it=sources.begin();it!=sources.end();++it) if(classes.contains(it.key()) || !linaccess::isVbaClassModule(linaccess::decodeVbaSource(it.value()).toUtf8().toStdString())) result.append(names.value(it.key()));return result;}
         QMap<QString,QString> names,imported;
         if(database_.driverName()!="QSQLITE") throw linaccess::VbaRuntimeError(3251,"Native project catalogs require SQLite storage");
         if(kind=="table") {
@@ -1833,7 +1833,7 @@ public:
         check(); int state=0;
         if((kind=="form" || kind=="report") && AccessFormPreview::projectObjectLoaded(database_,kind=="form" ? linaccess::AccessDocumentKind::Form : linaccess::AccessDocumentKind::Report,name)) state=1;
         for(auto* widget:QApplication::allWidgets()) {
-            if(widget->property("la_project_object_kind").toString()==kind
+            if((widget->property("la_project_object_kind").toString()==kind || (kind=="module" && widget->property("la_project_object_kind").toString()=="class"))
                 && widget->property("la_project_object_name").toString().compare(name,Qt::CaseInsensitive)==0
                 && widget->property("la_project_object_connection").toString()==database_.connectionName()
                 && widget->property("la_project_object_database").toString()==identity_

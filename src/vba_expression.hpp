@@ -58,6 +58,7 @@ struct VbaArgumentSignature {
     bool function{};
     std::string resultType{};
     bool variadic{};
+    std::vector<bool> byReference{};
     bool objectArgument(std::size_t position,std::string_view name={}) const;
 };
 
@@ -79,6 +80,7 @@ public:
     virtual bool isNativeType(std::string_view) const { return false; }
     virtual std::optional<VbaArgumentSignature> argumentSignature(std::string_view) const { return {}; }
     virtual VbaValue member(std::string_view name, const std::vector<VbaValue>& arguments) = 0;
+    virtual VbaValue invokeMember(std::string_view name,const std::vector<VbaValue>& arguments,bool needsValue) { return member(name,arguments); }
     // Advertise a zero-argument scalar default explicitly; getter errors propagate.
     virtual bool hasScalarDefault() const { return false; }
     virtual VbaValue scalarValue() { throw VbaRuntimeError(13,"Object has no scalar default value"); }
@@ -175,9 +177,10 @@ public:
 VbaEvaluatedArgument evaluateVbaArgumentExpression(std::string_view expression,VbaHost& host,
     const VbaVariables& variables,const VbaFunctionResolver& resolver={},const VbaValue* withContext=nullptr,
     VbaCompareMode compareMode=VbaCompareMode::Binary,int arrayBase=0,bool objectContext=false);
+std::vector<std::string> vbaConstructedClasses(std::string_view expression);
 bool validVbaExpression(std::string_view expression,bool withContext=false);
 VbaValue evaluateVbaExpression(std::string_view expression, VbaHost& host,
-                               const VbaVariables& variables, const VbaFunctionResolver& resolver = {},const VbaValue* withContext=nullptr,VbaCompareMode compareMode=VbaCompareMode::Binary,int arrayBase=0);
+                               const VbaVariables& variables, const VbaFunctionResolver& resolver = {},const VbaValue* withContext=nullptr,VbaCompareMode compareMode=VbaCompareMode::Binary,int arrayBase=0,bool statementContext=false);
 VbaValue evaluateVbaObjectExpression(std::string_view expression,VbaHost& host,
                                     const VbaVariables& variables,const VbaFunctionResolver& resolver = {},const VbaValue* withContext=nullptr,VbaCompareMode compareMode=VbaCompareMode::Binary,int arrayBase=0);
 VbaValue evaluateAccessExpression(std::string_view expression,VbaHost& host);

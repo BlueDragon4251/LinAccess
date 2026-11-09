@@ -1,3 +1,5 @@
+#include "native_class_definition.hpp"
+#include "vba_class.hpp"
 #include "execution_capabilities.hpp"
 #include "native_capability_report.hpp"
 #include "native_designer_history.hpp"
@@ -307,6 +309,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     action("+ Bericht", [this] { editReport(); });
     action("+ Makro", [this] { editMacro(); });
     action("+ Modul", [this] { editModule(); });
+    action("+ Klasse", [this] { editClass(); });
     action("Aktualisieren", [this] { refreshExplorer(); });
     auto* fileMenu=menuBar()->addMenu("&Datei");
     const auto projectActions=toolbar->actions();
@@ -366,7 +369,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto* viewMenu=menuBar()->addMenu("&Ansicht");
     auto* debugOutput=new QDockWidget("Debug-Ausgabe",this);debugOutput->setObjectName("native-debug-output-dock");debugOutput->setWidget(createNativeDebugOutputView(debugOutput,"native-debug-output"));addDockWidget(Qt::BottomDockWidgetArea,debugOutput);debugOutput->hide();auto* debugOutputAction=debugOutput->toggleViewAction();debugOutputAction->setObjectName("native-debug-output-toggle");viewMenu->addAction(debugOutputAction);
     menuBar()->removeAction(viewMenu->menuAction()); menuBar()->insertMenu(objectMenu->menuAction(),viewMenu);
-    for (int i=5;i<11;++i) objectMenu->addAction(projectActions[i]);
+    for (int i=5;i<12;++i) objectMenu->addAction(projectActions[i]);
     auto* renameTable=viewMenu->addAction("Tabelle &umbenennen...");renameTable->setObjectName("native-table-rename");
     connect(renameTable,&QAction::triggered,this,[this] {
         const auto* item=explorer_->currentItem();if(!item || item->data(0,Qt::UserRole).toString()!="table" || QApplication::activeModalWidget() || !db_.isOpen()) return;const auto oldName=item->text(0);
@@ -1693,6 +1696,7 @@ void MainWindow::refreshExplorer() {
     group("Berichte", "report", objectNames("report"));
     group("Makros", "macro", objectNames("macro"));
     group("Module", "module", objectNames("module"));
+    group("Klassenmodule", "class", objectNames("class"));
     QSqlQuery artifacts(db_);
     if (artifacts.exec("SELECT id,kind,name,status FROM _la_access_artifacts "
                        "ORDER BY kind,name COLLATE NOCASE")) {
@@ -1732,6 +1736,7 @@ void MainWindow::openExplorerItem(QTreeWidgetItem* item, int) {
     else if (kind == "report") runReport(name);
     else if (kind == "macro") editMacro(name);
     else if (kind == "module") editModule(name);
+    else if (kind == "class") editClass(name);
     else if (kind == "access_artifact") showAccessArtifact(
         item->data(0, Qt::UserRole + 1).toInt());
 }
@@ -2871,4 +2876,36 @@ bool MainWindow::allowProjectClose(const QString& connection) {
 void MainWindow::closeEvent(QCloseEvent* event) {
     if (!AccessFormPreview::closeProjectDocuments(db_)) event->ignore();
     else QMainWindow::closeEvent(event);
+}
+
+void MainWindow::editClass(const QString& existingName) {
+    if(!hasProject()) return;const auto old=existingName.isEmpty() ? QJsonObject{} : objectDefinition("class",existingName);
+    try {if(!existingName.isEmpty()) (void)linaccess::nativeClassModuleSource(old,existingName);}catch(const std::exception& error){messageError(this,QString::fromUtf8(error.what()));return;}
+    QDialog dialog(this);dialog.setObjectName("native-class-editor");dialog.setWindowTitle("Klassenmodul bearbeiten");dialog.resize(900,650);tagProjectObject(&dialog,this,db_,"class",existingName);auto* layout=new QVBoxLayout(&dialog);
+    const QPointer<MainWindow> owner=this;const auto identity=db_.databaseName();const auto generation=property("la_project_generation");
+    const auto check=[owner,identity,generation]{if(!owner || !owner->db_.isOpen() || owner->db_.databaseName()!=identity || owner->property("la_project_generation")!=generation) throw linaccess::VbaRuntimeError(3420,"Klassenmodul gehört nicht mehr zum aktuellen Projekt.");};
+    auto* name=new QLineEdit(existingName,&dialog);name->setObjectName("native-class-name");name->setMaxLength(64);name->setReadOnly(!existingName.isEmpty());name->setPlaceholderText("Klassenname (Buchstaben, Ziffern, Unterstrich)");layout->addWidget(name);
+    auto* source=new QPlainTextEdit(&dialog);source->setObjectName("native-class-source");source->setPlainText(old.isEmpty() ? QStringLiteral("Option Explicit\n") : old.value("vba").toString());layout->addWidget(source,1);
+    auto* note=new QLabel("Instanzen in Standardmodulen oder Formularcode mit New erzeugen; Referenzen als Object oder Variant halten. Öffentliche Methodenparameter benötigen derzeit ByVal. Class_Initialize wird ausgeführt; Class_Terminate, benutzerdefinierte Standardmember und As-New-Deklarationen sind noch nicht unterstützt.",&dialog);note->setWordWrap(true);layout->addWidget(note);
+    auto* row=new QHBoxLayout;auto* analyze=addButton(row,"Prüfen");analyze->setObjectName("native-class-analyze");auto* save=addButton(row,"Speichern");save->setObjectName("native-class-save");auto* remove=addButton(row,"Klasse löschen");remove->setObjectName("native-class-delete");remove->setEnabled(!existingName.isEmpty());auto* close=addButton(row,"Schließen");layout->addLayout(row);installDesignerSaveShortcut(dialog,save);connect(close,&QPushButton::clicked,&dialog,&QDialog::reject);
+    auto* result=new QTextBrowser(&dialog);result->setObjectName("native-class-result");result->setMaximumHeight(130);layout->addWidget(result);
+    const auto definition=[&] {
+        const auto className=name->text().trimmed();if(!linaccess::nativeClassNameValid(className)) throw linaccess::VbaRuntimeError(5,"Ungültiger nativer Klassenname.");
+        auto code=source->toPlainText();if(!linaccess::isVbaClassModule(code.toUtf8().toStdString())) code="VERSION 1.0 CLASS\nAttribute VB_Name = \""+className+"\"\n"+code;
+        QJsonObject value{{"version",1},{"vba",code}};(void)linaccess::nativeClassModuleSource(value,className);return value;
+    };
+    connect(analyze,&QPushButton::clicked,&dialog,[&]{try{check();const auto value=definition();(void)linaccess::compileNativeVbaClass(name->text().trimmed().toStdString(),value.value("vba").toString().toUtf8().toStdString());result->setPlainText("Native Klassensyntax geprüft. Es wurde keine Instanz erzeugt und keine Prozedur ausgeführt.");}catch(const std::exception& error){result->setPlainText(QString::fromUtf8(error.what()));}});
+    connect(save,&QPushButton::clicked,&dialog,[&]{try {
+        check();const auto className=name->text().trimmed();const auto value=definition();const auto saved=dialog.property("la_editor_saved_name").toString();const auto current=saved.isEmpty() ? existingName : saved;
+        const auto catalog=linaccess::standardVbaModuleSources(db_);if(current.isEmpty() && catalog.contains(className.toCaseFolded())) throw linaccess::VbaRuntimeError(3010,"Klassen-/Modulname ist bereits vorhanden.");
+        if(!current.isEmpty() && current!=className) throw linaccess::VbaRuntimeError(3251,"Klassenumbenennung ist hier nicht implementiert.");
+        if(saveObject("class",className,value)) {source->setPlainText(value.value("vba").toString());name->setText(className);name->setReadOnly(true);remove->setEnabled(true);tagProjectObject(&dialog,this,db_,"class",className);completeDesignerSave(dialog,className);result->setPlainText("Klassenquelle gespeichert. Neue Instanzen werden mit New erzeugt; bestehende Instanzen einer geänderten Revision werden ungültig.");}
+    }catch(const std::exception& error){messageError(&dialog,QString::fromUtf8(error.what()));}});
+    connect(remove,&QPushButton::clicked,&dialog,[&]{try {
+        check();const auto saved=dialog.property("la_editor_saved_name").toString();const auto className=saved.isEmpty() ? existingName : saved;if(className.isEmpty()) return;
+        QSqlQuery snapshot(db_);snapshot.prepare("SELECT definition FROM main._la_objects WHERE kind='class' AND name=? COLLATE BINARY");snapshot.addBindValue(className);if(!snapshot.exec() || !snapshot.next()) throw linaccess::VbaRuntimeError(3420,"Klassenquelle ist nicht mehr verfügbar.");const auto previous=snapshot.value(0);snapshot.finish();
+        if(QMessageBox::question(&dialog,"Klasse löschen","Gespeicherte Klasse und ungespeicherten Text wirklich verwerfen?",QMessageBox::Yes|QMessageBox::No,QMessageBox::No)!=QMessageBox::Yes) return;check();
+        QSqlQuery query(db_);query.prepare("DELETE FROM main._la_objects WHERE kind='class' AND name=? COLLATE BINARY AND definition=?");query.addBindValue(className);query.addBindValue(previous);if(!query.exec() || query.numRowsAffected()!=1) throw linaccess::VbaRuntimeError(3420,"Klassenquelle wurde zwischenzeitlich geändert.");refreshExplorer();dialog.accept();
+    }catch(const std::exception& error){messageError(&dialog,QString::fromUtf8(error.what()));}});
+    trackDesignerChanges(dialog);dialog.exec();
 }

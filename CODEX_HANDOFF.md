@@ -5017,3 +5017,30 @@ Paketnachweise. Mehrfeld-Ersetzungs-Vorstufe1c66d81 privat veröffentlicht/Baum
 verifiziert; letzte geprüfteDEBcd0cd59 liegt vor beiden Datenblatt-Erweiterungen.
 Katalog456/386/70 unverändert; F079/F373-Beschreibungen bestehenden Umfängen
 zugeordnet. Ohne Zwischenabschluss weiter, danach Paket aktualisieren.
+
+
+Native eigene Klassenmodule und echte Instanzen implementiert: Klasseneditor/
+Explorer/kind=class, gespeicherte CLASS/VB_Name-Quelle, gemeinsamer kollisionsgeprüfter
+Modulkatalog/AllModules mit echter Editor-IsLoaded-Erkennung, keine Registrierung
+von Klassenmethoden als freie SQL-Funktionen. New erzeugt getrennte Feld-/Array-/
+Static-Zustände und führt privaten parameterlosen Class_Initialize einmal aus.
+Öffentliche Felder/Konstanten/Sub/Function/Get/Let/Set, Me-/Objektidentität,
+Arrayrückgaben, native Default-Weiterleitung und echte private Aufruferscopes.
+Reentrant fremde Prozeduren/Ausdruckshosts erben keine privaten Klassenrechte.
+Kontextdienste verwenden echte Projekt-/DAO-Hosts ohne erfundenes Formular;
+Instanzen überleben aufrufende Editor-/Formfenster im lebenden Projekt. Beobachtete
+Quellrevision-/Lösch-/Projektänderungen invalidieren dauerhaft. Grenzen ausdrücklich:
+Object/Variant-Referenzen statt benannter Custom-As-Typen, externe Argumente ByVal,
+kein importierter generischer Klassenbau/As New/Implements/WithEvents/Default-
+Instanzen/COM; Class_Terminate vor Konstruktion verweigert. Details NATIVE_VBA_CLASSES.md.
+Erster Kern/DAO bestanden; Original fand Def-Vorprüfung gewöhnlicher Kontrollnamen,
+GUI erreichte20s-Watchdog im parallelen Block. Def-Bindung auf echte typisierte Ziele
+und anwendbare Def-Namen begrenzt, Fehler kontrolliert transportieren; New-Prüfung
+verwechselt rohe Kontrollnamen nicht mit Konstruktoren. Private Reentry-Scope-Lücke
+vor Veröffentlichung geschlossen. Final Kern/GUI/Original3/3 (143,28s:4,08/17,58/
+121,62s), DAO vorher3,49s. Anwendung gebaut, KernQt-frei, alle7 Original-/Uploadhashes
+unverändert. Keine neuen CTests/Windows-/Gesamtsuitennachweise; Original bleibt am
+bekannten fehlenden Makroquelltext statt positiver Verkaufsausführung begrenzt.
+Vorstufe3fe7245 privat veröffentlicht/Remote-Baum verifiziert; frischeDEB3fe7245 mit
+beiden Datenblatt-Erweiterungen vollständig geprüft, liegt vor Klassen-Erweiterung.
+Katalog456/386/70 unverändert; ohne Zwischenabschluss weitere offene Umfänge umsetzen.

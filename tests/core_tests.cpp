@@ -1,3 +1,4 @@
+void testVbaClasses();
 void testVbaDebugOutput();
 void testVbaProperties();
 void testVbaStaticProcedures();
@@ -5017,6 +5018,7 @@ End Function
     testVbaDebugOutput();
     testVbaProperties();
     testVbaStaticProcedures();
+    testVbaClasses();
     testVbaConditions();
     std::cout << "Core tests passed\n";
 }

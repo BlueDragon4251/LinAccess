@@ -1,3 +1,4 @@
+#include "native_class_definition.hpp"
 #include "vba_module_context.hpp"
 #include "execution_capabilities.hpp"
 #include "native_module_definition.hpp"
@@ -44,9 +45,9 @@ std::shared_ptr<VbaModuleState> standardVbaModuleState(QSqlDatabase db,std::stri
     if (auto found=frames.find(key);found!=frames.end()) return found->second;
     auto state=createVbaModuleState(source); frames.emplace(key,state); return state;
 }
-QMap<QString,QByteArray> standardVbaModuleSources(QSqlDatabase db,QMap<QString,QString>* canonicalNames) {
+QMap<QString,QByteArray> standardVbaModuleSources(QSqlDatabase db,QMap<QString,QString>* canonicalNames,QSet<QString>* ownedClasses) {
     (void)context(db);QElapsedTimer timer;timer.start();
-    QMap<QString,QByteArray> sources;QMap<QString,QString> names;
+    QMap<QString,QByteArray> sources;QMap<QString,QString> names;QSet<QString> classes;
     QSqlQuery table(db);
     if(!table.exec("SELECT type FROM main.sqlite_schema WHERE name='_la_access_artifacts' COLLATE NOCASE")) throw VbaRuntimeError(3251,"VBA SQL metadata unavailable");
     if(table.next()) {
@@ -80,25 +81,25 @@ QMap<QString,QByteArray> standardVbaModuleSources(QSqlDatabase db,QMap<QString,Q
     if(!table.exec("SELECT type FROM main.sqlite_schema WHERE name='_la_objects' COLLATE NOCASE")) throw VbaRuntimeError(3251,"Native module catalog metadata unavailable");
     if(table.next()) {
         if(table.value(0).toString()!="table") throw VbaRuntimeError(3251,"Native modules require a physical project catalog");table.finish();
-        QSqlQuery any(db);if(!any.exec("SELECT 1 FROM main._la_objects WHERE kind='module' LIMIT 1")) throw VbaRuntimeError(3251,"Native module catalog shape unsupported");const bool present=any.next();if(any.lastError().isValid()) throw VbaRuntimeError(3146,"Native module catalog probe failed");any.finish();
+        QSqlQuery any(db);if(!any.exec("SELECT 1 FROM main._la_objects WHERE kind IN ('module','class') LIMIT 1")) throw VbaRuntimeError(3251,"Native module catalog shape unsupported");const bool present=any.next();if(any.lastError().isValid()) throw VbaRuntimeError(3146,"Native module catalog probe failed");any.finish();
         if(present) {
             QSqlQuery shadow(db);if(!shadow.exec("SELECT 1 FROM temp.sqlite_schema WHERE name='_la_objects' COLLATE NOCASE AND type IN ('table','view')")) throw VbaRuntimeError(3251,"Native module shadow check failed");if(shadow.next()) throw VbaRuntimeError(3251,"Native module catalog shadow is unsupported");shadow.finish();
             qsizetype bytes=0,count=0;for(const auto& source:sources) bytes+=source.size();
-            QSqlQuery rows(db);rows.setForwardOnly(true);if(!rows.exec("SELECT name,definition FROM main._la_objects WHERE kind='module'")) throw VbaRuntimeError(3146,"Native module catalog unavailable");
+            QSqlQuery rows(db);rows.setForwardOnly(true);if(!rows.exec("SELECT kind,name,definition FROM main._la_objects WHERE kind IN ('module','class')")) throw VbaRuntimeError(3146,"Native module catalog unavailable");
             while(rows.next()) {
                 if(++count>1000000 || timer.hasExpired(5000)) throw VbaRuntimeError(3251,"Native module catalog scan limit exceeded");
-                const auto name=rows.value(0).toString(),key=name.toCaseFolded();
-                if(!nativeModuleNameValid(name)) throw VbaRuntimeError(3251,"Invalid native standard module name");
+                const auto kind=rows.value(0).toString(),name=rows.value(1).toString(),key=name.toCaseFolded();
+                if(!(kind=="class" ? nativeClassNameValid(name) : nativeModuleNameValid(name))) throw VbaRuntimeError(3251,"Invalid native standard module name");
                 if(sources.contains(key)) throw VbaRuntimeError(5,"Ambiguous native/imported module name");
-                const auto encoded=rows.value(1).toByteArray();if(encoded.size()>4*1024*1024) throw VbaRuntimeError(3035,"Native module definition limit exceeded");
+                const auto encoded=rows.value(2).toByteArray();if(encoded.size()>4*1024*1024) throw VbaRuntimeError(3035,"Native module definition limit exceeded");
                 QJsonParseError error;const auto document=QJsonDocument::fromJson(encoded,&error);if(error.error!=QJsonParseError::NoError || !document.isObject()) throw VbaRuntimeError(13,"Invalid native module document");
-                auto source=nativeModuleSource(document.object());bytes+=source.size();if(sources.size()>=256 || bytes>16*1024*1024) throw VbaRuntimeError(3251,"VBA module inventory limit exceeded");
-                names.insert(key,name);sources.insert(key,std::move(source));
+                auto source=kind=="class" ? nativeClassModuleSource(document.object(),name) : nativeModuleSource(document.object());bytes+=source.size();if(sources.size()>=256 || bytes>16*1024*1024) throw VbaRuntimeError(3251,"VBA module inventory limit exceeded");
+                if(kind=="class") classes.insert(key);names.insert(key,name);sources.insert(key,std::move(source));
             }
             if(rows.lastError().isValid()) throw VbaRuntimeError(3146,"Native module catalog fetch failed");
         }
     }
-    if(canonicalNames) *canonicalNames=std::move(names);return sources;
+    if(canonicalNames) *canonicalNames=std::move(names);if(ownedClasses) *ownedClasses=std::move(classes);return sources;
 }
 std::vector<std::shared_ptr<VbaModuleState>> publicVbaModuleStates(QSqlDatabase db) {
     (void)context(db);

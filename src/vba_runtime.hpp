@@ -38,6 +38,17 @@ std::uint64_t vbaExecutionEpoch() noexcept;
 bool vbaExecutionStopRequested() noexcept;
 void requestVbaExecutionStop() noexcept;
 enum class VbaCompareMode { Binary, Text, Database };
+class VbaHost;
+// Actual lexical caller, including nested execution through another host.
+class VbaLexicalScope final {
+public:
+    VbaLexicalScope(std::string_view source,VbaHost* host);
+    ~VbaLexicalScope();
+    VbaLexicalScope(const VbaLexicalScope&)=delete;
+    VbaLexicalScope& operator=(const VbaLexicalScope&)=delete;
+};
+std::string_view activeVbaModuleSource() noexcept;
+bool activeVbaHostMatches(const VbaHost* host) noexcept;
 class VbaObject;
 struct VbaValue;
 struct VbaModuleState;
@@ -72,6 +83,9 @@ public:
     virtual void enterModule(std::string_view) {}
     virtual void leaveModule() noexcept {}
     virtual bool hasInstanceIdentifier(std::string_view) { return false; }
+    virtual bool hasClassInstance() const { return false; }
+    virtual bool canConstructClass(std::string_view) { return false; }
+    virtual std::shared_ptr<VbaObject> constructClass(std::string_view) { throw VbaRuntimeError(3251,"Native class construction requires a project class context"); }
     virtual std::shared_ptr<VbaModuleState> moduleState(std::string_view module);
     virtual std::vector<std::shared_ptr<VbaModuleState>> globalModuleStates() { return {}; }
     virtual std::optional<VbaValue> resolveIdentifier(std::string_view name,bool objectReference);

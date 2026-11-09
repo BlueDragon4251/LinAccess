@@ -739,10 +739,12 @@ bool vbaIntrinsicName(const std::string& name) {
 class ExpressionParser {
 public:
     ExpressionParser(std::string_view source, VbaHost* host, const VbaVariables& locals,
-                     const VbaFunctionResolver& resolver = {},bool objectContext=false,bool accessExpression=false,const VbaValue* withContext=nullptr,bool allowWith=false,VbaCompareMode compareMode=VbaCompareMode::Binary,int arrayBase=0,bool jetEval=false)
-        : source_(source),tokens_(tokenize(source,accessExpression)), host_(host), locals_(locals), resolver_(resolver),objectContext_(objectContext),accessExpression_(accessExpression),jetEval_(jetEval),withContext_(withContext),allowWith_(allowWith || withContext),compareMode_(compareMode),arrayBase_(arrayBase),executionEpoch_(vbaExecutionEpoch()) {}
+                     const VbaFunctionResolver& resolver = {},bool objectContext=false,bool accessExpression=false,const VbaValue* withContext=nullptr,bool allowWith=false,VbaCompareMode compareMode=VbaCompareMode::Binary,int arrayBase=0,bool jetEval=false,bool statementContext=false)
+        : source_(source),tokens_(tokenize(source,accessExpression)), host_(host), locals_(locals), resolver_(resolver),objectContext_(objectContext),accessExpression_(accessExpression),jetEval_(jetEval),statementContext_(statementContext),withContext_(withContext),allowWith_(allowWith || withContext),compareMode_(compareMode),arrayBase_(arrayBase),executionEpoch_(vbaExecutionEpoch()) {}
 
     VbaValue parse() {
+        std::optional<VbaLexicalScope> external;
+        if(host_ && !activeVbaHostMatches(host_)) external.emplace(std::string_view{},host_);
         auto value = expression(1,objectContext_);
         if(host_ && (vbaExecutionStopRequested() || executionEpoch_!=vbaExecutionEpoch())) throw VbaExecutionStopped{};
         if (peek().type != Token::Type::End)
@@ -750,6 +752,8 @@ public:
         return value;
     }
     VbaEvaluatedArgument parseArgument() {
+        std::optional<VbaLexicalScope> external;
+        if(host_ && !activeVbaHostMatches(host_)) external.emplace(std::string_view{},host_);
         auto result=argumentExpression(objectContext_);
         if(host_ && (vbaExecutionStopRequested() || executionEpoch_!=vbaExecutionEpoch())) throw VbaExecutionStopped{};
         if(peek().type!=Token::Type::End) throw error("Additional argument expression tokens");
@@ -918,7 +922,7 @@ private:
                 }
                 const bool reference=objectContext || nextSymbol(".") || nextSymbol("!");
                 value = item ? (reference ? value.object->objectItem(member.value) : value.object->item(member.value))
-                    : (reference ? value.object->objectMember(member.value,args) : value.object->member(member.value,args));
+                    : (reference ? value.object->objectMember(member.value,args) : value.object->invokeMember(member.value,args,!(statementContext_ && peek().type==Token::Type::End)));
                 } catch(const VbaRuntimeError& failure) { if (!accessExpression_) throw; value=VbaValue::errorValue(failure.number); }
             }
         }
@@ -1060,8 +1064,10 @@ private:
                 throw error("Native Scripting class is not implemented",3251);
             }
             if(type.type==Token::Type::Word && lower(type.value)=="vba" && take(".")) type=consume();
-            if(type.type!=Token::Type::Word || lower(type.value)!="collection") throw error("Native class construction is not implemented",3251);
-            return host_ ? VbaValue::reference(std::make_shared<VbaCollection>()) : VbaValue{};
+            if(type.type!=Token::Type::Word) throw error("Native class name expected",3251);
+            if(lower(type.value)=="collection") return host_ ? VbaValue::reference(std::make_shared<VbaCollection>()) : VbaValue{};
+            if(nextSymbol(".")) throw error("Qualified project class construction is not implemented",3251);
+            return host_ ? VbaValue::reference(host_->constructClass(type.value)) : VbaValue{};
         }
         if (word == "null") return {};
         if (word == "empty") return VbaValue::empty();
@@ -1196,6 +1202,7 @@ private:
             const auto forms = word == "forms" ? host_->formsCollection() : host_->reportsCollection();
             return item ? forms->member("Item",args) : VbaValue::reference(forms);
         }
+        if(word=="me" && host_ && host_->hasClassInstance()) return VbaValue::reference(host_->currentForm());
         if (word == "me" && !nextSymbol("!") && !nextSymbol(".")) {
             if (take("(")) {
                 const auto index=expression(1); require(")");
@@ -2401,6 +2408,7 @@ private:
     bool objectContext_{};
     bool accessExpression_{};
     bool jetEval_{};
+    bool statementContext_{};
     const VbaValue* withContext_{};
     bool allowWith_{};
     VbaCompareMode compareMode_;
@@ -2616,8 +2624,8 @@ bool validVbaExpression(std::string_view text,bool withContext) {
     catch (...) { return false; }
 }
 VbaValue evaluateVbaExpression(std::string_view text, VbaHost& host,
-                               const VbaVariables& vars, const VbaFunctionResolver& resolver,const VbaValue* withContext,VbaCompareMode compareMode,int arrayBase) {
-    return ExpressionParser(text, &host, vars, resolver,false,false,withContext,false,compareMode,arrayBase).parse();
+                               const VbaVariables& vars, const VbaFunctionResolver& resolver,const VbaValue* withContext,VbaCompareMode compareMode,int arrayBase,bool statementContext) {
+    return ExpressionParser(text, &host, vars, resolver,false,false,withContext,false,compareMode,arrayBase,false,statementContext).parse();
 }
 VbaEvaluatedArgument evaluateVbaArgumentExpression(std::string_view expression,VbaHost& host,
     const VbaVariables& variables,const VbaFunctionResolver& resolver,const VbaValue* withContext,VbaCompareMode compareMode,int arrayBase,bool objectContext) {
@@ -2631,4 +2639,15 @@ VbaValue evaluateAccessExpression(std::string_view text,VbaHost& host) {
     const VbaVariables variables;
     return ExpressionParser(text,&host,variables,{},false,true).parse();
 }
+std::vector<std::string> vbaConstructedClasses(std::string_view expression) {
+    constexpr std::string_view keyword="new";
+    if(std::search(expression.begin(),expression.end(),keyword.begin(),keyword.end(),[](unsigned char a,unsigned char b){return std::tolower(a)==b;})==expression.end()) return {};
+    const auto tokens=tokenize(expression,false);std::vector<std::string> names;
+    for(std::size_t i=0;i+1<tokens.size();++i) if(tokens[i].type==Token::Type::Word && lower(tokens[i].value)=="new" && tokens[i+1].type==Token::Type::Word) {
+        const auto name=lower(tokens[++i].value);
+        if(name!="collection" && name!="vba" && name!="scripting") names.push_back(name);
+    }
+    return names;
+}
+
 }

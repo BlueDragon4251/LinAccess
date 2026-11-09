@@ -89,6 +89,7 @@ private:
     void editQuery(const QString& name = {});
     void editMacro(const QString& name = {});
     void editModule(const QString& name = {});
+    void editClass(const QString& name = {});
     void editForm(const QString& name = {});
     void runForm(const QString& name);
     void runReport(const QString& name);

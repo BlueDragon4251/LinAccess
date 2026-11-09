@@ -3,7 +3,7 @@ project(LinAccess VERSION 0.7.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-add_library(linaccess_runtime STATIC src/vba_runtime.cpp src/vba_conditional.cpp src/vba_debugger.cpp src/vba_debug_output.cpp src/vba_expression.cpp src/vba_currency.cpp src/vba_decimal.cpp src/vba_round.cpp src/vba_calendar.cpp src/vba_array.cpp src/vba_analyzer.cpp src/csv.cpp)
+add_library(linaccess_runtime STATIC src/vba_runtime.cpp src/vba_class.cpp src/vba_conditional.cpp src/vba_debugger.cpp src/vba_debug_output.cpp src/vba_expression.cpp src/vba_currency.cpp src/vba_decimal.cpp src/vba_round.cpp src/vba_calendar.cpp src/vba_array.cpp src/vba_analyzer.cpp src/csv.cpp)
 target_include_directories(linaccess_runtime PUBLIC src)
 find_package(Boost 1.74 CONFIG REQUIRED)
 target_link_libraries(linaccess_runtime PRIVATE Boost::headers)
@@ -30,7 +30,7 @@ if(LINACCESS_BUILD_GUI)
     # Compile these large translation units once, without adding a runtime DSO.
     add_library(linaccess_forms STATIC
         src/access_form_preview.cpp src/access_form_record_commands.cpp src/access_record_clipboard.cpp src/native_send_keys.cpp src/access_form_objects.cpp src/access_layout_print.cpp
-        src/native_form_controls.cpp src/native_standard_module_host.cpp src/native_module_debugger.cpp src/native_debug_output.cpp src/native_capability_report.cpp src/native_macro_message_box.cpp src/native_input_box.cpp src/native_field_designer.cpp src/native_index_designer.cpp src/native_relation_designer.cpp src/access_form_preview.hpp)
+        src/native_form_controls.cpp src/native_class_catalog.cpp src/native_standard_module_host.cpp src/native_module_debugger.cpp src/native_debug_output.cpp src/native_capability_report.cpp src/native_macro_message_box.cpp src/native_input_box.cpp src/native_field_designer.cpp src/native_index_designer.cpp src/native_relation_designer.cpp src/access_form_preview.hpp)
     target_link_libraries(linaccess_forms PUBLIC linaccess_data Qt6::Widgets Qt6::PrintSupport)
     target_include_directories(linaccess_forms PUBLIC src)
     # Share the identical desktop translation units and Qt metaobjects between
@@ -92,14 +92,14 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
-    add_executable(linaccess_core_tests tests/core_tests.cpp tests/vba_fixed_string_tests.cpp tests/vba_debugger_tests.cpp tests/vba_condition_tests.cpp tests/vba_debug_output_tests.cpp tests/vba_property_tests.cpp tests/vba_static_tests.cpp)
+    add_executable(linaccess_core_tests tests/core_tests.cpp tests/vba_fixed_string_tests.cpp tests/vba_debugger_tests.cpp tests/vba_condition_tests.cpp tests/vba_debug_output_tests.cpp tests/vba_property_tests.cpp tests/vba_static_tests.cpp tests/vba_class_tests.cpp)
     target_include_directories(linaccess_core_tests PRIVATE src)
     target_compile_options(linaccess_core_tests PRIVATE "$<$<AND:$<CONFIG:Release>,$<CXX_COMPILER_ID:GNU,Clang>>:-O1>")
     target_link_libraries(linaccess_core_tests PRIVATE linaccess_runtime)
     add_test(NAME core_tests COMMAND linaccess_core_tests)
     if(LINACCESS_BUILD_GUI)
         find_package(Qt6 6.4 REQUIRED COMPONENTS Test)
-        add_executable(linaccess_mainwindow_tests tests/mainwindow_document_tests.cpp tests/stored_form_authoring_tests.cpp tests/query_designer_tests.cpp tests/native_debug_output_tests.cpp tests/native_property_tests.cpp tests/native_static_tests.cpp tests/native_project_gui_extensions.cpp)
+        add_executable(linaccess_mainwindow_tests tests/mainwindow_document_tests.cpp tests/stored_form_authoring_tests.cpp tests/query_designer_tests.cpp tests/native_debug_output_tests.cpp tests/native_property_tests.cpp tests/native_static_tests.cpp tests/native_class_tests.cpp tests/native_project_gui_extensions.cpp)
         target_include_directories(linaccess_mainwindow_tests PRIVATE src)
         # Large assertion harnesses need short rebuilds; production libraries retain Release optimization.
         target_compile_options(linaccess_mainwindow_tests PRIVATE "$<$<AND:$<CONFIG:Release>,$<CXX_COMPILER_ID:GNU,Clang>>:-O1>")

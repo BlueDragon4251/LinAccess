@@ -35,6 +35,14 @@
 #include <vector>
 
 namespace linaccess {
+namespace {thread_local std::vector<std::pair<std::string_view,const VbaHost*>> lexicalScopes;}
+VbaLexicalScope::VbaLexicalScope(std::string_view source,VbaHost* host) {lexicalScopes.emplace_back(source,host);}
+VbaLexicalScope::~VbaLexicalScope() {lexicalScopes.pop_back();}
+std::string_view activeVbaModuleSource() noexcept {return lexicalScopes.empty() ? std::string_view{} : lexicalScopes.back().first;}
+bool activeVbaHostMatches(const VbaHost* host) noexcept {return !lexicalScopes.empty() && lexicalScopes.back().second==host;}
+}
+
+namespace linaccess {
 namespace {
 thread_local std::uint64_t stopEpoch=0;
 thread_local std::vector<std::uint64_t> activeExecutionEpochs;
@@ -1588,6 +1596,7 @@ std::optional<VbaArgumentSignature> localProcedureSignature(std::string_view mod
     signature.variadic=std::any_of(parameters.begin(),parameters.end(),[](const auto& parameter){return parameter.paramArray;});
     for(const auto& parameter:parameters) {
         signature.names.push_back(lower(parameter.name));
+        signature.byReference.push_back(parameter.byReference);
         signature.required+=!parameter.optional && !parameter.paramArray;
         const auto& type=parameter.type;
         signature.objectArguments.push_back(!parameter.paramArray && (type=="object" || type=="collection"
@@ -1981,11 +1990,21 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
     const bool staticProcedure=std::any_of(instructions.begin(),instructions.end(),[](const auto& instruction){return instruction.staticScope;});
     const auto implicitTypes=moduleImplicitTypes(preprocessVbaConditional(module));
     const bool explicitVariables=implicitTypes.explicitVariables;
+    VbaLexicalScope lexical(module,&host);
     host.enterModule(module);
     struct ModuleScope { VbaHost& host; ~ModuleScope() { host.leaveModule(); } } moduleScope{host};
     // Resolve direct Sub calls before any effects in the calling procedure.
     // Syntax acceptance alone must not turn unknown APIs into successful calls.
     try {
+        std::unordered_set<std::string> checkedClasses;
+        for(const auto& instruction:instructions) {
+            if(host.hasClassInstance() && instruction.type==Statement::Type::SetField && instruction.endExpression=="!") throw VbaRuntimeError(3251,"Class bang/default writes are not implemented");
+            const auto check=[&](std::string_view expression) {for(const auto& name:vbaConstructedClasses(expression)) if(checkedClasses.insert(name).second && !host.canConstructClass(name)) throw VbaRuntimeError(3251,"Native project class is unavailable");};
+            if(instruction.type==Statement::Type::ObjectAssign || instruction.type==Statement::Type::IndexedAssign || instruction.type==Statement::Type::FileCopy || instruction.type==Statement::Type::FileRename) check(instruction.argument);
+            check(instruction.expression);check(instruction.endExpression);check(instruction.stepExpression);
+            for(const auto& item:instruction.outputItems) check(item.expression);
+            for(const auto& target:instruction.resizeTargets) check(target.bounds);
+        }
         for (const auto& instruction : instructions) {
             if (instruction.type != Statement::Type::Call) continue;
             auto declaration = validateVbaProcedure(module, instruction.argument);
@@ -2229,7 +2248,14 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         }
         const auto targetName=lower(instruction.argument);
         auto type=variableType(targetName);
-        if(type.empty() && !explicitVariables && !locals.contains(targetName) && !host.hasInstanceIdentifier(targetName)) type=implicitTypes.forName(targetName);
+        if((instruction.type==Statement::Type::For || instruction.type==Statement::Type::ForEach || instruction.type==Statement::Type::ObjectSet)
+            && type.empty() && !explicitVariables && !locals.contains(targetName)) {
+            const auto inferred=implicitTypes.forName(targetName);
+            if(!inferred.empty()) {
+                try {if(!host.hasInstanceIdentifier(targetName)) type=inferred;}
+                catch(const VbaRuntimeError& error) {VbaExecutionResult failure{VbaExecutionStatus::Error,"Variable target binding failed",instruction.line};failure.errorNumber=error.number;return failure;}
+            }
+        }
         if(((instruction.type==Statement::Type::ForEach || instruction.type==Statement::Type::ObjectSet) && (scalarType(type) || type=="paramarray"))
             || (instruction.type==Statement::Type::For && (type.ends_with("()") || type=="boolean" || type=="string" || type.starts_with("string*") || type=="date" || objectType(type)))) {
             VbaExecutionResult failure{VbaExecutionStatus::Unsupported,"Declared variable type is unsupported for this loop/object target",instruction.line}; failure.errorNumber=3251; return failure;
@@ -2508,8 +2534,8 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         const auto key=lower(std::string(name));ensureImplicitLocal(key,true);return locals.at(key);
     };
     const auto compareMode=moduleCompareMode(module);
-    const auto evaluate = [&](std::string_view expression) {
-        return evaluateVbaExpression(expression, host, locals, resolver,withFrames.empty() ? nullptr : &withFrames.back().value,compareMode,arrayBase);
+    const auto evaluate = [&](std::string_view expression,bool statementContext=false) {
+        return evaluateVbaExpression(expression, host, locals, resolver,withFrames.empty() ? nullptr : &withFrames.back().value,compareMode,arrayBase,statementContext);
     };
     const auto evaluateObject = [&](std::string_view expression) {
         return evaluateVbaObjectExpression(expression,host,locals,resolver,withFrames.empty() ? nullptr : &withFrames.back().value,compareMode,arrayBase);
@@ -2940,7 +2966,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                 }
                 break;
             case Statement::Type::ObjectCall:
-                if (active) (void)evaluate(instruction.expression);
+                if (active) (void)evaluate(instruction.expression,true);
                 break;
             case Statement::Type::While:
                 if (!active || (!instruction.expression.empty()

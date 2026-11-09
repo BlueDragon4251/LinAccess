@@ -1,3 +1,4 @@
+#include "native_class_catalog.hpp"
 #include "vba_conditional.hpp"
 #include "execution_capabilities.hpp"
 #include "native_standard_module_host.hpp"
@@ -41,6 +42,8 @@
 int nativeModuleMessageBox(QWidget*,std::string_view,int,const std::optional<std::string>&);
 namespace linaccess {
 NativeStandardModuleHost::~NativeStandardModuleHost()=default;
+bool NativeStandardModuleHost::canConstructClass(std::string_view name){check();return nativeProjectClassAvailable(db_,name);}
+std::shared_ptr<VbaObject> NativeStandardModuleHost::constructClass(std::string_view name){check();return constructNativeProjectClass(db_,owner_,name,guard_);}
 NativeStandardModuleHost::NativeStandardModuleHost(QWidget* owner,QSqlDatabase db,std::function<void()> guard)
         : owner_(owner),db_(std::move(db)),guard_(std::move(guard)){}
 void NativeStandardModuleHost::check() const{if(!owner_ || !db_.isOpen()) throw VbaRuntimeError(3420,"Module execution context is closed");if(owner_->thread()!=QThread::currentThread()) throw VbaRuntimeError(3251,"Module application context requires its GUI thread");guard_();}

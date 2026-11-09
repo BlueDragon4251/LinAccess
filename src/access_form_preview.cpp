@@ -1,3 +1,4 @@
+#include "native_class_catalog.hpp"
 #include "vba_array.hpp"
 #include "native_object_types.hpp"
 #include "vba_conditional.hpp"
@@ -516,6 +517,11 @@ class PreviewVbaHost final : public linaccess::VbaHost {
 public:
     static void openProjectDocument(QSqlDatabase,QWidget*,linaccess::AccessDocumentKind,const QString&,const QString&,std::optional<QString>,int,int,QPointer<AccessFormPreview> caller={});
     explicit PreviewVbaHost(AccessFormPreview& preview) : preview_(preview),observationDatabase_(preview.db_.databaseName()) {}
+    bool canConstructClass(std::string_view name) override {requireInstance();return linaccess::nativeProjectClassAvailable(preview_.db_,name);}
+    std::shared_ptr<linaccess::VbaObject> constructClass(std::string_view name) override {
+        requireInstance();QPointer<AccessFormPreview> owner=&preview_;
+        return linaccess::constructNativeProjectClass(preview_.db_,&preview_,name,[owner]{if(!owner || owner->closed_ || owner->openCancelled_) throw linaccess::VbaRuntimeError(3420,"Native class standalone document closed");});
+    }
     void executionObserved(std::string_view source,std::string_view procedure,const linaccess::VbaExecutionResult& result,bool stopped) override { if(preview_.closed_ || preview_.openCancelled_ || preview_.db_.databaseName()!=observationDatabase_) return;linaccess::recordVbaObservation(preview_.db_,source,procedure,result,stopped,"document"); }
     int compareStrings(std::string_view left,std::string_view right,linaccess::VbaCompareMode mode) override {
         if (mode==linaccess::VbaCompareMode::Binary) return linaccess::VbaHost::compareStrings(left,right,mode);
