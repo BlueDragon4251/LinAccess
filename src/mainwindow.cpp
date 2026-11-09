@@ -1,5 +1,6 @@
 #include "execution_capabilities.hpp"
 #include "native_capability_report.hpp"
+#include "native_designer_history.hpp"
 #include "native_schema_editor.hpp"
 #include "native_field_defaults.hpp"
 #include "mainwindow.hpp"
@@ -2424,6 +2425,7 @@ void MainWindow::editForm(const QString& existingName) {
     if (!hasProject()) return;
     const auto old = existingName.isEmpty() ? QJsonObject{} : objectDefinition("form", existingName);
     QJsonObject formEvents;QMap<QString,QMap<QString,QString>> priorFieldEvents;int formTimerInterval=0;
+    QPointer<linaccess::NativeDesignerHistory> history;
     try {
         formEvents=linaccess::nativeEventObject(linaccess::nativeEventOverrides(old.value("events"),linaccess::nativeFormMacroEvents()));formTimerInterval=linaccess::nativeFormTimerInterval(old.value("timer_interval"));
         QStringList names;for(const auto& value:old.value("fields").toArray()) names.append(value.toString());priorFieldEvents=linaccess::nativeFieldEventOverrides(old.value("field_events"),names);
@@ -2523,6 +2525,7 @@ void MainWindow::editForm(const QString& existingName) {
         try {if(linaccess::editNativeFormEvents(&dialog,formEvents,bindings,formTimerInterval,chosen,objectNames("macro"))) {
             for(int row=0;row<fields->count();++row) if(fields->item(row)->checkState()==Qt::Checked) {const auto events=bindings.value(fields->item(row)->data(Qt::UserRole).toString().toCaseFolded());if(events!=fields->item(row)->data(Qt::UserRole+2).toJsonObject()) fields->item(row)->setData(Qt::UserRole+2,events);}
             if(formEvents!=beforeForm || bindings!=beforeFields || formTimerInterval!=beforeInterval) {dialog.setWindowModified(true);if(auto* status=dialog.findChild<QLabel*>("native-designer-save-status")) status->setText("Nicht gespeicherte Änderungen");}
+            if(history && (formEvents!=beforeForm || bindings!=beforeFields || formTimerInterval!=beforeInterval)) history->record();
         }} catch(const std::exception& error) {messageError(&dialog,QString::fromUtf8(error.what()));}
     });
     connect(source, &QComboBox::currentTextChanged, &dialog, populate);
@@ -2600,7 +2603,7 @@ void MainWindow::editForm(const QString& existingName) {
             lines << "Noch nicht implementierte Abhängigkeit: " + QString::fromStdString(issue);
         findings->setPlainText(lines.join('\n'));
     });
-    connect(save, &QPushButton::clicked, &dialog, [this, &dialog, name, caption, source, fields, vba, importedBytes,old,&formEvents,&formTimerInterval] {
+    connect(save, &QPushButton::clicked, &dialog, [this, &dialog, name, caption, source, fields, vba, importedBytes,old,&formEvents,&formTimerInterval,&history] {
         QJsonArray chosen; QJsonObject captions,positions,eventBindings;
         for(int index=0;index<fields->count();++index) if(fields->item(index)->checkState()==Qt::Checked) {
             const auto field=fields->item(index)->data(Qt::UserRole).toString(); chosen.append(field); captions.insert(field,fields->item(index)->text());
@@ -2626,9 +2629,47 @@ void MainWindow::editForm(const QString& existingName) {
         catch(const std::exception& error) { messageError(&dialog,QString::fromUtf8(error.what())); return; }
         if(saveObject("form",name->text(),content)) {
             tagProjectObject(&dialog,this,db_,"form",name->text()); completeDesignerSave(dialog,name->text());
+            if(history) history->markSaved();
         }
     });
     trackDesignerChanges(dialog);
+    auto* historyButtons=new QHBoxLayout;outer->insertLayout(2,historyButtons);
+    const auto capture=[name,caption,source,fields,vba,importedBytes,&formEvents,&formTimerInterval] {
+        QJsonArray items;
+        for(int row=0;row<fields->count();++row) {
+            const auto* item=fields->item(row);
+            items.append(QJsonObject{{"field",item->data(Qt::UserRole).toString()},{"caption",item->text()},
+                {"checked",item->checkState()==Qt::Checked},{"layout",item->data(Qt::UserRole+1).toJsonObject()},
+                {"events",item->data(Qt::UserRole+2).toJsonObject()},{"tooltip",item->toolTip()}});
+        }
+        return QJsonObject{{"name",name->text()},{"caption",caption->text()},{"source",source->currentText()},
+            {"fields",items},{"vba",vba->toPlainText()},{"original_vba",QString::fromLatin1(importedBytes->toBase64())},
+            {"events",formEvents},{"timer_interval",formTimerInterval}};
+    };
+    const auto restore=[name,caption,source,fields,vba,importedBytes,findings,updateGeometry,populate,&formEvents,&formTimerInterval](const QJsonObject& state) {
+        const QSignalBlocker blockName(name),blockCaption(caption),blockSource(source),blockFields(fields),blockModel(fields->model()),blockCode(vba);
+        const auto current=fields->currentItem() ? fields->currentItem()->data(Qt::UserRole).toString() : QString{};
+        name->setText(state.value("name").toString());caption->setText(state.value("caption").toString());
+        source->setCurrentText(state.value("source").toString());populate();fields->clear();
+        int selection=-1;
+        for(const auto& value:state.value("fields").toArray()) {
+            const auto item=value.toObject();auto* entry=new QListWidgetItem(item.value("caption").toString(),fields);
+            entry->setData(Qt::UserRole,item.value("field").toString());entry->setData(Qt::UserRole+1,item.value("layout").toObject());
+            entry->setData(Qt::UserRole+2,item.value("events").toObject());entry->setToolTip(item.value("tooltip").toString());
+            entry->setFlags(entry->flags()|Qt::ItemIsUserCheckable|Qt::ItemIsEditable);entry->setCheckState(item.value("checked").toBool() ? Qt::Checked : Qt::Unchecked);
+            if(item.value("field").toString()==current) selection=fields->row(entry);
+        }
+        fields->setCurrentRow(selection>=0 ? selection : fields->count() ? 0 : -1);updateGeometry();
+        vba->setPlainText(state.value("vba").toString());*importedBytes=QByteArray::fromBase64(state.value("original_vba").toString().toLatin1());
+        formEvents=state.value("events").toObject();formTimerInterval=state.value("timer_interval").toInt();findings->clear();
+    };
+    history=new linaccess::NativeDesignerHistory(dialog,*historyButtons,capture,restore);
+    const auto record=[history] {if(history) history->record();};
+    connect(name,&QLineEdit::textChanged,history,record);connect(caption,&QLineEdit::textChanged,history,record);
+    connect(source,&QComboBox::currentTextChanged,history,record);connect(vba,&QPlainTextEdit::textChanged,history,record);
+    connect(fields->model(),&QAbstractItemModel::dataChanged,history,record);
+    connect(fields->model(),&QAbstractItemModel::rowsInserted,history,record);connect(fields->model(),&QAbstractItemModel::rowsRemoved,history,record);
+    connect(fields->model(),&QAbstractItemModel::rowsMoved,history,record);
     dialog.exec();
 }
 

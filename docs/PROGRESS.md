@@ -7626,3 +7626,21 @@ Fähigkeitsauskunft; korrigiert und nur dieses fehlgeschlagene Ziel erneut:
 Layout1/1 (12,76s) bestanden. App gebaut, keine neue CTest-ID, kein neuer
 Windows-/Gesamtsuite-/Qt-frei-/Installerlauf. F054/F160 und456/386/70 bleiben
 offen/unverändert. Letzter Kern d2488e0:2,17s; letzte DEB-Prüfung9eae43f.
+
+
+## 2026-11-09: echter Rückgängig-Verlauf im Formulardesigner
+
+Natives Undo/Redo stellt Feldreihenfolge/-auswahl, Beschriftungen, Twip-Geometrie,
+Datenquelle, VBA samt importierten Originalbytes, Form-/Feld-Ereignisse und Timer
+im geöffneten Entwurf wieder her. Erfolgreiches Speichern setzt den tatsächlichen
+Vergleichsstand; Rückkehr dorthin löscht den Änderungsstatus. Kein Undo-Speichern
+von Datenbankobjekten; Verlauf bleibt begrenzt im Speicher, kein VBA-Historyexport.
+Textfelder behalten ihr eigenes Text-Undo. Grenzen FORM_DESIGNER_HISTORY.md.
+
+Bestehender GUI-Lauf1/1 zunächst13,67s; unverändert bestätigte Ereignisdialoge
+als Nichtänderung bereinigt, abschließend dasselbe Ziel1/1 (13,52s) bestanden.
+Neue aktuelle DEB-/Build-ID-/MDBTools1.0.1-/SQLite3.54.1-Prüfung bestanden, alle
+vier Fixture- und drei Uploadhashes unverändert. Keine neue CTest-ID, kein neuer
+Windows-/Gesamtsuite-/Qt-frei-Nachweis. Letzter Kern d2488e0:2,17s; letzter
+Layout2a3a781:12,76s; letzter Original9eae43f:118,10s. F080/F148 und
+Katalog456/386/70 bleiben offen/unverändert. Allgemeine Formularerstellung folgt.
