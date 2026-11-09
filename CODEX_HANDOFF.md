@@ -5335,3 +5335,16 @@ geprüft. Letztes Original118,62s/DAO2,90s/Hashes liegen vor diesem Umfang; gepr
 DEB9affc5a unter /workspace/work/error-text-functions/package/linaccess-0.7.0-Linux.deb
 liegt vor ParamArray/benannten Settern. Ohne Zwischenabschluss Set-RHS-Auswertung
 nach MS-VBAL5.4.3.9 vor dynamischer Zielauflösung weiterimplementieren.
+
+
+Set-RHS-Reihenfolge: SET_EVALUATION_ORDER.md beschreibt einmalige Objektauswertung
+vor dynamischem Empfänger/Index und Alias-Aktualisierung nach MS-VBAL5.4.3.9.
+Echter Empfängerwechsel, Default, ReDim durch RHS, eigener/echter Formularsetter,
+RHS-Fehler ohne Zielaufruf und danach Nothing→91 geprüft. Fixtureobjekte/Klassen
+scoped bereinigt. App; erstes bestehendes Kern-/GUI-/DAO-/Original-Bündel4/4 in
+145,89s (5,53/19,19/2,75/118,41), sieben Hashes unverändert. Bekannte Makrogrenze
+bleibt; keine neuen CTests/Windows-/Vollsuiten-/Paketbehauptungen;456/386/70
+unverändert. Vorstufe d618eaf privat remote/Baum geprüft. Letztes geprüftes
+DEB9affc5a unter /workspace/work/error-text-functions/package/linaccess-0.7.0-Linux.deb
+liegt vor ParamArray/benannten Settern/Set-Reihenfolge. Ohne Zwischenabschluss
+mit echtem Undo/Redo vorgemerkter nativer Mehrfachlöschungen weiterprogrammieren.

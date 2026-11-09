@@ -3151,6 +3151,13 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                 break;
             case Statement::Type::ObjectAssign:
                 if (active) {
+                    const bool reference=instruction.stepExpression=="object";
+                    std::optional<VbaValue> assignedObject;
+                    if(reference) {
+                        assignedObject=evaluateObject(instruction.expression);
+                        if(assignedObject->kind!=VbaValue::Kind::Object) throw VbaRuntimeError(13,"Set requires an object reference");
+                        refreshAliases();
+                    }
                     const auto pos = memberSeparator(instruction.argument);
                     const auto target=memberTarget(trim(instruction.argument.substr(pos+1)));
                     if(!target) throw VbaRuntimeError(5,"Invalid property assignment target");
@@ -3160,7 +3167,6 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                     if (!object.object) throw VbaRuntimeError(91,"Objektvariable nicht gesetzt");
                     std::vector<VbaValue> indices;std::vector<CallArgument> indexArguments;
                     if(indexed) for(const auto& expression:splitArguments(trim(*target->arguments))) indexArguments.push_back(callArgument(expression));
-                    const bool reference=instruction.stepExpression=="object";
                     const bool named=std::any_of(indexArguments.begin(),indexArguments.end(),[](const auto& argument){return !argument.name.empty();});
                     const auto shape=named ? object.object->assignmentSignature(name,reference) : std::nullopt;
                     if(named && !shape) throw VbaRuntimeError(3251,"Named property setter is unavailable");
@@ -3172,7 +3178,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                         indices.push_back(value);names.push_back(argument.name);
                     }
                     if(named) bindNamedPropertyIndices(*shape,indices,names,indexReferences);
-                    const auto value = reference ? evaluateObject(instruction.expression) : evaluate(instruction.expression);
+                    const auto value = reference ? *assignedObject : evaluate(instruction.expression);
                     if(reference) {
                         if(value.kind!=VbaValue::Kind::Object) throw VbaRuntimeError(13,"Set requires an object reference");
                         if(instruction.argument[pos]=='!') throw VbaRuntimeError(3251,"Bang object assignment is unsupported");
@@ -3256,9 +3262,15 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
             case Statement::Type::IndexedAssign:
                 if(active) {
                     const auto name=lower(instruction.argument);
+                    if(variableType(name)=="paramarray" && !references) throw VbaRuntimeError(3251,"Writable ParamArray requires actual argument bindings");
+                    std::optional<VbaValue> assignedObject;
+                    if(instruction.stepExpression=="object") {
+                        assignedObject=evaluateObject(instruction.expression);
+                        if(assignedObject->kind!=VbaValue::Kind::Object) throw VbaRuntimeError(13,"Set requires an object reference");
+                        refreshAliases();
+                    }
                     if(automaticObjects.contains(name)) (void)readVariable(name);
                     const auto initial=locals.find(name);
-                    if(variableType(name)=="paramarray" && !references) throw VbaRuntimeError(3251,"Writable ParamArray requires actual argument bindings");
                     // Mid statements share indexed syntax; actual variables named Mid keep their normal array/object path.
                     if((name=="mid$" || (name=="mid" && initial==locals.end())) && instruction.stepExpression!="object") {
                         const auto parts=splitArguments(instruction.endExpression);
@@ -3306,7 +3318,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                             if(!setter) throw VbaRuntimeError(3251,"Named getter-default forwarding is not implemented");
                             bindNamedPropertyIndices(*signature,arguments,names,references);
                         }
-                        auto value=propertyAccess==VbaPropertyAccess::Set ? evaluateObject(instruction.expression) : scalarVbaValue(evaluate(instruction.expression));
+                        auto value=propertyAccess==VbaPropertyAccess::Set ? *assignedObject : scalarVbaValue(evaluate(instruction.expression));
                         arguments.push_back(std::move(value));if(!writeProperty(instruction.argument,propertyAccess,std::move(arguments),references)) throw VbaRuntimeError(3251,"Property index assignment is unsupported");break;
                     }
                     const bool objectTarget=initial!=locals.end() && initial->second.kind==VbaValue::Kind::Object;
@@ -3327,7 +3339,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                         indices.push_back(objectTarget ? value : coerceVbaModuleValue(scalarVbaValue(value),"long"));names.push_back(argument.name);
                     }
                     if(named) bindNamedPropertyIndices(*shape,indices,names,indexReferences);
-                    const auto value=object ? evaluateObject(instruction.expression) : evaluate(instruction.expression);
+                    const auto value=object ? *assignedObject : evaluate(instruction.expression);
                     if(object && value.kind!=VbaValue::Kind::Object) throw VbaRuntimeError(13,"Set requires an object reference");
                     refreshAliases();
                     if(objectTarget) {

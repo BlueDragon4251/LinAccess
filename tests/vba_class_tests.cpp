@@ -1,3 +1,4 @@
+#include "vba_set_timing_fixture.hpp"
 #include "vba_named_setter_fixture.hpp"
 #include "vba_paramarray_alias_fixture.hpp"
 #include "vba_array_lock_fixture.hpp"
@@ -107,6 +108,13 @@ void testVbaClasses() {using namespace linaccess;auto state=std::make_shared<Cla
     result=executeVbaProcedure(nativeNamedSetterClassConsumer,"NamedClassSetterProbe",host);
     if(result.status!=VbaExecutionStatus::Completed) std::cerr<<"Named class setter: "<<result.explanation<<" line "<<result.line<<" error "<<result.errorNumber<<"\n";
     assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==461);
+    state->classes["nativesetbox"]=nativeSetTimingClass;
+    for(const auto& probe:std::vector<std::pair<const char*,int>>{{"MemberSetTiming",111},{"DefaultSetTiming",111},{"ArraySetTiming",101},{"OwnSetTiming",111},{"FailedSetTiming",7012},{"NullSetTiming",91}}) {
+        const auto outcome=executeVbaProcedure(nativeSetTimingFixture,probe.first,host);
+        if(outcome.status!=VbaExecutionStatus::Completed) std::cerr<<"Set timing "<<probe.first<<": "<<outcome.explanation<<" line "<<outcome.line<<" error "<<outcome.errorNumber<<"\n";
+        assert(outcome.status==VbaExecutionStatus::Completed && outcome.typedReturnValue->number==probe.second);
+    }
+    assert(executeVbaProcedure(nativeSetTimingFixture,"ClearTimingReferences",host).status==VbaExecutionStatus::Completed);
     state->classes["database"]="VERSION 1.0 CLASS\nAttribute VB_Name = \"Database\"\nPublic Value As Long\n";
     result=executeVbaProcedure("Function RejectNominalDao As Long\nDim items(0 To 0) As DAO.Database\nOn Error Resume Next\nSet items(0)=New Database\nRejectNominalDao=Err.Number\nEnd Function","RejectNominalDao",host);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==13);
     state->alive=false;error=0;try{first->member("Calls",{});}catch(const VbaRuntimeError& e){error=e.number;}assert(error==3420);

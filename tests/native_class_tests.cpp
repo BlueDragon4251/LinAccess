@@ -1,3 +1,4 @@
+#include "vba_set_timing_fixture.hpp"
 #include "vba_named_setter_fixture.hpp"
 #include "vba_paramarray_alias_fixture.hpp"
 #include "vba_array_lock_fixture.hpp"
@@ -86,6 +87,20 @@ void exerciseNativeClasses(MainWindow& window,QSqlDatabase db) {using namespace 
         if(formProbe.status!=VbaExecutionStatus::Completed) std::cerr<<"Form named setter: "<<formProbe.explanation<<" line "<<formProbe.line<<" error "<<formProbe.errorNumber<<"\n";
         assert(formProbe.status==VbaExecutionStatus::Completed && formProbe.typedReturnValue->number==3993);assert(namedForm.close());
         assert(sql.exec("DELETE FROM main._la_objects WHERE kind='class' AND name='NamedWriter'") && sql.numRowsAffected()==1);
+    }
+    {
+        sql.prepare("INSERT INTO main._la_objects(kind,name,definition) VALUES('class','NativeSetBox',?)");
+        sql.addBindValue(QJsonDocument(QJsonObject{{"version",1},{"vba",QString::fromStdString(nativeSetTimingClass)}}).toJson(QJsonDocument::Compact));assert(sql.exec());sql.finish();
+        NativeStandardModuleHost timingHost(&window,db,[]{});
+        const auto defaultProbe=executeVbaProcedure(nativeSetTimingFixture,"DefaultSetTiming",timingHost);
+        if(defaultProbe.status!=VbaExecutionStatus::Completed) std::cerr<<"Project Set timing: "<<defaultProbe.explanation<<" line "<<defaultProbe.line<<" error "<<defaultProbe.errorNumber<<"\n";
+        assert(defaultProbe.status==VbaExecutionStatus::Completed && defaultProbe.typedReturnValue->number==111);
+        AccessFormPreview timingForm("Set evaluation source",QByteArray("Begin Form\nEnd\n"),QByteArray::fromStdString(nativeSetTimingFixture),db,&window);
+        std::vector<VbaValue> inputs;const auto formProbe=timingForm.executeProcedure("FormSetTiming",inputs);
+        if(formProbe.status!=VbaExecutionStatus::Completed) std::cerr<<"Form Set timing: "<<formProbe.explanation<<" line "<<formProbe.line<<" error "<<formProbe.errorNumber<<"\n";
+        assert(formProbe.status==VbaExecutionStatus::Completed && formProbe.typedReturnValue->number==111);assert(timingForm.close());
+        assert(executeVbaProcedure(nativeSetTimingFixture,"ClearTimingReferences",timingHost).status==VbaExecutionStatus::Completed);
+        assert(sql.exec("DELETE FROM main._la_objects WHERE kind='class' AND name='NativeSetBox'") && sql.numRowsAffected()==1);
     }
     std::shared_ptr<VbaObject> retained;
     {QDialog editor(&window);NativeStandardModuleHost host(&editor,db,[]{});retained=evaluateVbaObjectExpression("New NativeCounter",host,{}).object;assert(retained && retained->member("Value",{}).number==1);}
