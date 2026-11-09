@@ -396,13 +396,20 @@ bool AccessTableModel::setDataBlock(int firstRow,int firstColumn,const QVector<Q
 bool AccessTableModel::setTypedDataBlock(int firstRow,int firstColumn,const QVector<QVector<QVariant>>& values) {
     return applyDataBlock(firstRow,firstColumn,values,true);
 }
-bool AccessTableModel::applyDataBlock(int firstRow,int firstColumn,const QVector<QVector<QVariant>>& values,bool typed,const QMap<QString,QVariant>* restoredDefaults) {
+bool AccessTableModel::setTypedRecordBlock(int firstRow,const QStringList& fields,const QVector<QVector<QVariant>>& values) {
+    if(firstRow!=rowCount() || canFetchMore() || fields.size()!=columnCount()) return reject(3251);
+    if(values.isEmpty()) return reject(13);for(const auto& row:values) if(row.size()!=columnCount()) return reject(13);
+    for(int column=0;column<fields.size();++column) if(fields[column].compare(record().fieldName(column),Qt::CaseInsensitive)!=0) return reject(13);
+    return applyDataBlock(firstRow,0,values,true,nullptr,true);
+}
+bool AccessTableModel::applyDataBlock(int firstRow,int firstColumn,const QVector<QVector<QVariant>>& values,bool typed,const QMap<QString,QVariant>* restoredDefaults,bool skipGenerated) {
     if(saving_ || changing_) return reject(2501);
     if(readOnly_) return reject(2448);
     const QScopedValueRollback<bool> changing(changing_,true);
     const QScopedValueRollback<bool> blockMutation(blockMutation_,true);
     if(editStrategy()!=QSqlTableModel::OnManualSubmit) return reject(3251);
     if(isDirty()) return reject(2501);
+    if(skipGenerated && (!typed || firstColumn!=0 || firstRow!=rowCount() || canFetchMore())) return reject(3251);
     if(metadataError_) return reject(metadataError_);
     if(firstRow<0 || firstRow>rowCount() || firstColumn<0 || firstColumn>=columnCount() || values.isEmpty() || values.front().isEmpty()) return reject(5);
     const auto columns=values.front().size();
@@ -417,7 +424,7 @@ bool AccessTableModel::applyDataBlock(int firstRow,int firstColumn,const QVector
     const int appended=std::max(0,static_cast<int>(endRow)-originalRows);
     struct Cell { int row,column; QVariant value; };
     QVector<Cell> checked;QMap<QString,QVariant> dateDefaults;BlockHistory history;
-    history.firstRow=firstRow;history.firstColumn=firstColumn;history.originalRows=originalRows;history.applied=true;
+    history.firstRow=firstRow;history.firstColumn=firstColumn;history.originalRows=originalRows;history.applied=true;history.skipGenerated=skipGenerated;
     try {
         if(appended) dateDefaults=restoredDefaults ? *restoredDefaults : nativeTableDateDefaults(database(),tableName());
         history.dateDefaults=dateDefaults;
@@ -428,6 +435,7 @@ bool AccessTableModel::applyDataBlock(int firstRow,int firstColumn,const QVector
             for(qsizetype column=0;column<columns;++column) {
                 const int targetRow=firstRow+row,targetColumn=firstColumn+column;
                 const auto type=columnType(targetColumn);
+                if(skipGenerated && generated_.contains(record().fieldName(targetColumn).toCaseFolded())) {historyRow.push_back(QVariant{});continue;}
                 if(targetRow<originalRows) {
                     if(!(flags(index(targetRow,targetColumn))&Qt::ItemIsEditable) && !(typed && type.contains("BLOB",Qt::CaseInsensitive) && isPasteColumn(targetColumn,true))) return reject(2448);
                 } else if(!isPasteColumn(targetColumn,typed)) return reject(2448);
@@ -491,7 +499,7 @@ bool AccessTableModel::undoBlock() {
 }
 bool AccessTableModel::redoBlock() {
     if(!canRedoBlock()) return rejectEdit(2046,"Kein eingefügter Bereich zum Wiederherstellen vorhanden.");
-    try {const auto history=*blockHistory_;return applyDataBlock(history.firstRow,history.firstColumn,history.values,true,&history.dateDefaults);}
+    try {const auto history=*blockHistory_;return applyDataBlock(history.firstRow,history.firstColumn,history.values,true,&history.dateDefaults,history.skipGenerated);}
     catch(const std::bad_alloc&) {return reject(7);}
 }
 bool AccessTableModel::insertRowIntoTable(const QSqlRecord& row) {

@@ -894,3 +894,16 @@ Prüfungen gemeinsam2/2 (0,12s), App gebaut: echte Datumszeilen mit Uhrzeit,
 Schalttag und NULL, vorgegebene Monats-/Jahresreihenfolge, fehlende Kategorie,
 Signum und Negativfälle geprüft. Keine neue CTest-ID/Windows-Beobachtung;
 COUNT_CROSSTAB_RUNTIME.md; F068/F067 und456/384/72 unverändert. Direkt weiter.
+
+Vollständige native Tabellenzeilen können jetzt über ausdrückliches Anfügen mit
+neuen AutoWerten übernommen werden. Die Grid-MIME enthält physische Feldnamen;
+Schemaform, Namen und Reihenfolge müssen vollständig passen. Nur provenient
+generierte Spalten werden ausgelassen, manuelle Primärschlüssel bleiben echte
+Werte mit ihren SQL-Constraints. Die neue Schlüsselvergabe erfolgt ausschließlich
+beim normalen transaktionalen Save. Die Regel bleibt bei Bereichs-Undo/Redo erhalten.
+Vorhandene GUI/Feld-Prüfungen gemeinsam2/2 (7,05s), App gebaut: vollständiger echter
+Datensatz mit Binärbytes und großer Ganzzahl angefügt, Undo/Redo, tatsächlicher
+neuer SQL-Schlüssel und verweigerte fremde Feldform geprüft. Positionsbereiche und
+ältere Grid-MIME bleiben getrennt; anders geordnete/partielle Namenszuordnung und
+Formular-MIME-Interop bleiben offen. TYPED_GRID_CLIPBOARD.md; F340/F168 und456/384/72
+unverändert. Direkt weitere Bearbeitungsanforderungen umsetzen.

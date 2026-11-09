@@ -4,6 +4,7 @@
 #include <QSet>
 #include <QVector>
 #include <QPersistentModelIndex>
+#include <QStringList>
 #include <optional>
 namespace linaccess {
 class AccessTableModel final : public QSqlTableModel {
@@ -41,6 +42,7 @@ public:
     bool setDataBlock(int firstRow,int firstColumn,const QVector<QVector<QString>>& values);
     bool isPasteColumn(int column,bool binary=false) const;
     bool setTypedDataBlock(int firstRow,int firstColumn,const QVector<QVector<QVariant>>& values);
+    bool setTypedRecordBlock(int firstRow,const QStringList& fields,const QVector<QVector<QVariant>>& values);
     bool canUndoBlock() const;
     bool canRedoBlock() const;
     bool undoBlock();
@@ -51,7 +53,7 @@ signals:
 protected:
     bool insertRowIntoTable(const QSqlRecord& record) override;
 private:
-    bool applyDataBlock(int firstRow,int firstColumn,const QVector<QVector<QVariant>>& values,bool typed,const QMap<QString,QVariant>* restoredDefaults=nullptr);
+    bool applyDataBlock(int firstRow,int firstColumn,const QVector<QVector<QVariant>>& values,bool typed,const QMap<QString,QVariant>* restoredDefaults=nullptr,bool skipGenerated=false);
     bool refreshTypes();
     bool reject(int number);
     QString columnType(int column) const;
@@ -67,7 +69,7 @@ private:
     QMap<QString,QVariant> insertedKey_;
     QMap<int,QMap<QString,QVariant>> submittedKeys_;
     struct BlockHistory {
-        int firstRow{},firstColumn{},originalRows{};bool applied{};
+        int firstRow{},firstColumn{},originalRows{};bool applied{},skipGenerated{};
         QVector<QVector<QVariant>> values;QMap<QString,QVariant> dateDefaults;
     };
     std::optional<BlockHistory> blockHistory_;

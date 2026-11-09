@@ -410,9 +410,10 @@ public:
         auto* typed=qobject_cast<AccessTableModel*>(model());
         if(!typed || !selectionModel() || !finishEditing()) return false;
         try {
-            QJsonArray rows,cells;int previous=-1;
+            QJsonArray rows,cells,fields;int previous=-1;
             const auto output=nativeGridClipboardText(*this,[&](const QModelIndex& index) {
                 if(previous>=0 && previous!=index.row()) {rows.append(cells);cells={};}
+                if(rows.isEmpty() && (previous<0 || previous==index.row())) fields.append(typed->record().fieldName(index.column()));
                 previous=index.row();const auto raw=typed->QSqlTableModel::data(index,Qt::EditRole);
                 cells.append(nativeGridEncode(raw));
                 if(raw.metaType().id()==QMetaType::QByteArray) return QStringLiteral("0x")+QString::fromLatin1(raw.toByteArray().toHex());
@@ -421,7 +422,7 @@ public:
                 return typed->clipboardText(index);
             });
             if(!cells.isEmpty()) rows.append(cells);
-            const auto data=QJsonDocument(QJsonObject{{"version",1},{"rows",rows}}).toJson(QJsonDocument::Compact);
+            const auto data=QJsonDocument(QJsonObject{{"version",1},{"rows",rows},{"fields",fields}}).toJson(QJsonDocument::Compact);
             if(data.size()>nativeGridMimeLimit) throw VbaRuntimeError(3035,"Typed grid clipboard size limit exceeded");
             auto* mime=new QMimeData;mime->setText(output);mime->setData(nativeGridMime,data);QApplication::clipboard()->setMimeData(mime);
         } catch(const VbaRuntimeError& error) { return refuse(error.number,"Die Auswahl kann nicht verlustfrei kopiert werden."); }
@@ -461,6 +462,12 @@ public:
             && !hasPendingEditor() && ((currentIndex().isValid() && (currentIndex().flags().testFlag(Qt::ItemIsEditable) || (binary && typed->isPasteColumn(currentIndex().column(),true))))
                 || (typed->rowCount()==0 && firstPasteColumn(typed,binary)>=0));
     }
+    bool canAppendRecords() const {
+        const auto* typed=qobject_cast<AccessTableModel*>(model());const auto* mime=QApplication::clipboard()->mimeData();
+        if(!typed || typed->isReadOnly() || typed->editStrategy()!=QSqlTableModel::OnManualSubmit || typed->isDirty() || hasPendingEditor()) return false;
+        if(canPasteSelection()) return true;
+        return mime && mime->hasFormat(nativeGridMime) && mime->data(nativeGridMime).size()<=nativeGridMimeLimit && QJsonDocument::fromJson(mime->data(nativeGridMime)).object().value("fields").toArray().size()==typed->columnCount();
+    }
     int firstPasteColumn(const AccessTableModel* typed,bool binary=false) const {
         for(int column=0;column<typed->columnCount();++column) if(!isColumnHidden(column) && typed->isPasteColumn(column,binary)) return column;
         return -1;
@@ -472,9 +479,18 @@ public:
         if(typed->editStrategy()!=QSqlTableModel::OnManualSubmit) return refuse(3251,"Bereichseinfügen ist in dieser Ansicht nicht verfügbar.");
         const auto* mime=QApplication::clipboard()->mimeData();
         const bool typedMime=mime && mime->hasFormat(nativeGridMime);
+        if(typedMime && mime->data(nativeGridMime).size()>nativeGridMimeLimit) return refuse(3035,"Die typisierte Zwischenablage überschreitet die native Größenbegrenzung.");
+        QStringList recordFields;bool fullRecord=false;
+        if(append && typedMime) {
+            const auto fields=QJsonDocument::fromJson(mime->data(nativeGridMime)).object().value("fields");
+            if(fields.isArray() && fields.toArray().size()==typed->columnCount()) {
+                fullRecord=true;for(const auto& value:fields.toArray()) {if(!value.isString()) return refuse(13,"Ungültige Datensatzfelder in der Zwischenablage.");recordFields<<value.toString();}
+                for(int column=0;column<recordFields.size();++column) if(recordFields[column].compare(typed->record().fieldName(column),Qt::CaseInsensitive)!=0) return refuse(13,"Die Datensatzfelder stimmen nicht mit der Zieltabelle überein.");
+            }
+        }
         const auto current=currentIndex();
-        const int firstColumn=current.isValid() ? current.column() : firstPasteColumn(typed,typedMime);
-        if(firstColumn<0 || !typed->isPasteColumn(firstColumn,typedMime)) return refuse(2448,"Die Zielspalte ist schreibgeschützt.");
+        const int firstColumn=fullRecord ? 0 : current.isValid() ? current.column() : firstPasteColumn(typed,typedMime);
+        if(firstColumn<0 || (!fullRecord && !typed->isPasteColumn(firstColumn,typedMime))) return refuse(2448,"Die Zielspalte ist schreibgeschützt.");
         if(!append && current.isValid() && !current.flags().testFlag(Qt::ItemIsEditable) && !(typedMime && typed->isPasteColumn(firstColumn,true))) return refuse(2448,"Die Zielzelle ist schreibgeschützt.");
         if(append) while(typed->canFetchMore()) {
             if(typed->rowCount()>=1000000) return refuse(3251,"Die Tabelle überschreitet die native Anfügegrenze.");
@@ -518,7 +534,7 @@ public:
         }
         for(int column=firstColumn;column<firstColumn+columns;++column) if(isColumnHidden(column)) return refuse(3251,"Verdeckte Zielspalten werden nicht überschrieben.");
         for(int row=firstRow;row<qMin<qint64>(endRow,typed->rowCount());++row) if(isRowHidden(row)) return refuse(3251,"Verdeckte Zieldatensätze werden nicht überschrieben.");
-        if(!(typedMime ? typed->setTypedDataBlock(firstRow,firstColumn,typedValues) : typed->setDataBlock(firstRow,firstColumn,values))) return false;
+        if(!(fullRecord ? typed->setTypedRecordBlock(firstRow,recordFields,typedValues) : typedMime ? typed->setTypedDataBlock(firstRow,firstColumn,typedValues) : typed->setDataBlock(firstRow,firstColumn,values))) return false;
         const auto first=typed->index(firstRow,firstColumn);
         setCurrentIndex(first);
         if(selectionModel()) selectionModel()->select(QItemSelection(first,typed->index(endRow-1,firstColumn+columns-1)),QItemSelectionModel::ClearAndSelect);
@@ -548,7 +564,7 @@ protected:
         auto* copy=add("copy","&Kopieren\tStrg+C",native && selectionModel()->hasSelection());
         const auto* clipboard=QApplication::clipboard()->mimeData();
         auto* paste=add("paste","&Einfügen\tStrg+V",canPasteSelection() && clipboard && clipboard->hasText());
-        auto* append=add("paste-append","Datensätze &anfügen",canPasteSelection() && clipboard && clipboard->hasText());
+        auto* append=add("paste-append","Datensätze &anfügen",canAppendRecords() && clipboard && clipboard->hasText());
         menu.addSeparator();
         auto* zoom=add("zoom","&Zoom...\tUmschalt+F2",native && currentIndex().isValid());
         auto* undoRecord=add("undo-record","Datensatzänderungen &verwerfen\tEsc",native && currentIndex().isValid() && !activeEditor() && native->hasPendingRecord(currentIndex().row()));

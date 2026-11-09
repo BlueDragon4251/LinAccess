@@ -37,3 +37,13 @@ editors retain their own existing text undo. Any unrelated cell/row modification
 select/requery or successful Save invalidates block history. Readonly models and
 missing/invalidated history refuse the operation. A failed SQL Save retains the
 pending block; this is not a general SQL undo or a multi-operation Access stack.
+
+Native grid payloads also record the selected physical field names. Explicit
+append recognizes a full row only when its field names and order match the full
+target schema. Such rows append from the first physical column, even with an
+AutoWert selection, and ignore only proven generated columns. Save obtains actual
+new keys through the existing counter/insert path; supplied manual keys retain
+the normal database constraints. Full-row shapes/names are checked before drafts
+change. The generated-field policy survives pending block Undo/Redo. Older grid
+payloads without field names retain positional range semantics. Form-record MIME
+remains separate; differently ordered/partial named record mappings remain open.

@@ -349,6 +349,13 @@ End Function
         assert(cells.setTypedDataBlock(0,1,{{QVariant(2.5)}}) && cells.QSqlTableModel::data(cells.index(0,1),Qt::EditRole).toLongLong()==2 && cells.canUndoBlock());
         assert(cells.setData(cells.index(0,2),"later") && !cells.canUndoBlock() && !cells.canRedoBlock());cells.revertAll();
         sheet.setCurrentIndex(cells.index(0,5));sheet.selectionModel()->select(cells.index(0,5),QItemSelectionModel::ClearAndSelect);assert(sheet.copySelection() && QApplication::clipboard()->text()=="True");
+        sheet.setCurrentIndex(cells.index(0,0));sheet.selectionModel()->select(QItemSelection(cells.index(0,0),cells.index(0,6)),QItemSelectionModel::ClearAndSelect);
+        assert(sheet.copySelection() && sheet.canAppendRecords());const auto full=QApplication::clipboard()->mimeData()->data(linaccess::nativeGridMime);
+        assert(sheet.pasteSelection(true) && cells.rowCount()==5 && cells.canUndoBlock());assert(cells.undoBlock() && cells.rowCount()==4 && cells.redoBlock() && cells.rowCount()==5 && cells.submitTransactionally());
+        assert(sql.exec("SELECT id,n,hex(payload) FROM typed_grid ORDER BY id DESC LIMIT 1") && sql.next() && sql.value(0).toInt()==5 && sql.value(1).toLongLong()==9223372036854775806LL && sql.value(2).toString()=="0001FF80");sql.finish();
+        auto forged=QJsonDocument::fromJson(full).object();auto fields=forged.value("fields").toArray();fields[0]="different_id";forged["fields"]=fields;
+        auto* wrong=new QMimeData;wrong->setData(linaccess::nativeGridMime,QJsonDocument(forged).toJson());QApplication::clipboard()->setMimeData(wrong);assert(!sheet.pasteSelection(true) && !cells.isDirty() && cells.rowCount()==5);
+
 
     }
 
