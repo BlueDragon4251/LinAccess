@@ -1903,7 +1903,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
         }
         const auto type=variableType(lower(instruction.argument));
         if(((instruction.type==Statement::Type::ForEach || instruction.type==Statement::Type::ObjectSet) && (scalarType(type) || type=="paramarray"))
-            || (instruction.type==Statement::Type::For && (type.ends_with("()") || type=="boolean" || type=="string" || type=="single" || type=="date" || type=="byte" || objectType(type)))) {
+            || (instruction.type==Statement::Type::For && (type.ends_with("()") || type=="boolean" || type=="string" || type=="date" || objectType(type)))) {
             VbaExecutionResult failure{VbaExecutionStatus::Unsupported,"Declared variable type is unsupported for this loop/object target",instruction.line}; failure.errorNumber=3251; return failure;
         }
     }
@@ -2733,17 +2733,13 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 const auto initial = evaluate(instruction.expression).asNumber();
                 const auto end = evaluate(instruction.endExpression).asNumber();
                 const auto step = evaluate(instruction.stepExpression).asNumber();
-                if (!std::isfinite(initial) || !std::isfinite(end)
-                    || !std::isfinite(step) || step == 0)
-                    throw std::runtime_error("Ungültige For-Schrittweite/Grenze");
-                if(integralType(type)) {
-                    if(std::floor(initial)!=initial || std::floor(end)!=end || std::floor(step)!=step)
-                        throw VbaRuntimeError(3251,"Fractional typed For limits and steps are not implemented");
-                    (void)coerceVbaModuleValue(VbaValue::numeric(end),type);
-                    (void)coerceVbaModuleValue(VbaValue::numeric(step),type);
-                }
+                if (!std::isfinite(initial) || !std::isfinite(end) || !std::isfinite(step))
+                    throw VbaRuntimeError(6,"For bound or step overflows Double");
+                // MS-VBAL 5.4.2.3 keeps evaluated limits/steps uncoerced. Only
+                // the counter assignment uses its declared numeric type.
                 assignVariable(counter,VbaValue::numeric(initial));
-                if ((step > 0 && initial > end) || (step < 0 && initial < end)) {
+                const auto assigned=locals.at(counter).asNumber();
+                if ((step >= 0 && assigned > end) || (step < 0 && assigned < end)) {
                     ip = static_cast<std::size_t>(instruction.partner);
                 } else {
                     LoopFrame loop{static_cast<int>(ip),end,step};
@@ -2787,10 +2783,11 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                     break;
                 }
                 const auto nextValue = locals[name].asNumber() + loops.back().step;
-                if (!std::isfinite(nextValue)) throw std::runtime_error("For-Zählerüberlauf");
+                if (!std::isfinite(nextValue)) throw VbaRuntimeError(6,"For counter overflow");
                 assignVariable(name,VbaValue::numeric(nextValue));
-                if ((loops.back().step > 0 && nextValue <= loops.back().end)
-                    || (loops.back().step < 0 && nextValue >= loops.back().end))
+                const auto assigned=locals.at(name).asNumber();
+                if ((loops.back().step >= 0 && assigned <= loops.back().end)
+                    || (loops.back().step < 0 && assigned >= loops.back().end))
                     ip = static_cast<std::size_t>(loops.back().forIndex);
                 else loops.pop_back();
                 break;

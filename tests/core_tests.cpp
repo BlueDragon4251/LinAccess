@@ -185,7 +185,7 @@ value=4
 Call Increment((value))
 TemporaryByte=value
 End Function
-Sub RejectByteLoop()
+Sub ByteLoop()
 Dim value As Byte
 CurrentDb.Execute "INSERT before byte loop"
 For value=1 To 2
@@ -202,7 +202,7 @@ End Sub
     result=executeVbaProcedure(module,"PreserveOverflow",host); assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==255 && host.fields["Code"]=="6");
     result=executeVbaProcedure(module,"MismatchByte",host); assert(result.status==VbaExecutionStatus::Error && result.errorNumber==13 && !host.fields.contains("Body"));
     result=executeVbaProcedure(module,"TemporaryByte",host); assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==4);
-    result=executeVbaProcedure(module,"RejectByteLoop",host); assert(result.status==VbaExecutionStatus::Unsupported && result.errorNumber==3251 && host.sqlStatements.empty());
+    result=executeVbaProcedure(module,"ByteLoop",host); assert(result.status==VbaExecutionStatus::Completed && host.sqlStatements.size()==3);
 }
 
 void testTypedNot() {
@@ -393,6 +393,108 @@ End Function
     assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->asText()=="6:922337203685477.5807");
     result=executeVbaProcedure(module,"CurrencyLoopBodyWrite",host);
     assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->kind==VbaValue::Kind::Currency && result.typedReturnValue->currencyUnits==40000);
+}
+
+void testNativeTypedForLoops() {
+    using namespace linaccess;FakeForm host;
+    const std::string module=R"VBA(Public boundary As Double
+Public stride As Double
+Function ByteCounters() As String
+Dim value As Byte
+Dim count As Long
+boundary=3
+stride=1
+For value=1 To boundary Step stride
+count=count+1
+boundary=100
+stride=0
+Next value
+ByteCounters=CStr(count)&":"&CStr(value)&":"&TypeName(value)
+count=0
+For value=3 To 1 Step -1
+count=count+1
+Next value
+ByteCounters=ByteCounters&":"&CStr(count)&":"&CStr(value)
+For value=0 To 1 Step 0
+Exit For
+Next value
+ByteCounters=ByteCounters&":"&CStr(value)
+End Function
+Function ByteCounterOverflow() As String
+Dim value As Byte
+On Error GoTo Failed
+For value=255 To 255
+Next value
+Failed:
+ByteCounterOverflow=CStr(Err.Number)&":"&CStr(value)&":"&TypeName(value)
+End Function
+Function IntegralBounds() As String
+Dim value As Integer
+Dim count As Long
+For value=0.5 To 0.25
+count=count+1
+Next value
+IntegralBounds=CStr(count)&":"&CStr(value)
+count=0
+For value=0 To 2.5
+count=count+1
+Next value
+IntegralBounds=IntegralBounds&":"&CStr(count)&":"&CStr(value)
+For value=32766 To 40000
+Exit For
+Next value
+IntegralBounds=IntegralBounds&":"&CStr(value)
+End Function
+Function SingleCounters() As String
+Dim value As Single
+Dim count As Long
+For value=0 To 0.3 Step 0.1
+count=count+1
+Next value
+SingleCounters=CStr(count)&":"&TypeName(value)
+count=0
+For value=0 To CSng(0.3) Step CSng(0.1)
+count=count+1
+Next value
+SingleCounters=SingleCounters&":"&CStr(count)
+For value=5 To 2
+Me!UnexpectedSingle="entered"
+Next value
+SingleCounters=SingleCounters&":"&CStr(value)
+For value=2 To 3
+value=3
+Next value
+SingleCounters=SingleCounters&":"&CStr(value)
+End Function
+Function SingleCounterOverflow() As String
+Dim value As Single
+On Error GoTo Failed
+For value=CSng(3.4028234663852886E38) To 1E39 Step CSng(3.4E38)
+Next value
+Failed:
+SingleCounterOverflow=CStr(Err.Number)&":"&TypeName(value)&":"&CStr(value>0)
+End Function
+Function DoubleZeroStep() As Double
+Dim value As Double
+For value=1 To 2 Step 0
+Exit For
+Next value
+DoubleZeroStep=value
+End Function
+Sub RejectDateCounter()
+Dim value As Date
+CurrentDb.Execute "INSERT forbidden date loop prefix"
+For value=1 To 2
+Next value
+End Sub
+)VBA";
+    auto result=executeVbaProcedure(module,"ByteCounters",host);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->asText()=="3:4:Byte:3:0:0");
+    result=executeVbaProcedure(module,"ByteCounterOverflow",host);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->asText()=="6:255:Byte");
+    result=executeVbaProcedure(module,"IntegralBounds",host);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->asText()=="1:1:3:3:32766");
+    result=executeVbaProcedure(module,"SingleCounters",host);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->asText()=="3:Single:4:5:4" && !host.fields.contains("UnexpectedSingle"));
+    result=executeVbaProcedure(module,"SingleCounterOverflow",host);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->asText()=="6:Single:True");
+    result=executeVbaProcedure(module,"DoubleZeroStep",host);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==1);
+    result=executeVbaProcedure(module,"RejectDateCounter",host);assert(result.status==VbaExecutionStatus::Unsupported && result.errorNumber==3251 && host.sqlStatements.empty());
 }
 
 void testCurrencyRealStorage() {
@@ -917,6 +1019,7 @@ End Sub
     testCalendarFunctions();
     testCurrencyRealStorage();
     testCurrencyForLoops();
+    testNativeTypedForLoops();
     testIsObjectFunction();
     testStringResultTypes();
     testReplaceFunction();
@@ -1746,7 +1849,7 @@ End Sub
         result=executeVbaProcedure(module,"ReferenceOverflow",host); assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->asNumber()==2147483647 && host.fields["Code"]=="6");
         result=executeVbaProcedure(module,"CountTyped",host); assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->asNumber()==6 && host.fields["Counter"]=="4");
         result=executeVbaProcedure(module,"OverflowCounter",host); assert(result.status==VbaExecutionStatus::Error && result.errorNumber==6);
-        FakeForm fractional; result=executeVbaProcedure(module,"FractionalCounter",fractional); assert(result.status==VbaExecutionStatus::Error && result.errorNumber==3251 && !fractional.fields.contains("Body"));
+        FakeForm fractional; result=executeVbaProcedure(module,"FractionalCounter",fractional); assert(result.status==VbaExecutionStatus::Completed && fractional.fields["Body"]=="entered");
         auto sequence=std::make_shared<TestSequence>(); sequence->values={VbaValue::numeric(1)}; args={VbaValue::reference(sequence)};
         for(const auto* procedure:{"InvalidEnumerator","InvalidSet"}) {
             FakeForm invalid; result=executeVbaProcedureWithArguments(module,procedure,invalid,args);

@@ -223,10 +223,10 @@ End Function
 Function ReturnOverflow() As Integer
 ReturnOverflow=32768
 End Function
-Sub BadLoop()
+Sub FractionalLoop()
 Dim i As Integer
 For i=1 To 2.5
-CurrentDb.Execute "INSERT INTO numeric_local_events VALUES('bad loop')"
+CurrentDb.Execute "INSERT INTO numeric_local_events VALUES('fractional loop')"
 Next i
 End Sub
 Sub BadEnumerator(items As Object)
@@ -249,9 +249,9 @@ End Sub
     assert(sql.exec("SELECT COUNT(*) FROM numeric_local_events") && sql.next() && sql.value(0).toInt()==0); sql.finish();
     result=form.executeProcedure("TemporaryReference",args); assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->asNumber()==3);
     result=form.executeProcedure("ReturnOverflow",args); assert(result.status==linaccess::VbaExecutionStatus::Error && result.errorNumber==6);
-    result=form.executeProcedure("BadLoop",args); assert(result.status==linaccess::VbaExecutionStatus::Error && result.errorNumber==3251);
+    result=form.executeProcedure("FractionalLoop",args); assert(result.status==linaccess::VbaExecutionStatus::Completed);
     args={makePreviewFormObject(form)->member("Controls",{})}; result=form.executeProcedure("BadEnumerator",args); assert(result.status==linaccess::VbaExecutionStatus::Unsupported && result.errorNumber==3251);
-    assert(sql.exec("SELECT COUNT(*) FROM numeric_local_events") && sql.next() && sql.value(0).toInt()==1); sql.finish();
+    assert(sql.exec("SELECT COUNT(*) FROM numeric_local_events") && sql.next() && sql.value(0).toInt()==3); sql.finish();
     assert(form.close());
 }
 
@@ -382,8 +382,9 @@ Next counter
 End Function
 Sub SingleLoop()
 Dim counter As Single
-CurrentDb.Execute "INSERT INTO floating_events VALUES('unsupported loop')"
+CurrentDb.Execute "INSERT INTO floating_events VALUES('single loop prefix')"
 For counter=0 To 1
+CurrentDb.Execute "INSERT INTO floating_events VALUES('single loop row')"
 Next counter
 End Sub
 )VBA";
@@ -408,8 +409,8 @@ End Sub
     result=form.executeProcedure("Matching",args); assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->number==1.25 && result.typedReturnValue->numericType==VbaValue::NumericType::Single);
     result=form.executeProcedure("Temporary",args); assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->asText()=="Double:1");
     result=form.executeProcedure("DoubleLoop",args); assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->number==3 && result.typedReturnValue->numericType==VbaValue::NumericType::Double);
-    result=form.executeProcedure("SingleLoop",args); assert(result.status==linaccess::VbaExecutionStatus::Unsupported && result.errorNumber==3251);
-    assert(sql.exec("SELECT COUNT(*) FROM floating_events") && sql.next() && sql.value(0).toInt()==2); sql.finish();
+    result=form.executeProcedure("SingleLoop",args); assert(result.status==linaccess::VbaExecutionStatus::Completed);
+    assert(sql.exec("SELECT COUNT(*) FROM floating_events") && sql.next() && sql.value(0).toInt()==5); sql.finish();
     assert(form.close());
 }
 

@@ -4014,3 +4014,19 @@ verweigerter gelöschter Zielbereich und gemeinsamer SQL-Save geprüft. Erste St
 Kein vorzeitiger SQL-Write, keine neue Windows-Beobachtung; beliebige externe
 Index-/Reentranz-/Konkurrenz-/Access-Ereignisgleichheit bleibt offen.
 TYPED_GRID_CLIPBOARD.md; F340/F168 und456/384/72 unverändert. Direkt weiter.
+
+Native einfache numerische For-Zähler unterstützen jetzt Byte und Single zusätzlich
+zu Integer/Long/Double. Grenzen/Schrittweite werden einmal ausgewertet und nicht
+auf den Zählertyp eingeengt; Start/Next werden regulär Let-zugewiesen, danach wird
+der tatsächlich zugewiesene (ggf. Single-gerundete) Zähler verglichen. Integer-/Long-
+Bruchgrenzen, Byte-Rückwärtsschritte und Step0 mit Exit For funktionieren; Overflow6
+ersetzt den letzten angenommenen Byte-/Single-Wert nicht. Deklariertes Date ist
+laut MS-VBAL kein numerischer Zählertyp und bleibt vor SQL-Präfix verweigert3251.
+Quelle: veröffentlichte MS-VBAL v20260818 §5.4.2.3/5.5.1.2.1, PDF-SHA dokumentiert;
+keine neue Windows-/Access2003-Beobachtung. Vorhandene Core/DAO/Layout gemeinsam3/3
+(17,41s), App gebaut: Rundung vor Anfangsvergleich, Endtypen Single/Double,
+Bruchgrenzen, eingefrorene Grenzen, Body-Zähleränderung, Zero-Step, Overflow und
+tatsächliche SQL-Schleifenaufrufe. Bestehende globale Bruchgrenzen-/Single-/Byte-
+Negativannahmen gezielt in reale positive Fälle geändert; keine neue CTest-ID.
+Volle gemischte Variant-/Fixedpoint-/Fehler-/Compilerparität bleibt offen.
+TYPED_FOR_RUNTIME.md; F045/F041/F122 und456/384/72 unverändert. Direkt weiter.
