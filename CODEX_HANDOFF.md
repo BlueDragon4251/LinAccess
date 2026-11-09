@@ -4631,3 +4631,15 @@ Callbackzähler: Entwurf und Speichern ohne Auswertung, explizite Ausführung li
 Zeilen. Keine neuen CTests oder Windows-/Original-/Gesamtsuiten-/Paketnachweise.
 Details: docs/VISUAL_QUERY_DESIGNER.md. Gruppierungs-Etappe als31c50d2 veröffentlicht;
 letzte geprüfteDEB weiterhin1dafedd. F080/F085/F087/F148 und456/386/70 unverändert.
+
+
+Gespeicherte Auswahlabfragen als visuelle Datenquelle: tatsächliche native Query-
+Views werden vor Entwurfsöffnung installiert und zusammen mit Tabellen angeboten;
+Metadatenvorschau bleibt ohne Zeilenauswertung. Tatsächliche verschachtelte Abfrage
+auf gespeichertem Entwurf inklusive berechnetem Feld/Kriterium/Sortierung und
+Wiederöffnung geprüft; Callbackzähler trennt Vorschau von Ausführung. Native
+Abhängigkeits-/Typ-/Parametergrenzen bleiben ausdrücklich erhalten. Anwendung
+gebaut, bestehendes GUI-/SQL-Bündel2/2 (15,84s) bestanden. Ein Qt-Enum-Baufehler
+wurde vor dem Prüflauf korrigiert. Keine neuen CTests oder Windows-/Original-/
+Gesamtsuiten-/Paketnachweise. Berichtsentwurf als4e20658 veröffentlicht; letzte
+geprüfteDEB weiterhin1dafedd. Details VISUAL_QUERY_DESIGNER.md;456/386/70 unverändert.

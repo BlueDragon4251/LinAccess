@@ -28,7 +28,8 @@ run and save for a closed/replaced project; full callback/window scheduling rema
 outside this scope. Imported sources remain outside this
 native-owned authoring path.
 
-Scope is one physical table, fields/literal criteria/native supported functions,
+Scope is one physical table or installed saved selection-query view, fields/literal
+criteria/native supported functions,
 AND/OR field groups, declared parameters, calculated scalar projections, grouped
 aggregates, distinct and ordered output. Joins and arbitrary SQL round-trip parsing and the complete Access QBE/window/locale oracle remain open.
 The native 255-field/64-character name and criteria/predicate bounds apply. The
@@ -140,3 +141,21 @@ fixture authors and saves a report source, verifies undo/redo and Cancel, reopen
 its saved design and invalidates metadata after manual SQL. A callback counter
 proves no values execute during design or save; explicit execution returns the
 actual expected records. No new Windows/original/full-suite/package proof.
+
+## Saved selection-query sources
+
+The source list includes actual physical tables and installed read-only saved-query
+views, excluding internal project/SQLite objects. Existing native dependency-view
+installation runs before opening the designer; field discovery still prepares
+without stepping data. A design can select, calculate, filter, group and sort the
+output fields of an existing supported saved selection query. The metadata keeps
+that source's real name. Saved-query dependency, type-lineage and parameter-view
+boundaries are unchanged: sources that cannot be installed as native views are
+not guessed or populated with fallback records. Arbitrary SQL reverse parsing,
+self joins and a full QBE/Access oracle remain outside this scope.
+
+Validation: existing GUI/SQL2/2 passed (15.84s), application built. An enum
+conversion build error was fixed before running the bundle. Actual nested query
+results/filter/order and saved design restoration are covered; callback counts
+prove metadata preparation does not execute row values. No new CTest ID or
+Windows/original/full-suite/package proof.
