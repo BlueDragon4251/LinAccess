@@ -23,7 +23,7 @@ transaction, document, modal and error guards:
 | RunCode | one supported Function call, including parentheses; return ignored |
 | StopMacro | none; terminates this RunMacro invocation, including repetitions |
 | CancelEvent | none; cancels a supported current bound event |
-| RunMacro | MacroName, optional RepeatCount; bounded nested call |
+| RunMacro | MacroName, optional RepeatCount/RepeatExpression; bounded nested call |
 
 The editor uses the Access action names, ordinary argument cells and Ja/Nein for
 Boolean arguments. Required text cannot be blank. Numeric arguments in persisted
@@ -38,9 +38,8 @@ arity, optional condition expression syntax, valid UTF16/no NUL,262144 UTF16 uni
 size. Unknown actions/attributes refuse3251; malformed values refuse
 13/450/5 as appropriate. Duplicate case-insensitive catalog names refuse3251.
 Runtime RepeatCount uses existing Long coercion, then requires1..1000 and at most
-10000 planned actions per call. Nested calls share a10000-visited-action limit
-(including skipped conditions) and a16-active-call limit. RepeatExpression and
-macro groups remain unsupported. Stops/lifetime checks run before each action.
+10000 planned actions per count-only call. Predicate-driven calls enforce the actual visited-action limit. Nested calls share a10000-visited-action limit
+(including skipped conditions) and a16-active-call limit. Macro groups remain unsupported. Stops/lifetime checks run before each action.
 
 A macro is a sequence of actions, not a single database transaction. Each RunSQL
 keeps its existing UseTransaction contract. If a later action fails, earlier
@@ -57,7 +56,7 @@ Enumeration of a stored source is metadata, not proof that its content executes.
 
 This is the native project format, not an Access2003 SaveAsText/binary macro
 importer or an MS Access execution oracle. Complete Access condition/continuation semantics, macro groups,
-embedded/data macros, RepeatExpression, full action vocabulary/expressions,
+embedded/data macros, full action vocabulary/expressions,
 complete macro-bound event dispatch, AutoExec, library lookup, a macro debugger and complete
 Access timing/error identity remain open under F088/F050/F057/F148. Catalog456 /
 384 confirmed partial items /72 open full requirements remains unchanged.
@@ -212,3 +211,46 @@ Form_Open are exercised. No new test target or Windows Access2003 oracle.
 
 Native project [AutoExec and Shift bypass](NATIVE_AUTOEXEC_RUNTIME.md) are now
 implemented for stored native macros; archive macro importing remains open.
+
+
+## RepeatExpression
+
+RunMacro now evaluates a supported RepeatExpression before each attempt. With
+only RepeatCount it runs at most that many times; with only RepeatExpression it
+continues until the expression becomes false. With both, the first limiting
+condition wins. Both omitted still run once. Initially false/Null expression
+results run no actions. StopMacro still terminates the current invocation and its
+remaining repetitions. Parent macros continue after a nested StopMacro.
+
+The shared guarded evaluator is used in real form/event and standalone project
+contexts. A text predicate is limited to4096 UTF16 units with valid expression
+syntax before executing the called macro. API scalar numeric/Boolean constants
+are converted through the native String/expression path; full Access Variant and
+expression scope/coercion remain bounded. Predicate errors retain their original
+number/source/help and add macro name/repetition context. Public-function Eval
+now preserves those error fields and explanation instead of dropping them.
+
+Explicit repeat counts remain1..1000. Predicate-only calls permit at most1000
+completed iterations; a further true attempt fails3251, while a terminating false
+predicate returns normally. The existing shared16-active-call/10000-visited-action
+budget also applies, including nested and skipped actions. Predicates can have
+real supported side effects; the terminating false evaluation is observable.
+There is no global macro transaction or rollback of prior completed iterations.
+
+The editor accepts a RepeatExpression in RunMacro argument3 with argument2 blank.
+Only this optional count slot uses JSON null as Missing in the native project
+format. It is not an Access macro JSON format or a general Null-to-Missing rule.
+Stored predicates are syntax-checked with the whole definition before its first
+action, including when a later RunMacro action contains an invalid predicate.
+
+Contracts consulted: Microsoft Learn,
+https://learn.microsoft.com/en-us/office/vba/api/access.docmd.runmacro and
+https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/runmacro-macro-action .
+These document the optional count/predicate combinations, not a fresh Access2003
+execution oracle or full macro compatibility proof.
+
+Validation: existing layout1/1 passed (11.44s); after fixing the actual Eval
+error-metadata defect, core/GUI2/2 passed (9.32s), matching app build. Predicate
+SQL effects/evaluation count, argument combinations, false-first, iteration bound,
+preflight without prefix effects, error/help metadata and actual editor save/reopen
+with omitted count are exercised. No new CTest target or Windows oracle.

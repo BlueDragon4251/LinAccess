@@ -2499,8 +2499,8 @@ void testNativeMacros(MainWindow& window,QSqlDatabase db) {
     const QByteArray code=R"VBA(Sub RepeatMacro()
 DoCmd.RunMacro RepeatCount:=3,MacroName:="Native Macro"
 End Sub
-Sub UnsupportedExpression()
-DoCmd.RunMacro "Native Macro",1,True
+Sub FalseExpression()
+DoCmd.RunMacro "Native Macro",1,False
 End Sub
 Sub MissingMacro()
 DoCmd.RunMacro "No Such Macro"
@@ -2512,7 +2512,7 @@ End Function)VBA");
     AccessFormPreview form("native_macro_context","Begin Form\nBegin Section\nEnd\nEnd",code,db,&window);form.show();QApplication::processEvents();std::vector<VbaValue> args;
     assert(form.executeProcedure("RepeatMacro",args).status==linaccess::VbaExecutionStatus::Completed);
     assert(sql.exec("SELECT COUNT(*),SUM(n) FROM native_macro_effects") && sql.next() && sql.value(0).toInt()==3 && sql.value(1).toInt()==3);sql.finish();
-    assert(form.executeProcedure("UnsupportedExpression",args).errorNumber==3251 && form.executeProcedure("MissingMacro",args).errorNumber==2485);
+    assert(form.executeProcedure("FalseExpression",args).status==linaccess::VbaExecutionStatus::Completed && form.executeProcedure("MissingMacro",args).errorNumber==2485);
     auto application=makePreviewApplicationObject(form);auto macros=application->member("CurrentProject",{}).object->member("AllMacros",{}).object;
     assert(macros->member("Count",{}).number==1 && macros->enumerate().size()==1);
     auto descriptor=macros->member("Item",{VbaValue::string("native macro")}).object;
@@ -2647,6 +2647,38 @@ void testNativeMacroDesigner(MainWindow& window,QSqlDatabase db) {
     auto unknown=definition;unknown.insert("events",QJsonObject{{"UnknownEvent","event_load"}});error=0;try {(void)linaccess::nativeStoredForm("Unknown event",unknown,db);}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==3251);
     unknown=definition;unknown.insert("field_events",QJsonObject{{"missing",QJsonObject{{"OnClick","event_load"}}}});error=0;try {(void)linaccess::nativeStoredForm("Unknown field event",unknown,db);}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==3251);
     unknown=definition;unknown.insert("timer_interval",-1);error=0;try {(void)linaccess::nativeStoredForm("Invalid timer",unknown,db);}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==5);
+}
+
+void testMacroRepeatExpressions(MainWindow& window,QSqlDatabase db) {
+    using linaccess::VbaValue;QSqlQuery sql(db);assert(sql.exec("CREATE TABLE repeat_effects(n INTEGER)"));assert(sql.exec("CREATE TABLE repeat_checks(n INTEGER)"));
+    const auto store=[&](QString kind,QString name,QJsonObject definition) {QSqlQuery save(db);save.prepare("INSERT INTO _la_objects(kind,name,definition) VALUES(?,?,?)");save.addBindValue(kind);save.addBindValue(name);save.addBindValue(QJsonDocument(definition).toJson(QJsonDocument::Compact));assert(save.exec());};
+    const auto action=[](QString name,QJsonArray args=QJsonArray{}) {return QJsonObject{{"action",name},{"arguments",args}};};
+    const auto macro=[&](QString name,QJsonArray actions) {store("macro",name,{{"version",1},{"actions",actions}});};
+    store("module","RepeatPredicates",{{"version",1},{"vba",R"VBA(Public Function RepeatPredicate() As Boolean
+CurrentDb.Execute "INSERT INTO repeat_checks VALUES(1)"
+RepeatPredicate=(DCount("*","repeat_effects")<3)
+End Function
+Public Function RepeatFailure() As Boolean
+Err.Raise 7002,"RepeatPredicate","deliberate repeat failure"
+End Function)VBA"}});
+    macro("RepeatBody",{action("RunSQL",{"INSERT INTO repeat_effects VALUES(1)"})});
+    const auto generation=window.property("la_project_generation");linaccess::NativeStandardModuleHost host(&window,db,[&] {if(window.property("la_project_generation")!=generation) throw linaccess::VbaRuntimeError(3420,"Project changed");});auto commands=host.applicationObject()->member("DoCmd",{}).object;
+    const auto count=[&](QString table) {QSqlQuery query(db);assert(query.exec("SELECT COUNT(*) FROM "+table) && query.next());return query.value(0).toInt();};
+    commands->member("RunMacro",{VbaValue::string("RepeatBody"),VbaValue::missing(),VbaValue::logical(false)});assert(count("repeat_effects")==0);
+    commands->member("RunMacro",{VbaValue::string("RepeatBody"),VbaValue::longInteger(2),VbaValue::logical(true)});assert(count("repeat_effects")==2);assert(sql.exec("DELETE FROM repeat_effects"));
+    commands->member("RunMacro",{VbaValue::string("RepeatBody"),VbaValue::missing(),VbaValue::string("RepeatPredicate()")});assert(count("repeat_effects")==3 && count("repeat_checks")==4);
+    commands->member("RunMacro",{VbaValue::string("RepeatBody"),VbaValue::longInteger(2),VbaValue::string("DCount(\"*\",\"repeat_effects\")<10")});assert(count("repeat_effects")==5);
+    int error=0;try {(void)commands->member("RunMacro",{VbaValue::string("RepeatBody"),VbaValue::missing(),VbaValue::string("RepeatFailure()")});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;assert(failure.source=="RepeatPredicate" && std::string(failure.what()).find("Wiederholung 1")!=std::string::npos);}assert(error==7002 && count("repeat_effects")==5);
+    macro("RepeatInvalid",{action("RunSQL",{"INSERT INTO repeat_effects VALUES(999)"}),action("RunMacro",{"RepeatBody",QJsonValue(QJsonValue::Null),"("})});error=0;try {(void)commands->member("RunMacro",{VbaValue::string("RepeatInvalid")});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==3251 && count("repeat_effects")==5);
+    macro("RepeatChildStop",{action("StopMacro")});macro("RepeatUnbounded",{action("RunMacro",{"RepeatChildStop"})});error=0;try {(void)commands->member("RunMacro",{VbaValue::string("RepeatUnbounded"),VbaValue::missing(),VbaValue::logical(true)});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;assert(std::string(failure.what()).find("iteration budget")!=std::string::npos);}assert(error==3251 && count("repeat_effects")==5);
+    assert(sql.exec("DELETE FROM repeat_effects") && sql.exec("DELETE FROM repeat_checks"));
+    QTimer::singleShot(0,&window,[&] {auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-macro-designer");dialog->findChild<QLineEdit*>("native-macro-name")->setText("RepeatUi");auto* list=dialog->findChild<QTableWidget*>("native-macro-actions");qobject_cast<QComboBox*>(list->cellWidget(0,0))->setCurrentText("RunMacro");list->item(0,1)->setText("RepeatBody");list->item(0,2)->setText("");list->item(0,3)->setText("RepeatPredicate()");QApplication::setActiveWindow(dialog);dialog->activateWindow();list->setFocus();QApplication::processEvents();QTest::keyClick(list,Qt::Key_S,Qt::ControlModifier);QApplication::processEvents();assert(dialog->isVisible() && !dialog->isWindowModified());dialog->reject();});
+    ::action(window,"+ Makro")->trigger();
+    assert(sql.exec("SELECT definition FROM _la_objects WHERE kind='macro' AND name='RepeatUi'") && sql.next());const auto arguments=QJsonDocument::fromJson(sql.value(0).toByteArray()).object().value("actions").toArray()[0].toObject().value("arguments").toArray();assert(arguments.size()==3 && arguments[1].isNull() && arguments[2].toString()=="RepeatPredicate()");sql.finish();
+    auto* explorer=window.findChild<QTreeWidget*>("database-explorer");QTreeWidgetItem* item=nullptr;for(auto* candidate:explorer->findItems("RepeatUi",Qt::MatchExactly|Qt::MatchRecursive,0)) if(candidate->data(0,Qt::UserRole).toString()=="macro") item=candidate;assert(item);
+    QTimer::singleShot(0,&window,[&] {auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-macro-designer");auto* list=dialog->findChild<QTableWidget*>("native-macro-actions");assert(list->item(0,2)->text().isEmpty() && list->item(0,3)->text()=="RepeatPredicate()");dialog->reject();});QMetaObject::invokeMethod(explorer,"itemDoubleClicked",Qt::DirectConnection,Q_ARG(QTreeWidgetItem*,item),Q_ARG(int,0));
+    commands->member("RunMacro",{VbaValue::string("RepeatUi")});assert(count("repeat_effects")==3 && count("repeat_checks")==4);
+    assert(sql.exec("DELETE FROM _la_objects WHERE kind='module' AND name='RepeatPredicates'"));
 }
 
 void testNativeAutoExec(MainWindow& window,QSqlDatabase db) {
@@ -3788,6 +3820,7 @@ End Sub
     testNativeMacroDesigner(window,db);
     testNativeModuleEditor(window,db);
     testStandaloneMacroExecution(window,db);
+    testMacroRepeatExpressions(window,db);
     testNativeAutoExec(window,db);
     assert(window.close()); dispose(); watchdog.stop();
     std::cout<<"Main window: native project/explorer opening, independent nonmodal form/report lifetime, deduplication, modal metadata, cancellation, SQL save and retained close/MsgBox passed\n";

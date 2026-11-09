@@ -2617,3 +2617,24 @@ persistiertem Vorläufer und erfolgreichem Shift-Neustart, gehaltene Application
 nach tatsächlichem Projektwechsel3420. Keine neue CTest-ID/Windows-Beobachtung/
 Gesamtsuite; Paket gehört vorherigem db892cc-Stand. NATIVE_AUTOEXEC_RUNTIME.md;
 F088/F042/F050/F121/F148 und456/384/72 unverändert. Direkt weiter.
+
+
+RunMacro RepeatExpression implementiert, in API und nativem Aktionseditor:
+Bedingung vor jedem Versuch; Anzahl allein begrenzt, Bedingung allein bisFalse,
+beide bis erster Grenze, beide ausgelassen einmal. Bool-/Zahlkonstanten über
+native String-/Expression-Konvertierung, Textsyntax bis4096 UTF16 vor Effekten.
+Ausgelassene Count-Position im nativen JSON ausschließlich für RunMacro als null
+(Missing); Editor-Save/Reopen erhält leere Anzahl und Argument3. Ohne Count max
+1000 abgeschlossene Wiederholungen; weiterer wahrer Versuch3251, abschließendes
+False normal. Gemeinsame16-/10000-Aktionsbudgets und StopMacro unverändert.
+Layout1/1 (11,44s) bestand im Bündel, GUI fand verlorene Fehlerquelle im alten
+VbaHost::eval-Pfad. Erklärung/Source/HelpFile/HelpContext dort korrekt weitergereicht,
+gezielt bestehende Kern-/GUI2/2 (9,32s) bestanden, App gebaut: reale DAO-Predicate-
+Effekte3/Prüfungen4, Count+Expr, False0/TrueCount, Fehler7002 samt Wiederholungs-
+kontext und separater Kern-Source/Help42-Nachweis, ungültige spätere Expr ohne
+Präfixeffekt, nichtendender verschachtelter Noop an1000er-Grenze, danach UI-
+Erstellung/CtrlS/Wiederöffnen und erneuter erfolgreicher Ablauf. Alte explizite
+False-RepeatExpression-Verweigerung auf tatsächlichen erfolgreichen Null-Durchlauf
+umgestellt. Keine neue CTest-ID/Gesamtsuite/Windows-Beobachtung/Paketprüfung;
+aktuelles DEB gehört db892cc. NATIVE_MACROS_RUNTIME.md; F088/F041/F051/F118/F148
+und456/384/72 unverändert. Direkt weiter mit nativen Makrogruppen.

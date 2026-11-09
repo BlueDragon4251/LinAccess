@@ -2437,7 +2437,7 @@ VbaValue VbaHost::eval(std::string_view source) {
         const auto result=executeVbaProcedureWithArguments(*module,name,*this,arguments);
         if(vbaExecutionStopRequested() || epoch!=vbaExecutionEpoch()) throw VbaExecutionStopped{};
         if (result.status!=VbaExecutionStatus::Completed || !result.typedReturnValue)
-            throw VbaRuntimeError(result.errorNumber ? result.errorNumber : 2425,"Eval function execution failed");
+            throw VbaRuntimeError(result.errorNumber ? result.errorNumber : 2425,result.explanation.empty() ? "Eval function execution failed" : result.explanation,result.errorSource,result.errorHelpFile,result.errorHelpContext);
         return *result.typedReturnValue;
     };
     const VbaVariables variables;

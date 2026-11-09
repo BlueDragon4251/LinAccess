@@ -1110,6 +1110,9 @@ End Function
 Public Function NeedCancel(Cancel As Integer) As Long
 NeedCancel=Cancel
 End Function
+Public Function EvalFailure() As Long
+Err.Raise 7002,"eval.source","eval.detail","eval.chm",42
+End Function
 Public Function RecurseEval() As Variant
 RecurseEval=Eval("RecurseEval()")
 End Function
@@ -1122,6 +1125,7 @@ DoCmd.RunSQL "INSERT INTO markers VALUES(99)"
 End Sub
 )VBA";
         assert(host.eval("PlusOne(7)").asNumber()==8);
+        try {(void)host.eval("EvalFailure()");assert(false);}catch(const VbaRuntimeError& failure) {assert(failure.number==7002 && failure.source=="eval.source" && failure.helpFile=="eval.chm" && failure.helpContext==42 && std::string(failure.what())=="eval.detail");}
         for (const auto& [expression,number]:std::vector<std::pair<std::string,int>>{
             {"PlusOne()",450},{"NeedCancel()",450},{"Hidden()",2425},{"NotAFunction()",2425},{"Unknown()",2425},{"RecurseEval()",28}}) {
             try { (void)host.eval(expression); assert(false); }

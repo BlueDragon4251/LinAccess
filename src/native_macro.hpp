@@ -20,11 +20,18 @@ inline const QVector<NativeMacroSignature>& nativeMacroSignatures() {
         {"RunSQL",{"text","boolean"},1},{"OpenTable",{"text","long","long"},1},
         {"OpenQuery",{"text","long","long"},1},{"OpenForm",{"text","long"},1},
         {"OpenReport",{"text","long"},1},{"RunCommand",{"long"},1},
-        {"RunCode",{"text"},1},{"Requery",{"text"},0},{"StopMacro",{},0},{"CancelEvent",{},0},{"RunMacro",{"text","long"},1}};
+        {"RunCode",{"text"},1},{"Requery",{"text"},0},{"StopMacro",{},0},{"CancelEvent",{},0},{"RunMacro",{"text","long","text"},1}};
     return signatures;
 }
 inline bool nativeMacroNameValid(const QString& name) {
     return !name.trimmed().isEmpty() && name.size()<=64 && name.isValidUtf16() && !name.contains(QChar(0)) && !name.contains('.') && !name.trimmed().startsWith('=') && !name.trimmed().startsWith('[');
+}
+inline std::optional<QString> nativeMacroRepeatExpression(const QString& value) {
+    const auto expression=value.trimmed();
+    if(expression.size()>4096 || !expression.isValidUtf16() || expression.contains(QChar(0))) throw VbaRuntimeError(5,"Invalid RunMacro repeat expression text");
+    if(expression.isEmpty()) return {};
+    if(!validVbaExpression(expression.toUtf8().toStdString())) throw VbaRuntimeError(3251,"RunMacro repeat expression syntax unsupported");
+    return expression;
 }
 struct NativeMacroAction {QString name;std::vector<VbaValue> arguments;std::optional<QString> condition;};
 inline QVector<NativeMacroAction> parseNativeMacro(const QJsonObject& definition) {
@@ -52,10 +59,12 @@ inline QVector<NativeMacroAction> parseNativeMacro(const QJsonObject& definition
         }
         for(int index=0;index<arguments.size();++index) {
             const auto value=arguments[index];const auto type=signature->types[index];
+            if(signature->name=="RunMacro" && index==1 && value.isNull()) {action.arguments.push_back(VbaValue::missing());continue;}
             if(type=="text" && value.isString()) {
                 const auto text=value.toString();if(text.size()>262144 || !text.isValidUtf16() || text.contains(QChar(0))) throw VbaRuntimeError(5,"Invalid native macro text");
                 if(index==0 && signature->required && text.trimmed().isEmpty()) throw VbaRuntimeError(5,"Native macro target cannot be empty");
                 if(signature->name=="RunCode") (void)nativeMacroFunctionName(text);
+                if(signature->name=="RunMacro" && index==2) (void)nativeMacroRepeatExpression(text);
                 action.arguments.push_back(VbaValue::string(text.toUtf8().toStdString()));
             } else if(type=="boolean" && value.isBool()) action.arguments.push_back(VbaValue::logical(value.toBool()));
             else if(type=="long" && value.isDouble() && std::isfinite(value.toDouble()) && std::trunc(value.toDouble())==value.toDouble()

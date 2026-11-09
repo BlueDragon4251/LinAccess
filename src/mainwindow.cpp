@@ -2204,7 +2204,7 @@ void MainWindow::editMacro(const QString& existingName) {
     tagProjectObject(&dialog,this,db_,"macro",existingName);
     auto* layout=new QVBoxLayout(&dialog);auto* name=new QLineEdit(existingName,&dialog);name->setObjectName("native-macro-name");name->setMaxLength(64);name->setPlaceholderText("Name des Makros");layout->addWidget(name);
     auto* list=new QTableWidget(0,5,&dialog);list->setObjectName("native-macro-actions");list->setHorizontalHeaderLabels({"Aktion","Argument 1 (Ziel / SQL / Befehl)","Argument 2 (optional)","Argument 3 (optional)","Bedingung (optional)"});list->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);list->setSelectionBehavior(QAbstractItemView::SelectRows);layout->addWidget(list);
-    auto* help=new QLabel("Aktionen werden von oben nach unten ausgeführt. RunSQL: SQL und optional Ja/Nein für Transaktion; Öffnen: Objektname und optionale numerische Ansicht/Modus; RunCommand: Befehlsnummer; Requery: optionaler Steuerelementname. StopMacro beendet den aktuellen Ablauf. Bedingungen verwenden Access-Ausdrücke; leer bedeutet immer ausführen.",&dialog);help->setWordWrap(true);layout->addWidget(help);
+    auto* help=new QLabel("Aktionen werden von oben nach unten ausgeführt. RunSQL: SQL und optional Ja/Nein für Transaktion; Öffnen: Objektname und optionale numerische Ansicht/Modus; RunCommand: Befehlsnummer; Requery: optionaler Steuerelementname. RunMacro: Makroname, optionale Anzahl und Wiederholungsbedingung; bei Bedingung darf die Anzahl leer bleiben. StopMacro beendet den aktuellen Ablauf. Bedingungen verwenden Access-Ausdrücke; leer bedeutet immer ausführen.",&dialog);help->setWordWrap(true);layout->addWidget(help);
     auto* buttons=new QHBoxLayout;auto* add=addButton(buttons,"Aktion hinzufügen");add->setObjectName("native-macro-add");auto* remove=addButton(buttons,"Aktion entfernen");auto* up=addButton(buttons,"Nach oben");auto* down=addButton(buttons,"Nach unten");auto* save=addButton(buttons,"Speichern");save->setObjectName("native-macro-save");layout->addLayout(buttons);installDesignerSaveShortcut(dialog,save);
     const auto append=[&](const QJsonObject& entry) {
         const int row=list->rowCount();if(row>=256) return;list->insertRow(row);
@@ -2231,7 +2231,8 @@ void MainWindow::editMacro(const QString& existingName) {
                 QJsonArray arguments;
                 for(int index=0;index<count;++index) {
                     const auto value=list->item(row,index+1)->text(),type=signature->types[index];
-                    if(type=="text") arguments.append(value);
+                    if(action=="RunMacro" && index==1 && value.trimmed().isEmpty()) arguments.append(QJsonValue(QJsonValue::Null));
+                    else if(type=="text") arguments.append(value);
                     else if(type=="boolean") {if(value.compare("Ja",Qt::CaseInsensitive)==0 || value.compare("True",Qt::CaseInsensitive)==0) arguments.append(true);else if(value.compare("Nein",Qt::CaseInsensitive)==0 || value.compare("False",Qt::CaseInsensitive)==0) arguments.append(false);else throw linaccess::VbaRuntimeError(13,"Transaktion erfordert Ja oder Nein.");}
                     else {bool valid=false;const auto integer=value.toLongLong(&valid);if(!valid || integer<std::numeric_limits<qint32>::min() || integer>std::numeric_limits<qint32>::max()) throw linaccess::VbaRuntimeError(13,"Makroargument erfordert eine 32-Bit-Ganzzahl.");arguments.append(static_cast<int>(integer));}
                 }
