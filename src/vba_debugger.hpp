@@ -10,7 +10,7 @@
 #include <vector>
 namespace linaccess {
 enum class VbaDebugAction { Continue, StepInto, StepOver, StepOut, Stop, SkipError };
-enum class VbaDebugReason { Breakpoint, Step, Error };
+enum class VbaDebugReason { Breakpoint, Step, Error, Stop, Assertion };
 struct VbaDebugError {int number{};std::string description,source,helpFile;int helpContext{};};
 struct VbaDebugVariable {
     std::string name,declaredType,valueType,value;
@@ -52,6 +52,7 @@ public:
     VbaDebugFrameScope(const VbaDebugFrameScope&)=delete;
     VbaDebugFrameScope& operator=(const VbaDebugFrameScope&)=delete;
     void checkpoint(int line,std::size_t instruction,bool executable);
+    void halt(VbaDebugReason reason);
     bool unhandled(const VbaDebugError& error,bool recoverable=true,int line=0);
 private:
     std::shared_ptr<VbaDebuggerState> state_;std::uint64_t id_{};

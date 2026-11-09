@@ -7826,3 +7826,29 @@ Separater Qt-freier Build/Kernlauf ebenfalls bestanden; ldd ohne Qt. Keine neuen
 CTest-IDs/Original-/Windows-/frische Gesamtsuitenbehauptung. Anwendung neu gebaut;
 letzte geprüfte DEB weiterhin eaaeb73. F040/F042/F043/F045/F051/F068 bleiben offen;
 Katalog456/386 bestätigte Teilumfänge/70 offene Vollanforderungen unverändert.
+
+
+## 2026-11-09: Stop und Debug.Assert im echten Debugger
+
+Native Interpreter-Anweisungen halten mit eigenen Stop-/Assertion-Gründen an
+Originalzeilen und lebenden Variablen. Fortsetzen/Schritt/Beenden, eager vollständige
+Boolean-Auswertung, einmaliger Standardgetter und Err-Erhalt unter ResumeNext
+sind im bestehenden Umfang eingebunden. Ohne Debuggersitzung wird benötigter Halt
+3251 gemeldet; kein stiller Erfolg. Echter Modul-Editor/Debugger prüft Status,
+Variable17 und tatsächliche SQL-Fortsetzung18 mit anschließender Test-Rücknahme.
+Bestehendes Kernel-/GUI-Bündel2/2 (14,49s) bestanden; Anwendung gebaut. Keine neuen
+CTest-IDs oder weiteren Original-/Windows-/Gesamtsuiten-/Qt-frei-Nachweise für diese
+Stop-Erweiterung; Details in NATIVE_VBA_DEBUGGER_RUNTIME.md.
+
+GitHub-CLI-Token wurde nach931ea64 ungültig. Vorhandener GitHub-Connector besitzt
+weiterhin bestätigten Schreibzugriff auf das private Repository. Die vorige
+bedingte-Kompilierung-Etappe wurde darüber als1a599f6 veröffentlicht und per Ref
+verifiziert: gleicher vollständiger Git-Dateibaum37583763b86188457803ca22944c4911e2c9c9af
+wie lokaler6f95ca0, lediglich Veröffentlichungsmetadaten/neue Commit-ID. Ungepushtes
+Originalobjekt bleibt als lokaler Sicherungsref erhalten; Arbeitsdateien unverändert.
+Kein Token wurde gelesen/ersetzt/gespeichert. Wiederverwendbarer kontrollierter
+Veröffentlichungshelfer außerhalb Git: /workspace/work/github-connector/publish.mjs
+(über functions.exec/tools ausführen; Blob-/Tree-SHA, private Sichtbarkeit und
+Fast-forward-Lease werden geprüft, lokale identische Remote-Commitobjekte übernommen).
+F040/F045/F051/F060-Status und Katalog456/386/70 unverändert. Letzte geprüfteDEB eaaeb73;
+frisches Paket folgt aus dem aktuellen Quellstand.

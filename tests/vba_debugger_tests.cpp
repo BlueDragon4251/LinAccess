@@ -64,4 +64,37 @@ End Sub)VBA";
     host.messages.clear();active=nullptr;int polls=0;{VbaDebuggerSession debugger([](const VbaDebugPause& pause) {assert(pause.reason==VbaDebugReason::Step);return VbaDebugAction::Stop;},{},[&] {if(++polls==1) active->requestPause();});active=&debugger;const auto outcome=executeVbaProcedure("Sub LongRun()\nDim n As Long\nFor n=1 To 30\nNext\nMsgBox \"wrong\"\nEnd Sub","LongRun",host);assert(outcome.status==VbaExecutionStatus::Completed && outcome.exitSub && debugger.aborted() && host.messages.empty() && polls>=1);}
     {VbaDebuggerSession debugger([](const auto&) -> VbaDebugAction {throw std::runtime_error("debug callback failure");},{},{},true);assert(executeVbaProcedure(recover,"Recover",host).status==VbaExecutionStatus::Completed && debugger.aborted() && debugger.failure()=="debug callback failure");}
     assert(!vbaDebuggerBusy() && !vbaDebuggerActive());assert(executeVbaProcedure("Sub Fresh()\nMsgBox \"fresh\"\nEnd Sub","Fresh",host).status==VbaExecutionStatus::Completed && host.messages==std::vector<std::string>({"fresh"}));
+
+    const std::string explicitHalt="Sub ExplicitHalt()\nDim n As Long\nn=17\nOn Error Resume Next\nStop\nDebug.Assert n=18\nn=n+1\nMsgBox CStr(n) & \":\" & CStr(Err.Number)\nEnd Sub";
+    host.messages.clear();pauses=0;active=nullptr;
+    {
+        VbaDebuggerSession debugger([&](const VbaDebugPause& pause) {
+            ++pauses;assert(pause.reason==(pauses==1 ? VbaDebugReason::Stop : VbaDebugReason::Assertion));
+            assert(!pause.error && !pause.recoverable && pause.frames.back().line==(pauses==1 ? 5 : 6));
+            assert(active && variable(active->variables(pause.frames.back().id),"n").value=="17");
+            return VbaDebugAction::Continue;
+        });active=&debugger;
+        assert(executeVbaProcedure(explicitHalt,"ExplicitHalt",host).status==VbaExecutionStatus::Completed && !debugger.aborted());
+    }
+    assert(pauses==2 && host.messages==std::vector<std::string>({"18:0"}));
+    host.messages.clear();{
+        VbaDebuggerSession debugger([](const VbaDebugPause& pause){assert(pause.reason==VbaDebugReason::Stop);return VbaDebugAction::Stop;});
+        const auto result=executeVbaProcedure(explicitHalt,"ExplicitHalt",host);assert(result.status==VbaExecutionStatus::Completed && result.exitSub && debugger.aborted() && host.messages.empty());
+    }
+    for(const auto* statement:{"Stop","Debug.Assert False"}) {
+        const auto source=std::string("Sub NoDebugger()\n")+statement+"\nMsgBox \"wrong\"\nEnd Sub";
+        const auto result=executeVbaProcedure(source,"NoDebugger",host);assert(result.status==VbaExecutionStatus::Error && result.errorNumber==3251 && host.messages.empty());
+    }
+    host.object->reads=0;
+    assert(executeVbaProcedure("Sub TrueAssertion()\nDebug.Assert Observed\nEnd Sub","TrueAssertion",host).status==VbaExecutionStatus::Completed && host.object->reads==1);
+    const auto invalidAssert=executeVbaProcedure("Sub InvalidAssert()\nMsgBox \"wrong\"\nDebug.Assert True,False\nEnd Sub","InvalidAssert",host);assert(invalidAssert.status!=VbaExecutionStatus::Completed && host.messages.empty());
+    {
+        VbaDebuggerSession debugger([](const auto&){assert(false);return VbaDebugAction::Stop;});
+        assert(executeVbaProcedure("Sub SkippedHalt()\nIf False Then\nStop\nDebug.Assert False\nEnd If\nEnd Sub","SkippedHalt",host).status==VbaExecutionStatus::Completed);
+    }
+    const std::string eagerAssert="Sub EagerAssert()\nDim touched As Long\nDebug.Assert False And Touch(touched)\nMsgBox CStr(touched)\nEnd Sub\nFunction Touch(ByRef n As Long) As Boolean\nn=n+1\nTouch=True\nEnd Function";
+    {
+        VbaDebuggerSession debugger([&](const VbaDebugPause& pause){assert(pause.reason==VbaDebugReason::Assertion && pause.frames.size()==1 && variable(active->variables(pause.frames.back().id),"touched").value=="1");return VbaDebugAction::Continue;});active=&debugger;
+        assert(executeVbaProcedure(eagerAssert,"EagerAssert",host).status==VbaExecutionStatus::Completed && host.messages==std::vector<std::string>({"1"}));
+    }
 }

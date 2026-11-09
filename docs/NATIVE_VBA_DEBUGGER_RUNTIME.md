@@ -48,3 +48,31 @@ und native gerufene Prozeduren verwenden dieselben Interpreterrahmen, soweit
 sie vom vorhandenen Interpreter unterstützt werden. Unbekannte Modulquellen
 werden als unbekannt beschriftet. Sprach- und Ausführungsgrenzen bleiben explizit;
 insbesondere ist der ursprüngliche Kassa-F129-Fehler3075 weiterhin offen.
+
+
+## Explicit Stop and Debug.Assert
+
+Stop and Debug.Assert BooleanExpression are native interpreter statements.
+An active debugger suspends at the original statement line with unchanged live
+frames/variables. Continue resumes after the statement; Step/Stop use the existing
+session controls. A true assertion evaluates once without a halt. A false or Null
+assertion halts; the whole expression is evaluated eagerly, including the second
+operand of And/Or. Scalar default getters are evaluated once. These halts are not
+runtime errors, do not overwrite Err, and remain visible under On Error Resume
+Next. They have distinct Stop/Assertion reasons, with existing enum values intact.
+The actual debugger dialog labels both cases and disables error-only continuation.
+
+Without an active native debugger, Stop or a failed assertion raises explicit3251
+rather than silently continuing. The saved-module editor already creates a debugger
+session for Run/F5; this does not automatically create one for every form event or
+standalone host. It adds no Debug.Print/Immediate window, complete IDE lifecycle,
+Windows modal/event oracle or general VBA parity. Malformed assertions fail normal
+whole-procedure preflight before host effects. MS-VBAL5.4.2.11/5.4.2.23 are the
+normative basis; Stop resumption is explicitly implementation-defined there.
+
+Existing core tests cover live variables, Continue/Stop, eager ByRef operand effects,
+inactive branches, default getter identity, Err preservation and unavailable-host
+errors. The existing document test drives the real Stop/Assert dialog, reads the
+actual local variable, resumes and checks actual SQL before rollback. Final targeted
+core/GUI2/2 passed (14.49s); no new CTest ID, Windows or original-workflow claim.
+F040/F045/F051/F060 remain at their existing documented catalog statuses.

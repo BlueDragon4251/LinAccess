@@ -2810,6 +2810,14 @@ End Function
 Public Function NativeFailure() As Long
 Err.Raise 7001, "NativeRun", "deliberate failure"
 End Function
+Public Sub NativeHaltProbe()
+Dim n As Long
+n=17
+Stop
+Debug.Assert n=18
+n=n+1
+CurrentDb.Execute "INSERT INTO editor_module_effects VALUES(" & CStr(n) & ")"
+End Sub
 Public Sub NativeExecute()
 CurrentDb.Execute "INSERT INTO editor_module_effects VALUES(" & Application.Run("NativeSupport",NativeAdd(1)) & ")"
 End Sub
@@ -2926,9 +2934,22 @@ End Function)VBA"}}).toJson(QJsonDocument::Compact));assert(sql.exec());sql.fini
     open([&](QDialog* dialog) {
         auto* choices=dialog->findChild<QComboBox*>("native-module-procedure");auto* run=dialog->findChild<QPushButton*>("native-module-run");auto* result=dialog->findChild<QTextBrowser*>("native-module-result");auto* editor=dialog->findChild<QPlainTextEdit*>("native-module-source");assert(choices && run && result && editor);
         const auto select=[&](const QString& name) {const int index=choices->findData(name);assert(index>=0);choices->setCurrentIndex(index);};
-        QTimer debugErrors;debugErrors.setInterval(1);QObject::connect(&debugErrors,&QTimer::timeout,dialog,[&] {auto* debugger=dialog->findChild<QDialog*>("native-module-debugger");if(!debugger || !debugger->isVisible()) return;if(auto* resume=debugger->findChild<QPushButton*>("native-debugger-continue");resume && resume->isEnabled()) resume->click();else if(auto* close=debugger->findChild<QPushButton*>("native-debugger-close");close && close->isEnabled()) close->click();});debugErrors.start();
+        bool sawStop=false,sawAssertion=false;
+        QTimer debugErrors;debugErrors.setInterval(1);QObject::connect(&debugErrors,&QTimer::timeout,dialog,[&] {auto* debugger=dialog->findChild<QDialog*>("native-module-debugger");if(!debugger || !debugger->isVisible()) return;
+            if(auto* status=debugger->findChild<QLabel*>("native-debugger-status")) {
+                if(status->text().startsWith("Stop-Anweisung") || status->text().startsWith("Debug.Assert")) {
+                    auto* locals=debugger->findChild<QTreeWidget*>("native-debugger-locals");assert(locals);bool found=false;
+                    for(int i=0;i<locals->topLevelItemCount();++i) if(locals->topLevelItem(i)->text(0)=="n") {assert(locals->topLevelItem(i)->text(3)=="17");found=true;}assert(found);
+                    sawStop|=status->text().startsWith("Stop-Anweisung");sawAssertion|=status->text().startsWith("Debug.Assert");
+                }
+            }
+            if(auto* resume=debugger->findChild<QPushButton*>("native-debugger-continue");resume && resume->isEnabled()) resume->click();else if(auto* close=debugger->findChild<QPushButton*>("native-debugger-close");close && close->isEnabled()) close->click();});debugErrors.start();
         select("NativeExecute");QApplication::setActiveWindow(dialog);dialog->activateWindow();editor->setFocus();QApplication::processEvents();QTest::keyClick(editor,Qt::Key_F5);QApplication::processEvents();assert(result->toPlainText().startsWith("Prozedur ausgeführt."));
         assert(sql.exec("SELECT n FROM editor_module_effects") && sql.next() && sql.value(0).toInt()==22 && !sql.next());sql.finish();
+        assert(sql.exec("SAVEPOINT native_halt_probe"));select("NativeHaltProbe");run->click();
+        assert(sawStop && sawAssertion && result->toPlainText().startsWith("Prozedur ausgeführt."));
+        assert(sql.exec("SELECT COUNT(*) FROM editor_module_effects WHERE n=18") && sql.next() && sql.value(0).toInt()==1);sql.finish();
+        assert(sql.exec("ROLLBACK TO native_halt_probe") && sql.exec("RELEASE native_halt_probe"));
         assert(application->member("Run",{VbaValue::string("NativeCounter")}).number==44);
         select("NativeCounter");run->click();assert(result->toPlainText().contains("Rückgabewert: 44"));
         select("NativeApplicationEval");run->click();assert(result->toPlainText().contains("Rückgabewert: 7"));

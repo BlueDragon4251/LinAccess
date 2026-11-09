@@ -56,7 +56,7 @@ struct BranchDestination {
     int conditionalUnwind{},withUnwind{},forUnwind{};
 };
 struct Statement {
-    enum class Type { With, EndWith, Select, Case, EndSelect, SendKeys, Directory, FileCopy, FileRename, FileKill, If, ElseIf, Else, EndIf, For, ForEach, ExitFor, Next, Evaluate, Save, Maximize, GoLast,
+    enum class Type { DebugStop, DebugAssert, With, EndWith, Select, Case, EndSelect, SendKeys, Directory, FileCopy, FileRename, FileKill, If, ElseIf, Else, EndIf, For, ForEach, ExitFor, Next, Evaluate, Save, Maximize, GoLast,
                       GoNext, GoNew, Requery,
                       ExecuteSql, OpenForm, ControlRequery, ControlFocus, ControlVisible,
                       Call, SetField, IndexedAssign, ResizeArray, EraseArray, SetVar, StringAlign, Exit, Dim, ObjectSet, ObjectAssign, ObjectCall, While, EndWhile, ExitDo, Quit, RaiseError, ErrorResumeNext, ErrorDisable, Label, Jump, GoSub, ComputedJump, ComputedGoSub, ReturnSubroutine, ErrorHandler, Resume, ResumeNext, ResumeLabel } type;
@@ -608,6 +608,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
     const std::regex variableAssignment(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*=\s*(.+)$)", std::regex::icase);
     const std::regex stringAlignment(R"(^(LSet|RSet)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*=\s*(.+)$)",std::regex::icase);
     const std::regex message(R"(^MsgBox(?:\s+(.+)|\((.*)\))$)", std::regex::icase);
+    const std::regex debugAssert(R"(^Debug\s*\.\s*Assert\s+(.+)$)",std::regex::icase);
     const std::regex evaluation(R"(^Eval(?:\s+(.+)|\((.*)\))$)",std::regex::icase);
     const std::regex save(R"(^DoCmd\s*\.\s*RunCommand\s+acCmdSaveRecord$)", std::regex::icase);
     const std::regex maximize(R"(^DoCmd\s*\.\s*Maximize\s*$)", std::regex::icase);
@@ -1133,6 +1134,12 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
             const auto expr = "MsgBox("+trim(match[1].matched ? match[1].str() : match[2].str())+")";
             if (!validExpression(expr)) return {VbaExecutionStatus::Unsupported, "MsgBox argument syntax unsupported", line};
             statements.push_back({Statement::Type::Evaluate, {}, expr, line});
+        } else if(normalized=="stop") {
+            statements.push_back({Statement::Type::DebugStop,{},{},line});
+        } else if(std::regex_match(source,match,debugAssert)) {
+            const auto expression=trim(match[1].str());
+            if(!validExpression(expression)) return {VbaExecutionStatus::Unsupported,"Debug.Assert condition syntax unsupported",line};
+            statements.push_back({Statement::Type::DebugAssert,{},expression,line});
         } else if (std::regex_match(source,match,evaluation)) {
             const auto expr="Eval("+trim(match[1].matched ? match[1].str() : match[2].str())+")";
             if (!validExpression(expr)) return {VbaExecutionStatus::Unsupported,"Eval argument syntax unsupported",line};
@@ -2435,6 +2442,13 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                     return {VbaExecutionStatus::Error, "End If ohne If", instruction.line};
                 active = frames.back().parent;
                 frames.pop_back();
+                break;
+            case Statement::Type::DebugStop:
+            case Statement::Type::DebugAssert:
+                if(active && (instruction.type==Statement::Type::DebugStop || !vbaBooleanCondition(evaluate(instruction.expression)))) {
+                    if(!debugger) throw VbaRuntimeError(3251,"Stop/failed Debug.Assert requires a native debugger session");
+                    debugger->halt(instruction.type==Statement::Type::DebugStop ? VbaDebugReason::Stop : VbaDebugReason::Assertion);
+                }
                 break;
             case Statement::Type::Evaluate:
                 if (active) {

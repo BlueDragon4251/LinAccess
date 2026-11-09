@@ -92,6 +92,12 @@ void VbaDebugFrameScope::checkpoint(int line,std::size_t instruction,bool execut
     const bool step=state_->pauseRequested || state_->mode==VbaDebugAction::StepInto || ((state_->mode==VbaDebugAction::StepOver || state_->mode==VbaDebugAction::StepOut) && state_->frames.size()<=state_->stepDepth);
     if(breakpoint || step) (void)state_->pause(breakpoint ? VbaDebugReason::Breakpoint : VbaDebugReason::Step);
 }
+void VbaDebugFrameScope::halt(VbaDebugReason reason) {
+    if(reason!=VbaDebugReason::Stop && reason!=VbaDebugReason::Assertion) throw VbaRuntimeError(5,"Invalid explicit debugger halt");
+    if(!state_ || !state_->active) throw VbaRuntimeError(3251,"Explicit halt requires a native debugger session");
+    if(state_->aborted) throw VbaExecutionStopped{};
+    (void)state_->pause(reason);
+}
 bool VbaDebugFrameScope::unhandled(const VbaDebugError& error,bool recoverable,int line) {
     if(!state_ || !state_->active || state_->propagating) return false;if(line>0) state_->frame(id_).info.line=line;if(state_->aborted) throw VbaExecutionStopped{};for(const auto& frame:state_->frames) {if(frame.info.id==id_) break;if(frame.handlesError && frame.handlesError()) return false;}return state_->pause(VbaDebugReason::Error,&error,recoverable)==VbaDebugAction::SkipError;
 }
