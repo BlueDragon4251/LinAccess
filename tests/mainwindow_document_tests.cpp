@@ -2916,6 +2916,34 @@ int main(int argc,char** argv) {
     {auto* tree=window.findChild<QTreeWidget*>();bool selected=false;for(auto* item:tree->findItems("Owned rename query",Qt::MatchExactly|Qt::MatchRecursive,0)) if(item->data(0,Qt::UserRole).toString()=="query") {tree->setCurrentItem(item);selected=true;break;}assert(selected);}
     QTimer::singleShot(0,&window,[] {auto* input=qobject_cast<QInputDialog*>(QApplication::activeModalWidget());assert(input && input->objectName()=="native-query-rename");input->setTextValue("Renamed query Ä");input->accept();});window.findChild<QAction*>("native-query-rename")->trigger();
     {bool owned=false;assert(linaccess::accessQuerySource(db,"Renamed query Ä",nullptr,&owned)=="SELECT qty FROM authored_renamed" && owned);assert(linaccess::datasheet_page_store::read(db,"query","Renamed query Ä").present && !linaccess::datasheet_page_store::read(db,"query","Owned rename query").present);const auto result=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT qty FROM [Renamed query Ä]"),{});assert(result.rows.size()==3);}
+    {
+        using namespace linaccess;auto database=makeDaoDatabase(db);auto table=database->member("CreateTableDef",{VbaValue::string("rename_command_table")}).object;auto field=table->member("CreateField",{VbaValue::string("value"),VbaValue::integer(4)}).object;table->member("Fields",{}).object->member("Append",{VbaValue::reference(field)});database->member("TableDefs",{}).object->member("Append",{VbaValue::reference(table)});
+        const QByteArray source="Begin Form\nBegin Section\nEnd\nEnd\n";const QByteArray code=R"VBA(Sub RenameQuery()
+DoCmd.Rename OldName:="Renamed query Ä", NewName:="Command query", ObjectType:=acQuery
+End Sub
+Sub RenameTable()
+DoCmd.Rename "renamed_command_table", acTable, "rename_command_table"
+End Sub
+Sub WrongType()
+DoCmd.Rename "blocked", acForm, "Caption form"
+End Sub
+Sub MissingType()
+DoCmd.Rename NewName:="blocked", OldName:="Command query"
+End Sub
+Sub OmittedType()
+DoCmd.Rename "blocked", , "Command query"
+End Sub
+Sub NullName()
+DoCmd.Rename Null, acQuery, "Command query"
+End Sub
+)VBA";
+        AccessFormPreview caller("rename-command-caller",source,code,db,&window);std::vector<VbaValue> arguments;
+        const auto renamed=caller.executeProcedure("RenameQuery",arguments);if(renamed.status!=VbaExecutionStatus::Completed) std::cerr<<"DoCmd.Rename error="<<renamed.errorNumber<<" "<<renamed.explanation<<"\n";assert(renamed.status==VbaExecutionStatus::Completed);
+        assert(caller.executeProcedure("RenameTable",arguments).status==VbaExecutionStatus::Completed);assert(db.tables().contains("renamed_command_table") && !db.tables().contains("rename_command_table"));
+        assert(caller.executeProcedure("WrongType",arguments).errorNumber==3251);assert(caller.executeProcedure("MissingType",arguments).errorNumber==3251);assert(caller.executeProcedure("OmittedType",arguments).errorNumber==3251);assert(caller.executeProcedure("NullName",arguments).errorNumber==94);
+        assert(accessQuerySource(db,"Command query")=="SELECT qty FROM authored_renamed" && datasheet_page_store::read(db,"query","Command query").present && !datasheet_page_store::read(db,"query","Renamed query Ä").present);
+        QSqlQuery values(db);assert(values.exec("INSERT INTO renamed_command_table VALUES(7)"));assert(values.exec("SELECT value FROM renamed_command_table") && values.next() && values.value(0).toInt()==7);values.finish();assert(caller.close());
+    }
     assert(window.close()); dispose(); watchdog.stop();
     std::cout<<"Main window: native project/explorer opening, independent nonmodal form/report lifetime, deduplication, modal metadata, cancellation, SQL save and retained close/MsgBox passed\n";
 }

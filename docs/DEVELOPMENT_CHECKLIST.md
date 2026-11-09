@@ -1822,3 +1822,18 @@ Savepoint ab. Kein QtGui im DAO-Backend. Bestehende DAO/GUI2/2 (7,84s) prüfen
 auch tatsächliches Öffnen/Ausführen, Seitenbindung und atomare Teilfehler-Rücknahme.
 App gebaut; langsame Originalkopie nicht ohne Importänderung wiederholt.
 DAO_QUERYDEFS_CATALOG.md; F055/F080/F121 offen,456/384/72 unverändert. Weiterarbeiten.
+
+DoCmd.Rename führt jetzt über tatsächliche eigene TableDef-/QueryDef.Name-Setter
+Tabellen-/Abfrageumbenennung aus, einschließlich neu geordneter benannter
+Argumente. ObjectType und OldName derzeit ausdrücklich erforderlich; Missing
+bleibt auch bei Namen/Kommalücken Missing statt versehentlich acTable(Empty).
+Null94, unbewiesener Kontext/Typ3251; geschlossene/beschäftigte/modale Projekte
+und passende offene Dokumente werden geschützt. Aufrufer über skalare Auswertung
+und Dispatch abgesichert. Reale VBA-Integrationsprüfung bestätigt beide Objekttypen,
+resultierendes SQL, Seitenbindung und Fehlerfälle. DAO/GUI2/2 (7,77s), App gebaut.
+Große DAO-/GUI-Prüfprogramme verwenden unter GNU/Clang Release jetzt -O1, um
+Wiederübersetzungen zu verkürzen; Produkt-/Desktop-/Datenbibliotheken bleiben
+nach tatsächlich geprüften flags.make bei -O3. Keine neue Testregistrierung.
+DOCMD_RENAME_RUNTIME.md; F052/F055/F080/F121 offen,456/384/72 unverändert.
+Fortsetzung: tatsächliches Entfernen eigener Datenbankobjekte samt abgeleiteten
+Ansichten und Seitenmetadaten prüfen/umsetzen; kontinuierlich weiterarbeiten.

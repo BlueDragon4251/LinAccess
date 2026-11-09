@@ -1355,6 +1355,7 @@ public:
         if(key=="hourglass") return Signature{{"HourglassOn"},1};
         if(key=="opentable") return Signature{{"TableName","View","DataMode"},1};
         if(key=="openquery") return Signature{{"QueryName","View","DataMode"},1};
+        if(key=="rename") return Signature{{"NewName","ObjectType","OldName"},1};
         if(key=="openform") return Signature{{"FormName","View","FilterName","WhereCondition","DataMode","WindowMode","OpenArgs"},1};
         if(key=="openreport") return Signature{{"ReportName","View","FilterName","WhereCondition","WindowMode","OpenArgs"},1};
         if(key=="close") return Signature{{"ObjectType","ObjectName","Save"},0};
@@ -1379,6 +1380,17 @@ public:
             if(args.size()!=1 || args[0].kind==linaccess::VbaValue::Kind::Missing) throw linaccess::VbaRuntimeError(450,"Hourglass requires one Boolean argument");
             linaccess::nativeHourglass(linaccess::coerceVbaModuleValue(linaccess::scalarVbaValue(args[0]),"boolean").boolean);
             return {};
+        }
+        if(key=="rename") {
+            if(args.empty() || args.size()>3 || args[0].kind==linaccess::VbaValue::Kind::Missing) throw linaccess::VbaRuntimeError(450,"Rename requires a new name and at most three arguments");
+            const QPointer<AccessFormPreview> guard=&preview;std::vector<linaccess::VbaValue> values;
+            for(const auto& argument:args) {const auto value=linaccess::scalarVbaValue(argument);if(!guard) throw linaccess::VbaRuntimeError(3420,"Rename caller is no longer available");if(value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null Rename argument");values.push_back(value);}
+            if(values.size()!=3 || values[1].kind==linaccess::VbaValue::Kind::Missing || values[2].kind==linaccess::VbaValue::Kind::Missing) throw linaccess::VbaRuntimeError(3251,"Rename currently requires explicit ObjectType and OldName");
+            const auto newName=text(values[0].asText()),oldName=text(values[2].asText());const int type=static_cast<int>(linaccess::coerceVbaModuleValue(values[1],"long").number);QWidget* owner=nullptr;
+            for(auto* ancestor=guard->parentWidget();ancestor;ancestor=ancestor->parentWidget()) if(qobject_cast<QMainWindow*>(ancestor)) {owner=ancestor;break;}
+            QVariantMap result;if(!owner || owner->metaObject()->indexOfMethod("renameDatabaseObject(QString,int,QString)")<0 || !QMetaObject::invokeMethod(owner,"renameDatabaseObject",Qt::DirectConnection,Q_RETURN_ARG(QVariantMap,result),Q_ARG(QString,newName),Q_ARG(int,type),Q_ARG(QString,oldName))) throw linaccess::VbaRuntimeError(3251,"Native object rename is unavailable");
+            if(linaccess::vbaExecutionStopRequested()) throw linaccess::VbaExecutionStopped{};
+            if(const int error=result.value("error").toInt()) throw linaccess::VbaRuntimeError(error,result.value("description").toString().toStdString());return {};
         }
         if(key=="openquery") {
             if(args.empty() || args.size()>3 || args[0].kind==linaccess::VbaValue::Kind::Missing) throw linaccess::VbaRuntimeError(450,"OpenQuery requires a query name and at most three arguments");

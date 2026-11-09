@@ -97,6 +97,8 @@ if(BUILD_TESTING)
         find_package(Qt6 6.4 REQUIRED COMPONENTS Test)
         add_executable(linaccess_mainwindow_tests tests/mainwindow_document_tests.cpp)
         target_include_directories(linaccess_mainwindow_tests PRIVATE src)
+        # Large assertion harnesses need short rebuilds; production libraries retain Release optimization.
+        target_compile_options(linaccess_mainwindow_tests PRIVATE "$<$<AND:$<CONFIG:Release>,$<CXX_COMPILER_ID:GNU,Clang>>:-O1>")
         target_link_libraries(linaccess_mainwindow_tests PRIVATE linaccess_desktop linaccess_runtime linaccess_data Qt6::Widgets Qt6::Sql Qt6::PrintSupport Qt6::Test)
         add_test(NAME mainwindow_documents COMMAND linaccess_mainwindow_tests)
         set_tests_properties(mainwindow_documents PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
@@ -201,6 +203,8 @@ if(BUILD_TESTING)
         add_executable(linaccess_dao_tests tests/dao_tests.cpp
              )
         target_include_directories(linaccess_dao_tests PRIVATE src)
+        # Large assertion harnesses need short rebuilds; production libraries retain Release optimization.
+        target_compile_options(linaccess_dao_tests PRIVATE "$<$<AND:$<CONFIG:Release>,$<CXX_COMPILER_ID:GNU,Clang>>:-O1>")
         target_link_libraries(linaccess_dao_tests PRIVATE linaccess_runtime linaccess_data Qt6::Core Qt6::Sql)
         target_sources(linaccess_dao_tests PRIVATE tests/dao_cursor_tests.cpp)
         add_test(NAME dao_execution COMMAND linaccess_dao_tests)

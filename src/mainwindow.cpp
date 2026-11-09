@@ -558,6 +558,23 @@ QVariantMap MainWindow::saveDataPage(QWidget* page,bool interactive) {
     return {{"handled",true},{"error",0}};
 }
 
+QVariantMap MainWindow::renameDatabaseObject(const QString& newName,int objectType,const QString& oldName) {
+    if(!db_.isOpen()) return tableCommandFailure(3420,"Das Projekt ist geschlossen.");
+    if(QApplication::activeModalWidget() || queryExecutionDepth_>0) return tableCommandFailure(2046,"Umbenennen ist in diesem Kontext nicht verfügbar.");
+    if(objectType!=0 && objectType!=1) return tableCommandFailure(3251,"DoCmd.Rename unterstützt hier eigene Tabellen und Abfragen mit ausdrücklichem Objekttyp und Namen.");
+    try {
+        const auto kind=objectType==0 ? QString("table") : QString("query");
+        if(objectType==0) {for(auto* model:findChildren<linaccess::AccessTableModel*>()) if(model->tableName().compare(oldName,Qt::CaseInsensitive)==0) return tableCommandFailure(3251,"Tabelle und zugehörige bearbeitbare Abfragen vor dem Umbenennen schließen.");}
+        else if(findOpenQuery(oldName)) return tableCommandFailure(3251,"Abfrage vor dem Umbenennen schließen.");
+        const auto definition=linaccess::makeDaoDatabase(db_)->member(objectType==0 ? "TableDefs" : "QueryDefs",{linaccess::VbaValue::string(oldName.toStdString())}).object;
+        definition->assign("Name",linaccess::VbaValue::string(newName.toStdString()));const auto canonical=QString::fromStdString(definition->member("Name",{}).asText());refreshExplorer();
+        for(auto* entry:explorer_->findItems(canonical,Qt::MatchExactly|Qt::MatchRecursive,0)) if(entry->data(0,Qt::UserRole).toString()==kind) {explorer_->setCurrentItem(entry);break;}
+        return {{"handled",true},{"error",0}};
+    }catch(const linaccess::DaoStoredSchemaChange& error) {refreshExplorer();return tableCommandFailure(3251,"Änderung gespeichert; Projekt neu öffnen. "+QString::fromUtf8(error.what()));}
+    catch(const linaccess::VbaRuntimeError& error) {return tableCommandFailure(error.number,QString::fromUtf8(error.what()));}
+    catch(const std::exception& error) {return tableCommandFailure(3146,QString::fromUtf8(error.what()));}
+}
+
 QWidget* MainWindow::findOpenQuery(const QString& name) const {
     for(int index=0;index<tabs_->count();++index) {
         auto* page=tabs_->widget(index);
