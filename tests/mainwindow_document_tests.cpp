@@ -1077,7 +1077,10 @@ void exerciseRecordEscape(MainWindow& window,QSqlDatabase db) {
     assert(model->index(0,1).data().toString()=="alpha" && model->index(1,1).data().toString()=="other-draft" && model->isDirty());
     assert(!model->hasPendingRecord(0) && model->hasPendingRecord(1));
     assert(sql.exec("SELECT value FROM command_record_undo WHERE id=2") && sql.next() && sql.value(0).toString()=="beta"); sql.finish();
-    assert(view->insertRecord() && model->rowCount()==3 && model->setData(model->index(2,1),"new-draft"));
+    assert(window.dispatchTableCommand(28).value("error").toInt()==0 && model->rowCount()==3 && model->hasPendingRecord(1));
+    assert(sql.exec("SELECT COUNT(*) FROM command_record_undo") && sql.next() && sql.value(0).toInt()==2);sql.finish();
+    assert(model->setData(model->index(2,1),"new-draft"));
+    assert(window.dispatchTableCommand(28).value("error").toInt()==3251 && model->rowCount()==3 && model->hasPendingRecord(1) && model->hasPendingRecord(2));
     view->setFocus(); QTest::keyClick(view,Qt::Key_Escape);
     assert(model->rowCount()==2 && model->index(1,1).data().toString()=="other-draft" && model->hasPendingRecord(1));
     view->setCurrentIndex(model->index(1,1)); QTest::keyClick(view,Qt::Key_Escape); assert(!model->isDirty());
@@ -1127,6 +1130,14 @@ void exerciseRecordEscape(MainWindow& window,QSqlDatabase db) {
     assert(model->setData(model->index(1,1),"saved-by-ctrl-end")); QTest::keyClick(view,Qt::Key_Home,Qt::ControlModifier);
     assert(view->currentIndex().row()==1 && model->isDirty() && model->lastError().nativeErrorCode()=="3146");
     QTest::keyClick(view,Qt::Key_Escape); assert(!model->isDirty());
+    view->setCurrentIndex(model->index(0,1));
+    assert(model->setData(model->index(0,1),"new-row-saved-current") && model->setData(model->index(1,1),"new-row-other-draft"));
+    assert(window.dispatchTableCommand(28).value("error").toInt()==0 && model->rowCount()==3 && view->currentIndex().row()==2 && !model->hasPendingRecord(0) && model->hasPendingRecord(1));
+    assert(model->index(1,1).data(Qt::EditRole).toString()=="new-row-other-draft");
+    assert(sql.exec("SELECT value FROM command_record_undo WHERE id=1") && sql.next() && sql.value(0).toString()=="new-row-saved-current");sql.finish();
+    assert(sql.exec("SELECT value FROM command_record_undo WHERE id=2") && sql.next() && sql.value(0).toString()=="saved-by-ctrl-home");sql.finish();
+    view->setFocus();QTest::keyClick(view,Qt::Key_Escape);assert(model->rowCount()==2 && model->hasPendingRecord(1));
+    view->setCurrentIndex(model->index(1,1));QTest::keyClick(view,Qt::Key_Escape);assert(!model->isDirty());
     assert(window.closeTableDocument(0,"command_record_undo",2).value("error").toInt()==0); dispose();
 }
 void exercisePageNavigation(MainWindow& window,QSqlDatabase db) {
@@ -1868,8 +1879,9 @@ End Sub
     assert(mixed->executeProcedure("AddActiveTableRecord",selectArguments).errorNumber==3251 && recordEditModel->rowCount()==2);
     assert(mixed->executeProcedure("PreviousTableRecord",selectArguments).errorNumber==3251 && recordEditModel->rowCount()==2 && recordEditView->currentIndex().row()==1);
     assert(recordEditModel->setData(recordEditModel->index(addedRow,1),"new-record"));
-    assert(mixed->executeProcedure("AddTableRecord",selectArguments).errorNumber==3251 && recordEditModel->rowCount()==2);
-    assert(unchanged.exec("SELECT count(*) FROM command_record_edits") && unchanged.next() && unchanged.value(0).toInt()==1); unchanged.finish();
+    assert(mixed->executeProcedure("AddTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed && recordEditModel->rowCount()==3 && recordEditView->currentIndex().row()==2);
+    assert(unchanged.exec("SELECT count(*) FROM command_record_edits") && unchanged.next() && unchanged.value(0).toInt()==2); unchanged.finish();
+    assert(recordEditModel->undoPendingRecord(2) && recordEditModel->rowCount()==2 && !recordEditModel->isDirty());
     recordEditView->setCurrentIndex(recordEditModel->index(addedRow,1));
     assert(mixed->executeProcedure("PreviousTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed && recordEditView->currentIndex().row()==0 && !recordEditModel->isDirty());
     assert(mixed->executeProcedure("LastTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed);

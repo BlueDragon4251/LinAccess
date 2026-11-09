@@ -36,3 +36,14 @@ Sole populated inserted records keep the existing full-save/key-capture path.
 Selective save of inserted/deleted current rows, complete trigger/concurrency/
 Access event equivalence and automatic addition rows remain open. Existing
 GUI/field targets2/2 (6.21s); no new target or Access2003 observation.
+
+
+„Neuer Datensatz“/acNewRec spart jetzt das pauschale Speichern fremder Entwürfe:
+sauberer aktueller Datensatz darf bei weiteren Entwürfen eine neue Zeile öffnen;
+bestehender geänderter aktueller Datensatz nutzt den gezielten Save-Pfad. Ein
+alleiniger gefüllter Insert wird regulär gespeichert, bevor die nächste neue Zeile
+entsteht. Leere aktuelle Inserts oder selektive Inserts mit weiteren Entwürfen
+bleiben verweigert. Bestehende GUI-Prüfung1/1 (6,42s), App gebaut: tatsächliche
+RunCommand/VBA-Aufrufe, SQL-Abgrenzung, anderer Entwurf, neuer Zeilenfokus und Escape
+ohne fremden Datenverlust. Keine neue CTest-ID/Windows-Beobachtung. F368/F173/F168
+und456/384/72 unverändert. Direkt weiter.

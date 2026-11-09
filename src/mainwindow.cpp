@@ -835,10 +835,8 @@ QVariantMap MainWindow::dispatchTableCommand(int command) {
             const QPointer<MainWindow> self=this;
             if(!table->finishEditing()) return tableModelFailure(model,2501);
             if(!self || !table || !model) return tableCommandFailure(2501,"Tabellendokument wurde während der Validierung geschlossen.");
-            if(model->isDirty()) {
-                if(!model->canSubmitCurrentRecordAlone(table->currentIndex().row()))
-                    return tableCommandFailure(3251,"Neuer Datensatz mit weiteren Tabellenentwürfen ist noch nicht implementiert.");
-                const auto saved=saveDataPage(page,false);
+            if(model->isDirty() && model->hasPendingRecord(table->currentIndex().row())) {
+                const auto saved=saveDataPage(page,false,true);
                 if(saved.value("error").toInt()) return saved;
             }
             if(!self || !table || !model) return tableCommandFailure(2501,"Tabellendokument wurde während des Speicherns geschlossen.");
