@@ -2146,7 +2146,7 @@ QString accessWhereClause(const QString& criteria) {
     return renderJetTokens(tokens.mid(5));
 }
 
-QString accessScalarDomainExpression(const QString& expression) {
+QString accessScalarDomainExpression(const QString& expression,bool deterministicOnly) {
     const auto value=expression.trimmed();if(value.isEmpty()) throw VbaRuntimeError(5,"Empty domain expression");
     (void)accessWhereClause(value);
     const auto tokens=tokenize(value);int depth=0;
@@ -2155,6 +2155,13 @@ QString accessScalarDomainExpression(const QString& expression) {
     const QSet<QString> aggregates{"sum","count","avg","min","max","first","last","var","stdev"};
     for(qsizetype i=0;i<tokens.size();++i) {
         const auto& token=tokens[i];
+        if(deterministicOnly) {
+            const auto name=token.value.toCaseFolded();
+            if(symbol(token,"!") || ((token.kind==Token::Word || token.kind==Token::Identifier) && QSet<QString>{"forms","reports","application","screen","me"}.contains(name) && i+1<tokens.size() && symbol(tokens[i+1],".")))
+                throw VbaRuntimeError(3251,"Live object references are unavailable in visual calculated fields");
+            if(token.kind==Token::Word && QSet<QString>{"filelen","filedatetime","curdir","date","time","now","timer","rnd"}.contains(name))
+                throw VbaRuntimeError(3251,"External or clock values are unavailable in visual calculated fields");
+        }
         if(symbol(token,"(")) ++depth;
         else if(symbol(token,")")) {if(--depth<0) throw VbaRuntimeError(3251,"Unbalanced domain expression");}
         else if(symbol(token,",") && depth==0) throw VbaRuntimeError(3251,"Domain expression must be scalar");

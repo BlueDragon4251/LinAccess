@@ -74,3 +74,24 @@ with its groups/parameters intact. Cancel and later manual SQL invalidation rema
 covered. The existing GUI/SQL bundle passed2/2 (14.51s) without follow-up reruns.
 No new CTest ID, core/original/Windows/full-suite or new package proof is claimed.
 F067/F068/F080/F148 remain open; the fixed456 catalog is unchanged.
+
+## Calculated fields
+
+The draft now adds and removes actual calculated output rows. Each expression
+requires an alias and supports the same output, sorting and AND/OR criteria as
+physical fields. The emitted SQL contains the expression itself (parenthesized),
+not a fabricated stored column. Expressions and row order survive saving and
+reopening under the existing exact-SQL hash rule. Removing a row changes only the
+draft, never a table column or its data. The255-row and4096-character limits apply.
+
+Expressions use the native bounded scalar expression compiler: arithmetic, field
+references and supported scalar functions. Aggregates, subqueries, unknown VBA/SQL
+callbacks and live object/file/clock values are refused in this designer scope;
+manual SQL remains available with its existing explicit runtime boundaries.
+Repeating expressions for criteria/sorting must not introduce external side effects.
+Preview/Apply/restoration remain metadata-only. This does not add joins or grouping.
+
+Validation: existing GUI/SQL bundle2/2 passed (15.09s), application built.
+The same GUI fixture compares calculated values and sorting against independent
+SQL, reopens the saved expression and refuses a callback without invoking it.
+No new CTest ID, Windows/original/full-suite or package proof is claimed.

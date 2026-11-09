@@ -3562,3 +3562,16 @@ Keine neuen CTests oder Kern-/Original-/Windows-/Gesamtsuiten-/Paketnachweise.
 Voriger visueller Entwurf als33cda14 veröffentlicht/verifiziert; gleicher geprüfter
 Baum6e85a5c233a9ab51f14542cb36e703905789ad12 wie lokaler8e5458f. Letzte geprüfteDEB
 weiterhin1dafedd. F067/F068/F080/F148 und456/386/70 unverändert; Entwicklung läuft.
+
+
+Berechnete Felder im visuellen Abfrageentwurf: echte skalare Ausdrücke mit Alias,
+Ausgabe, Sortierung und UND/ODER-Kriterien; Hinzufügen/Entfernen betrifft nur den
+Entwurf. Gespeicherte Ausdrücke öffnen wieder korrekt. Begrenzte native skalare
+Funktionen; Aggregate, Unterabfragen, unbekannte Callbacks und externe/lebende
+Werte werden in diesem Entwurf ausdrücklich begrenzt. Keine Zeilenauswertung in
+Vorschau/Übernahme. Details: docs/VISUAL_QUERY_DESIGNER.md. Anwendung gebaut;
+bestehendes GUI-/SQL-Bündel2/2 bestanden (15,09s), inklusive wirklicher berechneter
+Ergebnisse gegen unabhängiges SQL, Sortierung und Wiederöffnung. Keine neuen
+CTest-IDs oder Windows-/Original-/Gesamtsuiten-/Paketnachweise. Parameter/Oder-
+Etappe als b1b5858 veröffentlicht; letzte geprüfteDEB weiterhin1dafedd.
+Katalog456/386/70 unverändert; keine vollständige Abfrageentwurfsparität behauptet.

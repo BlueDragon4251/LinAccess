@@ -61,3 +61,16 @@ object, real query designer open1/modified3/saved1/closed0, and pending editable
 query data remaining open1. Targeted core/mainwindow/layout3/3 (15.13 s), fresh
 headless1/1 (1.76 s), current package/build-ID/SQLite3.54.1/four hashes pass.
 Last full baseline48/48 (83.85 s); no full rerun claimed.456/384/72 unchanged.
+
+
+Berechnete Felder im visuellen Abfrageentwurf: echte skalare Ausdrücke mit Alias,
+Ausgabe, Sortierung und UND/ODER-Kriterien; Hinzufügen/Entfernen betrifft nur den
+Entwurf. Gespeicherte Ausdrücke öffnen wieder korrekt. Begrenzte native skalare
+Funktionen; Aggregate, Unterabfragen, unbekannte Callbacks und externe/lebende
+Werte werden in diesem Entwurf ausdrücklich begrenzt. Keine Zeilenauswertung in
+Vorschau/Übernahme. Details: docs/VISUAL_QUERY_DESIGNER.md. Anwendung gebaut;
+bestehendes GUI-/SQL-Bündel2/2 bestanden (15,09s), inklusive wirklicher berechneter
+Ergebnisse gegen unabhängiges SQL, Sortierung und Wiederöffnung. Keine neuen
+CTest-IDs oder Windows-/Original-/Gesamtsuiten-/Paketnachweise. Parameter/Oder-
+Etappe als b1b5858 veröffentlicht; letzte geprüfteDEB weiterhin1dafedd.
+Katalog456/386/70 unverändert; keine vollständige Abfrageentwurfsparität behauptet.
