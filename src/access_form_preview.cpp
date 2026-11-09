@@ -3081,7 +3081,8 @@ std::optional<linaccess::VbaValue> AccessFormPreview::getModuleMember(std::strin
         return frame->values.at(key);
     }
     const auto signature=linaccess::nativeVbaPropertySignature(source,name,linaccess::VbaPropertyAccess::Get,publicOnly);
-    if(signature && signature->names.empty() && !arguments.empty()
+    if(!signature) return {};
+    if(signature->names.empty() && !arguments.empty()
         && (signature->resultType.empty() || signature->resultType=="variant" || !linaccess::nativeObjectType(signature->resultType).empty())) {
         QPointer<AccessFormPreview> guard(this);
         const auto target=invokeModuleProperty(name,linaccess::VbaPropertyAccess::Get,{},publicOnly);

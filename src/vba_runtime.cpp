@@ -1565,7 +1565,7 @@ std::optional<VbaArgumentSignature> nativeVbaPropertySignature(std::string_view 
     const auto indices=parameters.size()-(access!=VbaPropertyAccess::Get && !parameters.empty() ? 1 : 0);
     for(std::size_t index=0;index<parameters.size();++index) {
         if(parameters[index].paramArray) throw VbaRuntimeError(3251,"Property ParamArray is not implemented");
-        if(index<indices && parameters[index].byReference) throw VbaRuntimeError(3251,"Native property indices currently require explicit ByVal");
+        if(publicOnly && index<indices && parameters[index].byReference) throw VbaRuntimeError(3251,"External property indices currently require explicit ByVal");
     }
     const auto normalizedType=[](const std::string& type) {return type.empty() ? std::string("variant") : type;};
     for(const auto& sibling:accessors) {
@@ -2431,10 +2431,10 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
             if(instructions[index].type==Statement::Type::Next && !loops.empty() && loops.back().forIndex==instructions[index].partner)
                 loops.pop_back();
     };
-    const auto writeProperty=[&](std::string_view name,VbaPropertyAccess access,std::vector<VbaValue> arguments) {
+    const auto writeProperty=[&](std::string_view name,VbaPropertyAccess access,std::vector<VbaValue> arguments,const VbaArgumentReferences& indexReferences=VbaArgumentReferences{}) {
         if(!stateOwners.front()->procedures.contains(lower(std::string(name)))) return false;
         const bool setter=nativeVbaPropertySignature(module,name,access,false).has_value();
-        std::vector<VbaValue> defaultIndices;VbaValue value;
+        std::vector<VbaValue> defaultIndices;VbaValue value;auto references=indexReferences;
         if(!setter) {
             const auto getter=nativeVbaPropertySignature(module,name,VbaPropertyAccess::Get,false);
             if(!getter || arguments.empty()) return false;
@@ -2442,18 +2442,16 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                 && (getter->resultType.empty() || getter->resultType=="variant" || !nativeObjectType(getter->resultType).empty());
             if(!forwarded && (access!=VbaPropertyAccess::Let || nativeObjectType(getter->resultType).empty())) return false;
             value=arguments.back();arguments.pop_back();
-            if(forwarded) {defaultIndices=std::move(arguments);arguments.clear();}
+            if(forwarded) {defaultIndices=std::move(arguments);arguments.clear();references=VbaArgumentReferences{};}
             if(access==VbaPropertyAccess::Let) value=scalarVbaValue(value);
             else if(value.kind!=VbaValue::Kind::Object) throw VbaRuntimeError(13,"Set requires an object reference");
         } else if(access==VbaPropertyAccess::Let && !arguments.empty()) arguments.back()=scalarVbaValue(arguments.back());
-        storeAliases();
-        const auto result=executeVbaProperty(module,name,setter ? access : VbaPropertyAccess::Get,host,arguments,false);
-        refreshAliases();
-        if(result.status!=VbaExecutionStatus::Completed) throw VbaRuntimeError(result.errorNumber ? result.errorNumber : 3251,result.explanation,result.errorSource,result.errorHelpFile,result.errorHelpContext);
+        if(setter) {references.names.push_back({});references.arrayElements.push_back({});}
+        const auto result=invoke(propertySelector(name,setter ? access : VbaPropertyAccess::Get),arguments,references,!setter);
         if(!setter) {
-            if(!result.typedReturnValue || result.typedReturnValue->kind!=VbaValue::Kind::Object) throw VbaRuntimeError(13,"Default assignment requires a native object result");
-            if(!result.typedReturnValue->object) throw VbaRuntimeError(91,"Default member object is Nothing");
-            result.typedReturnValue->object->assignDefaultMember(defaultIndices,value);refreshAliases();
+            if(result.kind!=VbaValue::Kind::Object) throw VbaRuntimeError(13,"Default assignment requires a native object result");
+            if(!result.object) throw VbaRuntimeError(91,"Default member object is Nothing");
+            result.object->assignDefaultMember(defaultIndices,value);refreshAliases();
         }
         return true;
     };
@@ -2944,10 +2942,18 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                         && (!nativeObjectType(getter->resultType).empty() || (getter->names.empty() && (getter->resultType.empty() || getter->resultType=="variant")));
                     if(initial==locals.end() && stateOwners.front()->procedures.contains(name)
                         && (nativeVbaPropertySignature(module,instruction.argument,propertyAccess,false) || defaultWrite)) {
-                        std::vector<VbaValue> arguments;
-                        for(const auto& expression:splitArguments(instruction.endExpression)) arguments.push_back(evaluate(expression));
+                        std::vector<VbaValue> arguments;VbaArgumentReferences references;
+                        auto signature=nativeVbaPropertySignature(module,instruction.argument,propertyAccess,false);
+                        if(!signature) signature=getter;
+                        for(const auto& expression:splitArguments(instruction.endExpression)) {
+                            const auto parsed=callArgument(expression);
+                            if(!parsed.name.empty()) throw VbaRuntimeError(3251,"Named property setter indices are not implemented");
+                            auto argument=evaluateVbaArgumentExpression(parsed.expression,host,locals,resolver,withFrames.empty() ? nullptr : &withFrames.back().value,compareMode,arrayBase,
+                                signature && signature->objectArgument(arguments.size()));
+                            arguments.push_back(std::move(argument.value));references.names.push_back(parsed.expression);references.arrayElements.push_back(std::move(argument.arrayElement));
+                        }
                         auto value=propertyAccess==VbaPropertyAccess::Set ? evaluateObject(instruction.expression) : scalarVbaValue(evaluate(instruction.expression));
-                        arguments.push_back(std::move(value));(void)writeProperty(instruction.argument,propertyAccess,std::move(arguments));break;
+                        arguments.push_back(std::move(value));(void)writeProperty(instruction.argument,propertyAccess,std::move(arguments),references);break;
                     }
                     const bool objectTarget=initial!=locals.end() && initial->second.kind==VbaValue::Kind::Object;
                     const auto target=objectTarget ? initial->second.object : std::shared_ptr<VbaObject>{};

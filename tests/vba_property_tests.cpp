@@ -3,6 +3,7 @@
 #include "vba_property_fixture.hpp"
 #include "vba_parameterless_fixture.hpp"
 #include "vba_default_property_fixture.hpp"
+#include "vba_byref_property_fixture.hpp"
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
@@ -53,4 +54,9 @@ void testVbaProperties(){using namespace linaccess;PropertyHost host,other;
     result=executeVbaProperty(nativeDefaultPropertyFixture,"ReadCount",VbaPropertyAccess::Get,defaultHost,arguments);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==4);
     result=executeVbaProcedure(nativeDefaultPropertyFixture,"MissingProbe",defaultHost);assert(result.status==VbaExecutionStatus::Error && result.errorNumber==91);
     result=executeVbaProcedure(nativeDefaultPropertyFixture,"FailedProbe",defaultHost);assert(result.status==VbaExecutionStatus::Error && result.errorNumber==11);
+
+    PropertyHost byrefHost;
+    for(const auto& probe:std::vector<std::pair<std::string,int>>{{"LetProbe",277},{"GetProbe",22},{"TemporaryProbe",21},{"ArrayProbe",330},{"ObjectProbe",319},{"ErrorProbe",211},{"MismatchProbe",13}}){result=executeVbaProcedure(nativeByRefPropertyFixture,probe.first,byrefHost);if(result.status!=VbaExecutionStatus::Completed)std::cerr<<"ByRef property "<<probe.first<<": "<<result.explanation<<" line "<<result.line<<" error "<<result.errorNumber<<"\n";assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==probe.second);}
+    arguments={VbaValue::longInteger(1)};result=executeVbaProperty(nativeByRefPropertyFixture,"Counter",VbaPropertyAccess::Get,byrefHost,arguments,false);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==20 && arguments[0].number==2);
+    bool facadeRejected=false;try{(void)nativeVbaPropertySignature(nativeByRefPropertyFixture,"Counter",VbaPropertyAccess::Get,true);}catch(const VbaRuntimeError& e){facadeRejected=e.number==3251;}assert(facadeRejected);
 }

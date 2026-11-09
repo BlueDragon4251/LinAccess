@@ -12,8 +12,9 @@ object results and Set preserve reference identity, including Nothing. The final
 Let/Set value parameter is always ByVal, even when its source says ByRef, as
 specified by MS-VBAL5.3.1.7. Parameters/function results remain per-invocation.
 
-Indexed properties use explicit ByVal index parameters and existing typed/named
-getter argument binding. Matching accessors must have equivalent index names,
+Indexed properties use native typed/named getter argument binding. Same-module
+unqualified calls support ByRef indices; the external object facade currently
+requires explicit ByVal indices. Matching accessors must have equivalent index names,
 types and passing mechanisms; Get/Let value types must agree. Duplicate accessors
 and mismatched signatures fail explicitly. Setter detection and metadata inspection
 never execute a getter. A failing accessor propagates its actual native error;
@@ -30,7 +31,7 @@ source recognition alone is still not an execution or compatibility claim.
 
 This is a bounded F042/F043/F050 extension, not complete class support. Generic
 user class construction/lifecycle, user-defined default-property attributes and
-arbitrary argument/default queues, cross-module property binding, ByRef index copy-back,
+arbitrary argument/default queues, cross-module property binding and cross-object ByRef index copy-back,
 ParamArray, optional setter indices, named setters and complete visibility/COM
 semantics remain open. Parameterless Sub/Function/Get declarations now allow omitted parentheses, as
 specified by MS-VBAL5.3.1. Module inventory and actual form/core execution use
@@ -95,3 +96,29 @@ Nothing/error propagation/scalar excess arguments and owner-close rejection were
 executed. No new CTest ID. All32 original VBA artifacts had0 properties and0
 zero-argument object-function candidates; no extra original run was added.
 Catalog456/386/70 and full F042/F043/F050 requirements remain unchanged.
+
+
+## Same-module ByRef index transport
+
+Direct unqualified Get/Let/Set calls in the owning module now reuse the real
+procedure argument binder instead of copying evaluated indices into a detached
+argument vector. Existing local/module aliases, typed variables and captured array
+elements therefore update their actual caller locations. Temporary expressions
+stay temporary. The final setter value remains ByVal even if declared ByRef.
+A default-value assignment through an indexed object getter uses that same binder.
+
+Changes made before a getter/setter error are published through the existing
+alias mechanism; Err/On Error retain their normal native behavior. Native ByRef
+type mismatches and active-array-element allocation guards remain in force.
+Named setter indices are still refused. `publicOnly=false` is the module-owned
+API path; direct caller-owned argument vectors also receive Get index changes.
+The public form/object facade still rejects ByRef index signatures with3251,
+because its value-only interface cannot supply caller reference bindings.
+No external reference copy-back is simulated.
+
+The existing core/GUI bundle passed on its first run2/2 (17.35s), application
+built. Actual cases cover Get/Let/Set index changes, array element indices,
+temporaries, setter-value isolation, object identity, error-side mutations,
+ByRef type mismatch, API argument vectors and a real TextBox default write through
+a ByRef getter. Public facade rejection remains checked. No new CTest IDs or
+Original/Windows/full-suite proof; F042/F043/F050 and456/386/70 remain unchanged.

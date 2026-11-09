@@ -3869,3 +3869,19 @@ Deklarationen/normalen impliziten Variablen/Default-Weiterleitung. Katalog456/38
 und F042/F043/F050 unverändert. Anschließend ByRef-Property-Indizes für direkte
 samelokale Get/Let/Set-Aufrufe mit echter Rückbindung ergänzen; externe Objekt-
 fassade weiterhin explizit begrenzen. Ohne Zwischenabschluss fortsetzen.
+
+
+ByRef-Indizes bei direkten samelokalen Property-Get/Let/Set-Aufrufen sind echt
+rückgebunden: vorhandener Prozedurargument-Binder statt abgetrennten Wertkopien,
+einschließlich Array-Elementen, temporären Ausdrücken und Fehlerseitenwirkungen.
+Setterwert bleibtByVal, Objektidentität/Typ-/Array-Allokationsguards bleiben.
+Auch Default-Wertzuweisung über indizierten Objektgetter nutzt diese Rückbindung;
+realer Textfeldnachweis. Externe Objektfassade bleibt bei ByRef-Indizes explizit3251,
+keine erfundene Rückbindung. Details NATIVE_VBA_PROPERTIES.md. Anwendung gebaut;
+erstes bestehendes Kern-/GUI-Bündel2/2 (17,35s) bestanden, keine neuen CTests oder
+Original-/Windows-/Gesamtsuitennachweise. Vorstufe Default-Weiterleitung e588edc
+privat veröffentlicht/Remote-Baum verifiziert. Letzte geprüfteDEB46297bf vor
+klammerlosen Deklarationen/normaler impliziter Bindung/Default-/ByRef-Erweiterung.
+F042/F043/F050 und Katalog456/386/70 unverändert. Nächste Stufe: optionale und
+ParamArray-Indizes in Properties einschließlich besonderem letzten ByVal-Wert-
+parameter korrekt binden; danach Paket aktualisieren. Ohne Zwischenabschluss weiter.

@@ -3,6 +3,7 @@
 #include "vba_property_fixture.hpp"
 #include "vba_parameterless_fixture.hpp"
 #include "vba_default_property_fixture.hpp"
+#include "vba_byref_property_fixture.hpp"
 #include <QApplication>
 #include <QLineEdit>
 #include <QSqlDatabase>
@@ -65,4 +66,20 @@ End
     const auto before=defaultObject->member("ReadCount",{}).number;result=defaults.executeProcedure("WidgetProbe",arguments);if(result.status!=VbaExecutionStatus::Completed)std::cerr<<"Widget default: "<<result.explanation<<" line "<<result.line<<" error "<<result.errorNumber<<"\n";assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==19 && actual->text()=="19" && defaultObject->member("ReadCount",{}).number==before+3);
     defaultObject->assign("Editor",VbaValue::longInteger(21));defaultObject->assignIndexedMember("EditorAt",{VbaValue::longInteger(0)},VbaValue::longInteger(22));assert(actual->text()=="22" && defaultObject->member("ReadCount",{}).number==before+5);
     failed=false;try{defaultObject->assign("Closing",VbaValue::longInteger(99));}catch(const VbaRuntimeError& e){failed=e.number==2450;}assert(failed && actual->text()=="22" && !defaults.isVisible());
+
+    const auto byrefSource=QByteArray::fromStdString(nativeByRefPropertyFixture)+R"VBA(
+Public Property Get EditorRef(ByRef index As Long) As Object
+index=index+1
+Set EditorRef=Me.Actual
+End Property
+Public Function WidgetRefProbe As Long
+Dim index As Long
+index=0
+EditorRef(index)=23
+WidgetRefProbe=Actual+index
+End Function
+)VBA";
+    AccessFormPreview byref("Owned ByRef property indices",widgetLayout,byrefSource,db);byref.show();QApplication::processEvents();auto* referenceText=byref.findChild<QLineEdit*>("access-control-Actual");assert(referenceText);
+    for(const auto& probe:std::vector<std::pair<std::string,int>>{{"LetProbe",277},{"GetProbe",22},{"ArrayProbe",330},{"ObjectProbe",319},{"ErrorProbe",211},{"WidgetRefProbe",24}}){arguments.clear();result=byref.executeProcedure(QString::fromStdString(probe.first),arguments);if(result.status!=VbaExecutionStatus::Completed)std::cerr<<"Form ByRef property "<<probe.first<<": "<<result.explanation<<" line "<<result.line<<" error "<<result.errorNumber<<"\n";assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==probe.second);}assert(referenceText->text()=="23");
+    failed=false;try{(void)makePreviewFormObject(byref)->member("Counter",{VbaValue::longInteger(1)});}catch(const VbaRuntimeError& e){failed=e.number==3251;}assert(failed && byref.close());
 }
