@@ -7,6 +7,7 @@
 #include "vba_array.hpp"
 #include "vba_runtime.hpp"
 #include "vba_debugger.hpp"
+#include "vba_debug_output.hpp"
 #include "vba_expression.hpp"
 #include "vba_decimal.hpp"
 #include "vba_currency.hpp"
@@ -58,7 +59,7 @@ struct BranchDestination {
     int conditionalUnwind{},withUnwind{},forUnwind{};
 };
 struct Statement {
-    enum class Type { DebugStop, DebugAssert, With, EndWith, Select, Case, EndSelect, SendKeys, Directory, FileCopy, FileRename, FileKill, If, ElseIf, Else, EndIf, For, ForEach, ExitFor, Next, Evaluate, Save, Maximize, GoLast,
+    enum class Type { DebugStop, DebugAssert, DebugPrint, With, EndWith, Select, Case, EndSelect, SendKeys, Directory, FileCopy, FileRename, FileKill, If, ElseIf, Else, EndIf, For, ForEach, ExitFor, Next, Evaluate, Save, Maximize, GoLast,
                       GoNext, GoNew, Requery,
                       ExecuteSql, OpenForm, ControlRequery, ControlFocus, ControlVisible,
                       Call, SetField, IndexedAssign, ResizeArray, EraseArray, SetVar, StringAlign, Exit, Dim, ObjectSet, ObjectAssign, ObjectCall, While, EndWhile, ExitDo, Quit, RaiseError, ErrorResumeNext, ErrorDisable, Label, Jump, GoSub, ComputedJump, ComputedGoSub, ReturnSubroutine, ErrorHandler, Resume, ResumeNext, ResumeLabel } type;
@@ -75,6 +76,7 @@ struct Statement {
     std::vector<ArrayResizeTarget> resizeTargets;
     int sourceStatementEnd{-1};
     std::vector<BranchDestination> destinations;
+    std::vector<VbaDebugPrintItem> outputItems;
 };
 
 bool loopEntryStatement(Statement::Type type) {return type==Statement::Type::While || type==Statement::Type::For || type==Statement::Type::ForEach;}
@@ -623,6 +625,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
     const std::regex midDollarTarget(R"(^Mid\$\s*\((.*)\)$)",std::regex::icase);
     const std::regex stringAlignment(R"(^(LSet|RSet)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*=\s*(.+)$)",std::regex::icase);
     const std::regex message(R"(^MsgBox(?:\s+(.+)|\((.*)\))$)", std::regex::icase);
+    const std::regex debugPrint(R"(^Debug\s*\.\s*(?:Print\b|\?)\s*(.*)$)",std::regex::icase);
     const std::regex debugAssert(R"(^Debug\s*\.\s*Assert\s+(.+)$)",std::regex::icase);
     const std::regex evaluation(R"(^Eval(?:\s+(.+)|\((.*)\))$)",std::regex::icase);
     const std::regex save(R"(^DoCmd\s*\.\s*RunCommand\s+acCmdSaveRecord$)", std::regex::icase);
@@ -924,7 +927,10 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
         }
         const auto statementBegin=statements.size();
         const auto relativeSource=(source.starts_with('.') || source.starts_with('!')) ? "__la_with"+source : std::string{};
-        if (std::regex_match(source,match,selectStart)) {
+        if(std::regex_match(source,match,debugPrint)) {
+            const auto items=parseVbaDebugPrint(match[1].str(),validExpression);if(!items)return {VbaExecutionStatus::Unsupported,"Debug.Print output-list syntax unsupported",line};
+            Statement print{Statement::Type::DebugPrint,{},{},line};print.outputItems=*items;statements.push_back(std::move(print));
+        } else if (std::regex_match(source,match,selectStart)) {
             const auto expression=trim(match[1].str());
             if (!validExpression(expression)) return {VbaExecutionStatus::Unsupported,"Select expression unsupported",line};
             statements.push_back({Statement::Type::Select,{},expression,line});
@@ -2477,6 +2483,9 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                     return {VbaExecutionStatus::Error, "End If ohne If", instruction.line};
                 active = frames.back().parent;
                 frames.pop_back();
+                break;
+            case Statement::Type::DebugPrint:
+                if(active)executeVbaDebugPrint(instruction.outputItems,evaluate);
                 break;
             case Statement::Type::DebugStop:
             case Statement::Type::DebugAssert:

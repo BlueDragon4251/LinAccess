@@ -518,7 +518,7 @@ keine Tests oder Teilpunkte allein zur Erhöhung einer Fortschrittszahl anlegen.
 - [x] **F012** — Reproduce 9/29 even with CLI 1.0.0 by changing only its loaded MDB library; tie all 20 rejected schemas to standalone PK clauses; current full test passes all four version/library combinations.
 - [ ] **F013** — Independently reproduce/explain the remaining historical intermittent EOF reports.
 - [x] **F027** — Empty/Null distinction, tested Boolean/bitwise rules and CLng tie-to-even rounding.
-- [x] **F060** — Breakpoints, locals, stack frames, runtime errors and recovery. Native supported-runtime scope and boundaries: [debugger](NATIVE_VBA_DEBUGGER_RUNTIME.md).
+- [x] **F060** — Breakpoints, locals, stack frames, runtime errors, recovery and bounded Debug.Print output. Native supported-runtime scope and boundaries: [debugger](NATIVE_VBA_DEBUGGER_RUNTIME.md).
 - [x] **F061** — Imported QueryDefs, typed bound Parameters, temporary CreateQueryDef, SELECT/action execution.
 - [x] **F062** — Basic ANSI-89 strings/LIKE, single-table DISTINCTROW and TOP boundary ties.
 - [x] **F090** — Per-artifact and per-procedure capability/execution classification, including failures. Actual session observations, source revision matching and explicit unproven states: [scope](PROJECT_CAPABILITY_REPORT.md).

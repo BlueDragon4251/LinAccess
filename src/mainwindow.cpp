@@ -10,6 +10,8 @@
 #include "native_macro.hpp"
 #include "native_module_debugger.hpp"
 #include "vba_debugger.hpp"
+#include "native_debug_output.hpp"
+#include <QDockWidget>
 #include "native_macro_editor_draft.hpp"
 #include "native_macro_argument_editor.hpp"
 #include "native_macro_storage.hpp"
@@ -362,6 +364,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     });
     auto* objectMenu=menuBar()->addMenu("&Einfügen");
     auto* viewMenu=menuBar()->addMenu("&Ansicht");
+    auto* debugOutput=new QDockWidget("Debug-Ausgabe",this);debugOutput->setObjectName("native-debug-output-dock");debugOutput->setWidget(createNativeDebugOutputView(debugOutput,"native-debug-output"));addDockWidget(Qt::BottomDockWidgetArea,debugOutput);debugOutput->hide();auto* debugOutputAction=debugOutput->toggleViewAction();debugOutputAction->setObjectName("native-debug-output-toggle");viewMenu->addAction(debugOutputAction);
     menuBar()->removeAction(viewMenu->menuAction()); menuBar()->insertMenu(objectMenu->menuAction(),viewMenu);
     for (int i=5;i<11;++i) objectMenu->addAction(projectActions[i]);
     auto* renameTable=viewMenu->addAction("Tabelle &umbenennen...");renameTable->setObjectName("native-table-rename");

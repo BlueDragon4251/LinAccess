@@ -1,3 +1,4 @@
+void testVbaDebugOutput();
 void testVbaFixedStrings();
 void testVbaConditions();
 void testVbaDebugger();
@@ -5011,6 +5012,7 @@ End Function
     assert(evaluate("AscW(String:=ChrW$(CharCode:=937))").asNumber()==937);
     assert(evaluate("Chr$(CharCode:=34)").asText()=="\"");
     testVbaDebugger();
+    testVbaDebugOutput();
     testVbaConditions();
     std::cout << "Core tests passed\n";
 }

@@ -65,8 +65,8 @@ The actual debugger dialog labels both cases and disables error-only continuatio
 Without an active native debugger, Stop or a failed assertion raises explicit3251
 rather than silently continuing. The saved-module editor already creates a debugger
 session for Run/F5; this does not automatically create one for every form event or
-standalone host. It adds no Debug.Print/Immediate window, complete IDE lifecycle,
-Windows modal/event oracle or general VBA parity. Malformed assertions fail normal
+standalone host. Debug.Print output is described below; an interactive Immediate evaluator, complete IDE lifecycle,
+Windows modal/event oracle and general VBA parity remain unproven. Malformed assertions fail normal
 whole-procedure preflight before host effects. MS-VBAL5.4.2.11/5.4.2.23 are the
 normative basis; Stop resumption is explicitly implementation-defined there.
 
@@ -76,3 +76,31 @@ errors. The existing document test drives the real Stop/Assert dialog, reads the
 actual local variable, resumes and checks actual SQL before rollback. Final targeted
 core/GUI2/2 passed (14.49s); no new CTest ID, Windows or original-workflow claim.
 F040/F045/F051/F060 remain at their existing documented catalog statuses.
+
+
+## Native Debug.Print output
+
+Debug.Print and Debug.? execute in the actual interpreter, including outside an
+active debugger. Expression lists use comma zones of14 UTF-16 units, semicolon
+continuation, Spc and Tab, and native scalar formatting. Expressions evaluate once
+from left to right; output already emitted survives a later expression error.
+Malformed lists fail procedure preflight. Numeric leading/trailing spaces and
+separator rules follow MS-VBAL5.4.5.8/5.4.5.8.1. Native date/locale conversion
+boundaries remain; this is not a Windows output-format oracle.
+
+The real View-menu Debug-Ausgabe dock and the debugger's output pane display the
+same thread-local buffer. Output remains readable during Stop and after Continue.
+Clear resets it explicitly. Reading output never invokes property getters or
+re-evaluates expressions. Hidden/unchanged views skip refresh; appends preserve
+manual scroll position. No output is written to stdout, files or network.
+
+Limits: retained text1MiB/8192 line breaks, statement output1MiB, expression list
+64KiB/256 items/64 nesting levels. Retention drops complete UTF-8 sequences and
+reports truncation. Position follows UTF-16 units; full glyph/display-width parity
+is not claimed. Print#, Me.Print, graphics and interactive Immediate evaluation
+remain outside this scope.
+
+Application built; existing core/GUI bundle2/2 passed (17.43s), including real
+Stop/Continue output, separators, ByRef single evaluation, partial error output,
+UTF-8 retention and clear. The core binary links without Qt. No new CTest IDs.
+F060 remains a confirmed partial scope; catalog456/386/70 is unchanged.

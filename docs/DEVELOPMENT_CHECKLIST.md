@@ -3762,3 +3762,19 @@ Details CURRENCY_PARAMETERS_RUNTIME.md/CURRENCY_ARITHMETIC_SQL_RUNTIME.md.
 TOP-Entwurf alsc068ccd veröffentlicht/verifiziert; letzte geprüfteDEB44b1f70
 vor Aktions-/TOP-/exakter Parameterarithmetik. Jetzt aktuelles Paket prüfen;
 F014/F067/F068 und fester Katalog456/386/70 unverändert, Entwicklung fortsetzen.
+
+
+Native Debug.Print/Debug.? ist implementiert: echte VM-Auswertung, Komma-/Semikolon-
+Listen, Spc/Tab, einmalige Links-nach-rechts-Auswertung und erhaltene Teilausgabe
+bei späterem Fehler. Gemeinsamer flüchtiger thread-lokaler Puffer für tatsächliches
+Ansichtsmenü-Dock und Debugger-Pane, auch während Stop/Continue; explizites Löschen,
+Scrollposition erhalten. Grenzen1MiB/8192 Zeilen, Listen64KiB/256 Elemente/64 Ebenen,
+UTF-8-sichere Aufbewahrung, UTF-16-Spalten. Kein Dateidruck/Immediate-Evaluator oder
+vollständiger Windows-/Locale-Nachweis. Details NATIVE_VBA_DEBUGGER_RUNTIME.md.
+Anwendung gebaut; bestehendes Kern-/GUI-Bündel2/2 (17,43s) bestanden, Kern ohneQt
+verlinkt. Keine neuen CTests, kein neuer Original-/Windows-/Gesamtsuitennachweis.
+Letzte veröffentlichte Vorstufe0e4f084; dazu DEB unter
+/workspace/work/exact-currency-expressions/package/linaccess-0.7.0-Linux.deb mit
+scripts/check-deb.sh einschließlich BuildID/SQLite3.54.1/MDBTools1.0.1 geprüft.
+Dieses Paket liegt vor Debug.Print. F060 und Katalog456/386/70 unverändert.
+Entwicklung ohne Zwischenabschluss fortsetzen.

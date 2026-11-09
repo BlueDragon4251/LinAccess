@@ -94,6 +94,7 @@ struct sqlite3_value;
 
 void exerciseStoredForm(MainWindow& window,QSqlDatabase db);
 void exerciseVisualQueryDesigner(MainWindow& window,QSqlDatabase db);
+void exerciseNativeDebugOutput(MainWindow& window,QSqlDatabase db);
 
 namespace {
 QAction* action(MainWindow& window,const QString& text) {
@@ -3558,6 +3559,7 @@ int main(int argc,char** argv) {
     assert(refused && hash()==beforeRefusal && QSqlDatabase::database("linaccess-main").databaseName()==third);
     exerciseQueryEditor(window,db);
     exerciseVisualQueryDesigner(window,db);
+    exerciseNativeDebugOutput(window,db);
     exerciseTableSave(window,db);
     exerciseReferenceDatasheet();
     exerciseDatasheetOutput(window,db);
