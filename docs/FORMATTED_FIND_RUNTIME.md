@@ -37,3 +37,6 @@ Windows collation, wildcard, error-timing or FindRecord equivalence.
 
 Explicit native wildcard search now extends the prior literal-only boundary;
 see WILDCARD_FIND_RUNTIME.md. Full Jet/Windows behavior remains open.
+
+Raw all-field FindRecord now uses matching native field kinds; see
+ALL_FIELD_FIND_RUNTIME.md. Full cross-type/Windows traversal remains open.

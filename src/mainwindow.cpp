@@ -971,7 +971,6 @@ QVariantMap MainWindow::findTableRecord(const QVariantMap& request) {
         const bool sensitive=request.value("sensitive").toBool(),first=request.value("first").toBool(),formatted=request.value("formatted").toBool(),all=request.value("allfields").toBool();
         if(mode<0 || mode>2 || direction<0 || direction>2) return tableCommandFailure(5,"Ungültiger FindRecord-Vergleich oder Suchrichtung.");
         const bool textValue=sought.kind==linaccess::VbaValue::Kind::Text;
-        if(all && !formatted) return tableCommandFailure(3251,"Unformatierte Suche über alle Felder ist hier nicht implementiert.");
         if(formatted && !textValue) return tableCommandFailure(3251,"Formatierte Suche benötigt wörtlichen Text.");
         const auto text=linaccess::nativeFindValueText(sought);
         if(textValue && text.isEmpty()) return tableCommandFailure(3251,"Leere FindRecord-Suche ist noch nicht implementiert.");

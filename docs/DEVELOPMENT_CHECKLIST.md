@@ -2277,3 +2277,18 @@ lokalen Testvariablennamen korrigiert; veraltete globale Wildcard-Negativannahme
 gezielt ersetzt. Keine neue CTest-ID/Windows-Beobachtung. Nicht-ASCII-Textranges/
 Surrogatvergleiche und volle Jet-/Locale-/Allfeld-/Error/Event-Gleichheit bleiben
 offen. WILDCARD_FIND_RUNTIME.md; F373/F071/F130 und456/384/72 unverändert. Direkt weiter.
+
+Unformatierte DoCmd.FindRecord-Suche unterstützt jetzt OnlyCurrentField:=acAll0
+über die jeweils passenden unterstützten Feldtypen. Text sucht Textfelder,
+native Number/Currency/Date/Boolean verwenden ihre vorhandene geprüfte Gleichheit;
+typisierte Werte benötigen weiter Whole-Field-Match. In direkten Tabellenformularen
+ist der gerade fokussierte Steuerelementtyp im Allfeldmodus nicht mehr maßgeblich.
+Tabellen/Readonly-Query-Resultate verwenden den bestehenden Allspalten-Scanner,
+Formulare ihren begrenzten Datensatzbestand; formatierte Allfeld-Strings bleiben
+getrennt. Vorhandene GUI-Prüfung1/1 (5,90s), App gebaut: tatsächliche VBA-/Qt-
+Textsuche vom fokussierten Zahlenfeld, numerische Suche aus Textfokus, vollständiges
+Datum mit Uhrzeit sowie Tabelle mit gefundenem Zelltyp/Spaltenwechsel geprüft.
+Keine neuen CTest-/Windows-Beobachtungen; keine unbekannten Typen aus Zelltext
+erraten. Volle Cross-Type-Coercion, Allfeld-/Spalten-/Fokus-/Ereignis-/Locale-
+Gleichheit bleibt offen. ALL_FIELD_FIND_RUNTIME.md; F373/F071/F130/F050 und456/384/72
+unverändert. Ohne Zwischenabschluss weitere allgemeine Funktionen umsetzen.

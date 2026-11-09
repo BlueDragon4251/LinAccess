@@ -1405,7 +1405,11 @@ DoCmd.FindRecord "row-280"
 End Sub
 Sub FindRecordAllFields()
 DoCmd.FindRecord "row-250",OnlyCurrentField:=acAll
-Me.Tag="must-not-run"
+Me.Tag="findrecord-all-raw"
+End Sub
+Sub FindRecordAllNumber()
+DoCmd.FindRecord 42,Match:=1,OnlyCurrentField:=acAll
+Me.Tag="findrecord-all-number"
 End Sub
 Sub FindRecordFormatted()
 DoCmd.FindRecord "row-250",SearchAsFormatted:=True
@@ -2008,9 +2012,13 @@ End Sub
     assert(mixed->executeProcedure("FindRecordFormatted",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==249);
     navigationView->setCurrentIndex(navigationModel->index(24,0));
     assert(mixed->executeProcedure("FindRecordAllFormatted",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==249 && navigationView->currentIndex().column()==1);
+    navigationView->setCurrentIndex(navigationModel->index(24,0));assert(mixed->executeProcedure("FindRecordAllFields",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==249 && navigationView->currentIndex().column()==1);
+    assert(mixed->executeProcedure("FindRecordAllNumber",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==41 && navigationView->currentIndex().column()==0);
+    navigationView->setCurrentIndex(navigationModel->index(24,1));
+
     assert(mixed->executeProcedure("FindRecordEmptyMatch",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==24);
     assert(mixed->executeProcedure("FindRecordNoMatch",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==24);
-    for(const char* procedure:{"FindRecordAllFields","FindRecordNumber"})
+    for(const char* procedure:{"FindRecordNumber"})
         assert(mixed->executeProcedure(procedure,selectArguments).errorNumber==3251 && navigationView->currentIndex().row()==24);
     assert(mixed->executeProcedure("FindRecordWildcard",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==239 && makePreviewFormObject(*mixed)->member("Tag",{}).asText()=="wildcard-found");
     assert(mixed->executeProcedure("FindRecordInvalidDirection",selectArguments).errorNumber==5);
@@ -2507,6 +2515,18 @@ Sub FindDuplicateFormatted()
 Me!Duplicate.SetFocus
 DoCmd.FindRecord "0.1235",1,False,2,True,-1,True
 End Sub
+Sub FindAllRawLabel()
+Me!Amount.SetFocus
+DoCmd.FindRecord "mixed",1,True,2,False,0,True
+End Sub
+Sub FindAllRawNumber()
+Me!Label.SetFocus
+DoCmd.FindRecord 2.5,1,False,2,False,0,True
+End Sub
+Sub FindAllRawDate()
+Me!Label.SetFocus
+DoCmd.FindRecord CDate("2003-12-31 18:05:06"),1,False,2,False,0,True
+End Sub
 Sub FindWildcardLabel()
 Me!Label.SetFocus
 DoCmd.FindRecord "m[!a]x??",1,False,2,False,-1,True
@@ -2559,6 +2579,10 @@ End Sub
     assert(label->text()=="MIXED" && controls->item("Label").object->scalarValue().asText()=="mixed");
     assert(form.executeProcedure("Store",arguments).status==linaccess::VbaExecutionStatus::Completed);
     assert(sql.exec("SELECT label,moment FROM format_edit WHERE id=1") && sql.next() && sql.value(0).toString()=="mixed" && sql.value(1).toString()=="2003-12-31 18:05:06");sql.finish();
+    assert(form.executeProcedure("FindDateSecond",arguments).status==linaccess::VbaExecutionStatus::Completed && root->member("CurrentRecord",{}).number==2);
+    assert(form.executeProcedure("FindAllRawLabel",arguments).status==linaccess::VbaExecutionStatus::Completed && root->member("CurrentRecord",{}).number==1);
+    assert(form.executeProcedure("FindAllRawNumber",arguments).status==linaccess::VbaExecutionStatus::Completed && root->member("CurrentRecord",{}).number==2);
+    assert(form.executeProcedure("FindAllRawDate",arguments).status==linaccess::VbaExecutionStatus::Completed && root->member("CurrentRecord",{}).number==1);
     assert(form.executeProcedure("FindDateSecond",arguments).status==linaccess::VbaExecutionStatus::Completed && root->member("CurrentRecord",{}).number==2);
     assert(form.executeProcedure("FindWildcardLabel",arguments).status==linaccess::VbaExecutionStatus::Completed && root->member("CurrentRecord",{}).number==1);
     assert(form.executeProcedure("InvalidWildcardLabel",arguments).errorNumber==93 && root->member("CurrentRecord",{}).number==1);

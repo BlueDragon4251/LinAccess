@@ -745,7 +745,7 @@ public:
             throw linaccess::VbaRuntimeError(2046,"FindRecord is blocked by a modal window");
         QString field,formatControl;
         const auto* focus=QApplication::focusWidget();
-        for(const auto& control:document.layout_.controls) {
+        if(!all) for(const auto& control:document.layout_.controls) {
             auto* widget=document.controls_.value(control.name.toCaseFolded()).data();
             const auto* combo=qobject_cast<QComboBox*>(widget);
             if(!widget || (widget!=focus && (!combo || combo->lineEdit()!=focus))) continue;
@@ -1102,7 +1102,6 @@ linaccess::VbaValue dispatchPreviewDocumentCommand(AccessFormPreview& preview,st
         const int match=optionalNumber(1,1),search=optionalNumber(3,2),field=optionalNumber(5,-1);
         const bool sensitive=optionalBoolean(2,false),formatted=optionalBoolean(4,false),first=optionalBoolean(6,true);
         if(match<0 || match>2 || search<0 || search>2 || (field!=0 && field!=-1)) throw VbaRuntimeError(5,"Invalid FindRecord option");
-        if(field!=-1 && !formatted) throw VbaRuntimeError(3251,"Unformatted all-field FindRecord is not implemented");
         if(formatted && args[0].kind!=VbaValue::Kind::Text) throw VbaRuntimeError(3251,"Formatted FindRecord requires literal String input");
         const auto sought=linaccess::normalizeNativeFindValue(args[0]);
         const bool textValue=sought.kind==VbaValue::Kind::Text;
