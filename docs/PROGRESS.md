@@ -6657,3 +6657,20 @@ NULL bei existierendem Textdefault, Undo/Redo und verweigerte doppelte Namen.
 Keine neue CTest-ID oder Windows-Beobachtung. TYPED_GRID_CLIPBOARD.md; externe/
 Formular-MIME-/Access-Ereignisgleichheit bleibt offen. F340/F168/F173 und456/384/72
 unverändert. Direkt weiterimplementieren.
+
+
+Readonly-Abfragedatenblätter veröffentlichen jetzt neben TSV das vorhandene typisierte
+Grid-MIME mit Feldnamen. Tatsächliche rohe Querywerte erhalten Binärbytes, NULL,
+Leertext/leeres BLOB und volle SQLite-Ganzzahlen; TSV verwendet Hex-Binärtext und
+exakte Ganzzahldarstellung. Proveniente CURRENCY_TICKS-Ergebnisse erhalten ein
+getrenntes Currency-Tag mit kanonischen 64-Bit-Ticks, keine Umdeutung als Ganzzahl.
+Paste wandelt Currency vor Cacheänderung in exakten Text oder verlustfrei begrenzte
+bestehende Currency/Double-Speicherung um; andere Zieltypen werden verweigert.
+Keine physische CURRENCY_TICKS-Unterstützung oder externe Access-MIME-Parität.
+Vorhandene GUI/Feld-Prüfungen gemeinsam2/2 (6,42s), App gebaut: tatsächliches
+Query→anders geordnetes Tabellenziel, SQL-Default, volle Integer/Binär-/NULL-
+Unterscheidung, beide Currency-64-Bit-Grenzen nach Text, kleine Currency nach REAL,
+Undo/Redo/Save und vollständige Verweigerung großer Currency→REAL ohne Entwurf/
+SQL-Änderung. Fehlendes QMimeData-Include beim Build gezielt korrigiert. Keine neue
+CTest-ID/Windows-Beobachtung. TYPED_GRID_CLIPBOARD.md; F340/F168/F173/F014 und
+456/384/72 unverändert. Direkt weiterimplementieren.

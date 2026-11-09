@@ -8,6 +8,7 @@
 #include "vba_currency.hpp"
 #include "access_table_delegate.hpp"
 #include "access_table_view.hpp"
+#include "native_query_view.hpp"
 #include <QHeaderView>
 #include <QClipboard>
 #include <QTableView>
@@ -397,6 +398,34 @@ End Function
 
 
 
+    }
+
+    {
+        assert(sql.exec("CREATE TABLE query_clip_source(n INTEGER,note TEXT,payload BLOB)"));
+        assert(sql.exec("INSERT INTO query_clip_source VALUES(9223372036854775806,NULL,x'0001ff80'),(-9223372036854775807,'',x'')"));
+        assert(sql.exec("CREATE TABLE query_clip_target(id INTEGER PRIMARY KEY AUTOINCREMENT,payload BLOB,n INTEGER,note TEXT,extra TEXT DEFAULT 'default')"));
+        linaccess::AccessQueryModel result;result.execute(db,"SELECT n,note,payload FROM query_clip_source ORDER BY rowid");
+        linaccess::NativeQueryView source;source.setModel(&result);source.show();source.selectAll();source.copySelection();
+        assert(QApplication::clipboard()->text().startsWith("9223372036854775806\t\t0x0001ff80") && QApplication::clipboard()->mimeData()->hasFormat(linaccess::nativeGridMime));
+        linaccess::AccessTableModel dest(nullptr,db);dest.setTable("query_clip_target");dest.setEditStrategy(QSqlTableModel::OnManualSubmit);assert(dest.select());linaccess::AccessTableView target;target.setModel(&dest);
+        assert(target.pasteSelection(true) && dest.rowCount()==2 && dest.undoBlock() && dest.rowCount()==0 && dest.redoBlock() && dest.submitTransactionally());
+        assert(sql.exec("SELECT n,note,payload,extra FROM query_clip_target ORDER BY id") && sql.next());
+        assert(sql.value(0).toLongLong()==9223372036854775806LL && sql.value(1).isNull() && sql.value(2).toByteArray()==QByteArray::fromHex("0001ff80") && sql.value(3).toString()=="default");
+        assert(sql.next() && sql.value(0).toLongLong()==-9223372036854775807LL && !sql.value(1).isNull() && sql.value(1).toString().isEmpty() && !sql.value(2).isNull() && sql.value(2).toByteArray().isEmpty());sql.finish();
+        assert(sql.exec("CREATE TABLE query_money_target(id INTEGER PRIMARY KEY AUTOINCREMENT,small CURRENCY_REAL,large TEXT)"));
+        assert(sql.exec("CREATE TABLE query_money_guard(id INTEGER PRIMARY KEY AUTOINCREMENT,small CURRENCY_REAL,large CURRENCY_REAL)"));
+        linaccess::AccessTableModel money(nullptr,db);money.setTable("query_money_target");money.setEditStrategy(QSqlTableModel::OnManualSubmit);assert(money.select());target.setModel(&money);
+        for(const auto* large:{"922337203685477.5807","-922337203685477.5808"}) {
+            result.execute(db,"PARAMETERS p Currency,q Currency; SELECT [p] AS small,[q] AS large",{{"p","1.2345"},{"q",large}});source.selectAll();source.copySelection();
+            assert(QApplication::clipboard()->text()==QStringLiteral("1.2345\t")+large);
+            const auto payload=QJsonDocument::fromJson(QApplication::clipboard()->mimeData()->data(linaccess::nativeGridMime)).object();
+            assert(payload["rows"].toArray()[0].toArray()[0].toObject()["kind"]=="currency");
+            const int previous=money.rowCount();assert(target.pasteSelection(true) && money.rowCount()==previous+1 && money.undoBlock() && money.rowCount()==previous && money.redoBlock() && money.submitTransactionally());
+            assert(sql.exec("SELECT small,large FROM query_money_target ORDER BY id DESC LIMIT 1") && sql.next() && linaccess::currencyFromRealStorage(sql.value(0).toDouble()).currencyUnits==12345 && sql.value(1).toString()==large);sql.finish();
+            linaccess::AccessTableModel guard(nullptr,db);guard.setTable("query_money_guard");guard.setEditStrategy(QSqlTableModel::OnManualSubmit);assert(guard.select());linaccess::AccessTableView guarded;guarded.setModel(&guard);
+            assert(!guarded.pasteSelection(true) && !guard.isDirty() && guard.rowCount()==0);
+            assert(sql.exec("SELECT COUNT(*) FROM query_money_guard") && sql.next() && sql.value(0).toInt()==0);sql.finish();
+        }
     }
 
     {

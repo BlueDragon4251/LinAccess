@@ -3,8 +3,10 @@
 #include "native_table_find.hpp"
 #include "native_cell_zoom.hpp"
 #include "native_grid_clipboard.hpp"
+#include "native_grid_mime.hpp"
 #include <QApplication>
 #include <QClipboard>
+#include <QMimeData>
 #include <QKeyEvent>
 #include <QStatusTipEvent>
 #include <QPersistentModelIndex>
@@ -32,8 +34,20 @@ public:
     void copySelection() {
         auto* result=dynamic_cast<AccessQueryModel*>(model());
         if(!result || !isVisible() || !isEnabled()) throw VbaRuntimeError(2046,"Kein verfügbares Abfrageergebnis.");
-        const auto text=nativeGridClipboardText(*this,[result](const QModelIndex& index) { return result->clipboardText(index); });
-        QApplication::clipboard()->setText(text);
+        QJsonArray rows,cells,fields;int previous=-1;
+        const auto text=nativeGridClipboardText(*this,[&](const QModelIndex& index) {
+            if(previous>=0 && previous!=index.row()) {rows.append(cells);cells={};}
+            if(rows.isEmpty() && (previous<0 || previous==index.row())) fields.append(result->headerData(index.column(),Qt::Horizontal).toString());
+            previous=index.row();const auto raw=result->data(index,Qt::EditRole);const auto type=result->fieldSqlType(index.column());
+            cells.append(nativeGridEncode(raw,type));
+            if(raw.metaType().id()==QMetaType::QByteArray) return QStringLiteral("0x")+QString::fromLatin1(raw.toByteArray().toHex());
+            if(raw.metaType().id()==QMetaType::LongLong && type!="CURRENCY_TICKS") return QString::number(raw.toLongLong());
+            return result->clipboardText(index);
+        });
+        if(!cells.isEmpty()) rows.append(cells);
+        const auto data=QJsonDocument(QJsonObject{{"version",1},{"rows",rows},{"fields",fields}}).toJson(QJsonDocument::Compact);
+        if(data.size()>nativeGridMimeLimit) throw VbaRuntimeError(3035,"Typed query clipboard exceeds its native size limit");
+        auto* mime=new QMimeData;mime->setText(text);mime->setData(nativeGridMime,data);QApplication::clipboard()->setMimeData(mime);
     }
     void zoomField() {
         const QPointer<NativeQueryView> self=this;

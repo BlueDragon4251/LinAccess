@@ -6,6 +6,8 @@
 #include "vba_qt_value.hpp"
 #include "native_find_value.hpp"
 #include "native_text_replace.hpp"
+#include "native_grid_mime.hpp"
+#include "vba_currency.hpp"
 #include <QSqlError>
 #include <QElapsedTimer>
 #include <QSqlRecord>
@@ -474,6 +476,12 @@ bool AccessTableModel::applyDataBlock(int firstRow,int firstColumn,const QVector
                 } else if(!isPasteColumn(targetColumn,typed)) return reject(2448);
                 const auto input=values[row][column];QVariant converted;
                 if(typed && input.isNull()) converted={};
+                else if(typed && input.metaType()==QMetaType::fromType<NativeGridCurrency>()) {
+                    const auto exact=VbaValue::currency(input.value<NativeGridCurrency>().units);
+                    if(nativeFindTextType(type) || type=="CURRENCY_REAL") converted=sqlFieldValue(exact,type);
+                    else if(type!="SINGLE_REAL" && (type.contains("REAL",Qt::CaseInsensitive) || type.contains("DOUB",Qt::CaseInsensitive) || type.contains("FLOA",Qt::CaseInsensitive))) converted=currencyToRealStorage(exact);
+                    else return reject(3251);
+                }
                 else if(typed && type.contains("BLOB",Qt::CaseInsensitive)) {
                     if(input.metaType().id()!=QMetaType::QByteArray) return reject(13);
                     converted=input;

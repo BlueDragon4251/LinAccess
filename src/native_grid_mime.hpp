@@ -5,12 +5,18 @@
 #include <QJsonObject>
 #include <QVariant>
 #include <cmath>
+namespace linaccess {struct NativeGridCurrency {qint64 units{};};}
+Q_DECLARE_METATYPE(linaccess::NativeGridCurrency)
 namespace linaccess {
 inline constexpr auto nativeGridMime="application/x-linaccess-grid-v1";
 inline constexpr qsizetype nativeGridMimeLimit=8*1024*1024;
-inline QJsonObject nativeGridEncode(const QVariant& value) {
+inline QJsonObject nativeGridEncode(const QVariant& value,const QString& type={}) {
     if(value.isNull()) return {{"kind","null"}};
     const auto kind=value.metaType().id();
+    if(type=="CURRENCY_TICKS") {
+        if(kind!=QMetaType::Int && kind!=QMetaType::LongLong) throw VbaRuntimeError(13,"Exact Currency query clipboard requires integer ticks");
+        return {{"kind","currency"},{"value",QString::number(value.toLongLong())}};
+    }
     if(kind==QMetaType::Int || kind==QMetaType::LongLong) return {{"kind","integer"},{"value",QString::number(value.toLongLong())}};
     if(kind==QMetaType::Double) {
         if(!std::isfinite(value.toDouble()) || (value.toDouble()==0 && std::signbit(value.toDouble()))) throw VbaRuntimeError(6,"Nonfinite grid clipboard number");
@@ -32,9 +38,9 @@ inline QVariant nativeGridDecode(const QJsonValue& cell) {
     if(!cell.isObject()) throw VbaRuntimeError(13,"Invalid typed grid cell");
     const auto object=cell.toObject();const auto kind=object.value("kind").toString();const auto value=object.value("value");
     if(kind=="null" && value.isUndefined()) return {};
-    if(kind=="integer" && value.isString()) {
+    if((kind=="integer" || kind=="currency") && value.isString()) {
         bool valid=false;const auto integer=value.toString().toLongLong(&valid);
-        if(valid && QString::number(integer)==value.toString()) return QVariant::fromValue(integer);
+        if(valid && QString::number(integer)==value.toString()) return kind=="currency" ? QVariant::fromValue(NativeGridCurrency{integer}) : QVariant::fromValue(integer);
     }
     if(kind=="real" && value.isDouble() && std::isfinite(value.toDouble())) return value.toDouble();
     if(kind=="boolean" && value.isBool()) return value.toBool();
