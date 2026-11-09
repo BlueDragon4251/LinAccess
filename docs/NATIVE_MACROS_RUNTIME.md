@@ -26,6 +26,8 @@ transaction, document, modal and error guards:
 | Requery | optional ControlName |
 | RunCode | one supported Function call, including parentheses; return ignored |
 | StopMacro | none; terminates this RunMacro invocation, including repetitions |
+| StopAllMacros | none; terminates the active native macro invocation tree |
+| Echo | Boolean EchoOn, optional single-line status text |
 | CancelEvent | none; cancels a supported current bound event |
 | RunMacro | MacroName, optional RepeatCount/RepeatExpression; bounded nested call |
 
@@ -300,3 +302,33 @@ remain outside write/delete ownership.
 
 [Native macro project commands](NATIVE_MACRO_PROJECT_COMMANDS.md) provide real
 Close/DeleteObject/Rename operations under project and document execution guards.
+
+
+## StopAllMacros and Echo
+
+StopAllMacros is a saved action with no arguments, not a DoCmd VBA method. It stops
+the current nested native invocation tree, subsequent actions and repetitions.
+The shared state is checked after condition/repeat-expression evaluation and
+before the next action. It clears when the outermost invocation unwinds, so later
+independent macros run normally. Earlier committed SQL is not rolled back.
+
+The implemented stop concerns macro dispatch. Native VBA Function code that called
+a nested macro can finish its own statements; its parent macro still stops before
+later actions. Complete Access/VBA stop propagation and arbitrary reentrant roots
+remain open. No application-Quit/global VBA cancellation is fabricated.
+
+Echo actions and the standalone DoCmd/Application Echo members use the existing
+real GUI update suppression/status surface. StopAllMacros restores that Echo state,
+preserving previously disabled surfaces. The public contract also mentions
+SetWarnings restoration; full native SetWarnings state is not implemented and no
+such restoration/equivalence is claimed here.
+
+Contract consulted: Microsoft Learn,
+https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/stopallmacros-macro-action .
+This is documentation, not a new Windows Access2003 execution observation.
+
+Validation: existing GUI/layout2/2 passed (19.55s), matching app build. Actual dialogs
+observe suppressed updates, then nested stop/Echo restoration in both hosts. SQL
+order/VBA continuation, omitted parent actions/repetitions, later independent start,
+stop from repeat evaluation, false conditional stop, named Application.Echo and
+invalid status preflight without UI mutation are exercised. No new test target.

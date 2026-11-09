@@ -1422,7 +1422,7 @@ public:
         if(key=="runmacro") {
             linaccess::runNativeMacro(preview.db_,args,[&] {(void)checked();},
                 [&](const QString& expression) {return checked().evalExpression(expression.toUtf8().toStdString());},
-                [&](const linaccess::NativeMacroAction& action) {if(action.name=="RunCode") runNativeMacroFunction(checked(),action.arguments.front().asText());else (void)member(action.name.toStdString(),action.arguments);});
+                [&](const linaccess::NativeMacroAction& action) {if(action.name=="RunCode") runNativeMacroFunction(checked(),action.arguments.front().asText());else (void)member(action.name.toStdString(),action.arguments);},[] {linaccess::restoreNativeEcho();});
             return {};
         }
 

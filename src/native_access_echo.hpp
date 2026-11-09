@@ -58,6 +58,10 @@ private:
         for(const auto& surface:surfaces) if(surface.widget) surface.widget->setUpdatesEnabled(surface.updatesEnabled);
     }
 };
+inline void restoreNativeEcho() {
+    auto* object=qApp->findChild<QObject*>("access-native-echo-state",Qt::FindDirectChildrenOnly);if(!object) return;
+    auto* state=dynamic_cast<NativeEchoState*>(object);if(!state) throw VbaRuntimeError(3251,"Native Echo state is unavailable");state->enable(true);
+}
 inline VbaValue nativeEcho(QWidget& document,const std::vector<VbaValue>& arguments) {
     auto count=arguments.size();
     while(count && arguments[count-1].kind==VbaValue::Kind::Missing) --count;

@@ -7,6 +7,7 @@
 #include "access_format.hpp"
 #include "dao_database.hpp"
 #include "native_input_box.hpp"
+#include "native_access_echo.hpp"
 #include "native_public_procedure_run.hpp"
 #include "native_application_run.hpp"
 #include "native_domain_lookup.hpp"
@@ -72,6 +73,7 @@ public:
     bool isNativeType(std::string_view type) const override {return type=="access.docmd";}
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         const auto key=QString::fromUtf8(name.data(),name.size()).toCaseFolded();
+        if(key=="echo") return VbaArgumentSignature{{"EchoOn","StatusBarText"},1};
         if(key=="selectobject") return VbaArgumentSignature{{"ObjectType","ObjectName","InDatabaseWindow"},1};
         if(key=="close") return VbaArgumentSignature{{"ObjectType","ObjectName","Save"},0};
         if(key=="rename") return VbaArgumentSignature{{"NewName","ObjectType","OldName"},1};
@@ -96,8 +98,9 @@ public:
                     const auto signature=nativeVbaProcedureSignature(*source,target.toStdString());if(!signature || !signature->function) throw VbaRuntimeError(3251,"RunCode requires a Function");
                     const auto result=executeVbaEventExpression({},"="+expression,host);if(result.status!=VbaExecutionStatus::Completed) throw VbaRuntimeError(result.errorNumber ? result.errorNumber : 3251,result.explanation,result.errorSource,result.errorHelpFile,result.errorHelpContext);
                 }else (void)member(action.name.toStdString(),action.arguments);
-            });return VbaValue::empty();
+            },[] {restoreNativeEcho();});return VbaValue::empty();
         }
+        if(key=="echo") {auto result=nativeEcho(*owner_,args);host.check();return result;}
         std::vector<VbaValue> values;for(const auto& argument:args) {values.push_back(scalarVbaValue(argument));host.check();}
         const auto number=[&](std::size_t index,int fallback) {return index>=values.size() || values[index].kind==VbaValue::Kind::Missing ? fallback : static_cast<int>(coerceVbaModuleValue(values[index],"long").number);};
         const auto target=[&] {if(values.empty() || values[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"Object name is required");return QString::fromStdString(coerceVbaModuleValue(values[0],"string").asText());};
@@ -193,10 +196,12 @@ public:
     std::string_view className() const override {return "Application";}
     bool isNativeType(std::string_view type) const override {return type=="access.application";}
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
+        if(QString::fromUtf8(name.data(),name.size()).compare("Echo",Qt::CaseInsensitive)==0) return VbaArgumentSignature{{"EchoOn","bstrStatusBarText"},1};
         if(QString::fromUtf8(name.data(),name.size()).compare("Run",Qt::CaseInsensitive)==0) return nativeApplicationRunSignature();return {};
     }
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
         NativeStandardModuleHost host(owner_,db_,guard_);host.check();const auto key=QString::fromUtf8(name.data(),name.size()).toCaseFolded();
+        if(key=="echo") {auto result=nativeEcho(*owner_,args);host.check();return result;}
         if(key=="docmd") {if(!args.empty()) throw VbaRuntimeError(450,"DoCmd requires no arguments");if(auto command=commands_.lock()) return VbaValue::reference(command);auto command=std::make_shared<NativeModuleDoCmd>(owner_,db_,guard_);commands_=command;return VbaValue::reference(command);}
         if(key=="run") return runPublicStandardProcedure(host,args);
         if(key=="eval") {

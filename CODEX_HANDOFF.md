@@ -3734,3 +3734,23 @@ und Payload/Rechte/App-/Helper-BuildIDs/MDBTools1.0.1/bytegleiches SQLite3.54.1
 samt realem JOIN/NULL-/Countercheck verifiziert. Keine neue CTest-ID/Gesamtsuite/
 Windows-Beobachtung. NATIVE_MACRO_PROJECT_COMMANDS.md; F088/F050/F135/F140/F148
 und456/384/72 unverändert. Direkt weiter mit StopAllMacros/Echo-Wiederherstellung.
+
+
+StopAllMacros als echte parameterlose Makroaktion implementiert, kein erfundener
+DoCmd-Member. Gemeinsamer Stop-Zustand beendet den aktuellen verschachtelten
+Aufrufbaum, Wiederholungen und bedingungsgesteuerte Fortsetzungen; nach äußerstem
+Unwind sind Zustand/Budgets/Frames wieder frei. Bereits laufender nativer VBA-
+Functioncode wird nicht global abgebrochen; folgende Makroaktionen bleiben aber
+beendet. Neue unabhängige Rootaufrufe funktionieren. Echo-Aktion und Echo-/
+Application.Echo im formularfreien Host nutzen bestehende reale UI-Suppression;
+StopAllMacros stellt implementiertes Echo wieder her. Vollständiger SetWarnings-
+Zustand/Access-Stop-/Reentry-Scheduling bleiben offen, keine Rücksetzung eines
+nicht implementierten Warnungszustands behauptet. App gebaut, vorhandene GUI/
+Layout2/2 (19,55s) ohne Korrekturlauf bestanden: tatsächliche MsgBox bei ausgeschal-
+teten Updates, verschachtelter SQL/RunCode/Stop beider Hosts, native VBA-Fortsetzung,
+fehlende nachfolgende Aktionen/Wiederholungen, unabhängiger Folgestart, Stop aus
+RepeatExpression, False-Stop ohne vorzeitige Echo-Restauration, benanntes
+Application.Echo, ungültiger Status ohne UI-Mutation, kein DoCmd.StopAllMacros.
+Keine neue CTest-ID/Gesamtsuite/Windows-Beobachtung/Paketprüfung; DEB gehört cb8931b.
+NATIVE_MACROS_RUNTIME.md; F088/F050/F051/F059/F135/F148 und456/384/72 unverändert.
+Direkt weiter mit vollständigem Aktionsargument-Editor/weiterer Aktionsausführung.

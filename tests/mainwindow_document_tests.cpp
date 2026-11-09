@@ -2650,6 +2650,34 @@ void testNativeMacroDesigner(MainWindow& window,QSqlDatabase db) {
     unknown=definition;unknown.insert("timer_interval",-1);error=0;try {(void)linaccess::nativeStoredForm("Invalid timer",unknown,db);}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==5);
 }
 
+void testStopAllMacros(MainWindow& window,QSqlDatabase db) {
+    using linaccess::VbaValue;QSqlQuery sql(db);assert(sql.exec("CREATE TABLE stop_all_effects(n INTEGER)"));const auto action=[](QString name,QJsonArray args=QJsonArray{}) {return QJsonObject{{"action",name},{"arguments",args}};};
+    const auto macro=[&](QString name,QJsonArray actions) {(void)linaccess::storeNativeMacro(db,name,{{"version",1},{"actions",actions}});};
+    sql.prepare("INSERT INTO _la_objects VALUES('module','StopAllFunctions',?)");sql.addBindValue(QJsonDocument(QJsonObject{{"version",1},{"vba",R"VBA(Public Function StopThroughFunction() As Long
+StopThroughFunction=MsgBox("Stop all echo probe",vbOKOnly)
+Application.DoCmd.RunMacro "StopAllChild"
+CurrentDb.Execute "INSERT INTO stop_all_effects VALUES(3)"
+End Function
+Public Function StopFromPredicate() As Boolean
+Application.DoCmd.RunMacro "StopAllChild"
+StopFromPredicate=True
+End Function
+Public Function EchoConditionalProbe() As Long
+EchoConditionalProbe=MsgBox("Echo conditional probe",vbOKOnly)
+End Function
+Public Function NamedApplicationEcho() As Long
+Application.Echo EchoOn:=False,bstrStatusBarText:="named echo"
+Application.Echo EchoOn:=True
+NamedApplicationEcho=1
+End Function)VBA"}}).toJson(QJsonDocument::Compact));assert(sql.exec());sql.finish();
+    macro("StopAllChild",{action("RunSQL",{"INSERT INTO stop_all_effects VALUES(2)"}),action("StopAllMacros"),action("RunSQL",{"INSERT INTO stop_all_effects VALUES(99)"})});macro("StopAllParent",{action("Echo",{false,"echo suppressed"}),action("RunSQL",{"INSERT INTO stop_all_effects VALUES(1)"}),action("RunCode",{"StopThroughFunction()"}),action("RunSQL",{"INSERT INTO stop_all_effects VALUES(4)"}),action("Echo",{true})});
+    linaccess::NativeStandardModuleHost host(&window,db,[] {});auto application=host.applicationObject();auto commands=application->member("DoCmd",{}).object;assert(window.centralWidget()->updatesEnabled());int observed=0;QTimer probe;probe.setInterval(1);QObject::connect(&probe,&QTimer::timeout,&window,[&] {if(auto* message=qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) {assert(message->text()=="Stop all echo probe" || message->text()=="Echo conditional probe");assert(!window.centralWidget()->updatesEnabled());++observed;message->button(QMessageBox::Ok)->click();}});probe.start();commands->member("RunMacro",{VbaValue::string("StopAllParent"),VbaValue::integer(5)});assert(window.centralWidget()->updatesEnabled() && !linaccess::nativeMacroStopAllPending() && !linaccess::nativeProjectMacrosActive(db));
+    {AccessFormPreview caller("stop_all_form","Begin Form\nBegin Section\nEnd\nEnd",{},db,&window);caller.show();QApplication::processEvents();makePreviewApplicationObject(caller)->member("DoCmd",{}).object->member("RunMacro",{VbaValue::string("StopAllParent"),VbaValue::integer(5)});assert(window.centralWidget()->updatesEnabled() && !linaccess::nativeMacroStopAllPending());assert(caller.close());}
+    macro("AfterStopAll",{action("RunSQL",{"INSERT INTO stop_all_effects VALUES(5)"})});commands->member("RunMacro",{VbaValue::string("AfterStopAll")});macro("PredicateStopBody",{action("RunSQL",{"INSERT INTO stop_all_effects VALUES(7)"})});commands->member("RunMacro",{VbaValue::string("PredicateStopBody"),VbaValue::missing(),VbaValue::string("StopFromPredicate()")});
+    auto conditional=action("StopAllMacros");conditional.insert("condition","False");macro("FalseStopAll",{action("Echo",{false}),conditional,action("RunCode",{"EchoConditionalProbe()"}),action("Echo",{true}),action("RunSQL",{"INSERT INTO stop_all_effects VALUES(6)"})});commands->member("RunMacro",{VbaValue::string("FalseStopAll")});probe.stop();assert(observed==3 && window.centralWidget()->updatesEnabled());
+    assert(sql.exec("SELECT n FROM stop_all_effects"));QVector<int> effects;while(sql.next()) effects.push_back(sql.value(0).toInt());assert((effects==QVector<int>{1,2,3,1,2,3,5,2,6}));sql.finish();assert(application->member("Run",{VbaValue::string("NamedApplicationEcho")}).number==1 && window.centralWidget()->updatesEnabled());int error=0;try {(void)commands->member("Echo",{VbaValue::logical(false),VbaValue::string("invalid\nstatus")});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==5 && window.centralWidget()->updatesEnabled());error=0;try {(void)commands->member("StopAllMacros",{});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==438 && !linaccess::nativeMacroStopAllPending());assert(sql.exec("DELETE FROM _la_objects WHERE kind='module' AND name='StopAllFunctions'"));
+}
+
 void testMacroSelectObject(MainWindow& window,QSqlDatabase db) {
     using linaccess::VbaValue;auto database=linaccess::makeDaoDatabase(db);(void)database->member("CreateQueryDef",{VbaValue::string("SelectionQuery"),VbaValue::string("SELECT id,n FROM CommandKeep")});QSqlQuery sql(db);sql.prepare("INSERT INTO _la_objects VALUES('module','SelectionModule',?)");sql.addBindValue(QJsonDocument(QJsonObject{{"version",1},{"vba","Public Function SelectionMarker() As Long\nSelectionMarker=1\nEnd Function"}}).toJson(QJsonDocument::Compact));assert(sql.exec());sql.finish();(void)linaccess::storeNativeMacro(db,"SelectionTarget",{{"version",1},{"actions",QJsonArray{QJsonObject{{"action","StopMacro"},{"arguments",QJsonArray{}}}}}});action(window,"Aktualisieren")->trigger();
     const auto generation=window.property("la_project_generation");linaccess::NativeStandardModuleHost host(&window,db,[&] {if(window.property("la_project_generation")!=generation) throw linaccess::VbaRuntimeError(3420,"Project changed");});auto commands=host.applicationObject()->member("DoCmd",{}).object;const auto select=[&](int type,const QString& name,bool inDatabase) {commands->member("SelectObject",{VbaValue::integer(static_cast<std::int16_t>(type)),VbaValue::string(name.toStdString()),VbaValue::logical(inDatabase)});};
@@ -3919,6 +3947,7 @@ End Sub
     testNativeMacroStorage(window,db);
     testMacroProjectCommands(window,db);
     testMacroSelectObject(window,db);
+    testStopAllMacros(window,db);
     testNativeAutoExec(window,db);
     assert(window.close()); dispose(); watchdog.stop();
     std::cout<<"Main window: native project/explorer opening, independent nonmodal form/report lifetime, deduplication, modal metadata, cancellation, SQL save and retained close/MsgBox passed\n";
