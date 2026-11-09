@@ -1,4 +1,5 @@
 #include "native_schema_editor.hpp"
+#include "access_format.hpp"
 #include "native_field_defaults.hpp"
 #include "access_table_model.hpp"
 #include "access_autonumber.hpp"
@@ -44,8 +45,8 @@ bool AccessTableModel::rejectEdit(int number,const QString& message) {
 }
 bool AccessTableModel::reject(int number) { return rejectEdit(number,editMessage(number)); }
 bool AccessTableModel::refreshTypes() {
-    types_.clear();captions_.clear();descriptions_.clear(); generated_.clear(); metadataError_=0;
-    try { types_=sqliteColumnTypes(database(),tableName()); generated_=generatedAccessColumns(database(),tableName());const auto properties=nativeTableFieldDisplayProperties(database(),tableName());for(auto it=properties.cbegin();it!=properties.cend();++it) {if(it.value().caption) captions_.insert(it.key(),*it.value().caption);if(it.value().description) descriptions_.insert(it.key(),*it.value().description);}return true; }
+    types_.clear();captions_.clear();descriptions_.clear();formats_.clear(); generated_.clear(); metadataError_=0;
+    try { types_=sqliteColumnTypes(database(),tableName()); generated_=generatedAccessColumns(database(),tableName());const auto properties=nativeTableFieldDisplayProperties(database(),tableName());for(auto it=properties.cbegin();it!=properties.cend();++it) {if(it.value().caption) captions_.insert(it.key(),*it.value().caption);if(it.value().description) descriptions_.insert(it.key(),*it.value().description);if(it.value().format) formats_.insert(it.key(),*it.value().format);}return true; }
     catch(const VbaRuntimeError& error) { metadataError_=error.number; return reject(error.number); }
 }
 void AccessTableModel::setTable(const QString& table) {
@@ -288,6 +289,9 @@ QVariant AccessTableModel::data(const QModelIndex& index,int role) const {
     if(!index.isValid() || (role!=Qt::DisplayRole && role!=Qt::EditRole)) return raw;
     const auto name=record().fieldName(index.column()).toCaseFolded(),type=types_.value(name);
     if(generated_.contains(name) && (raw.isNull() || raw.metaType().id()==QMetaType::QString) && role==Qt::DisplayRole) return QStringLiteral("(AutoWert)");
+    if(role==Qt::DisplayRole && !raw.isNull() && !formats_.value(name).isEmpty()) {
+        try {return formattedText(index);}catch(const VbaRuntimeError& failure) {return QStringLiteral("#Fehler (%1)").arg(failure.number);}
+    }
     // Typed null spin/date editors otherwise materialize their own defaults.
     // A null QString selects the text editor without losing SQL NULL identity.
     if(role==Qt::EditRole && raw.isNull() && !type.contains("BOOL",Qt::CaseInsensitive) && !type.contains("BLOB",Qt::CaseInsensitive))
@@ -300,6 +304,15 @@ QVariant AccessTableModel::data(const QModelIndex& index,int role) const {
         return QString::fromStdString(value.asText());
     }
     catch(const VbaRuntimeError& error) { return QStringLiteral("#Fehler (%1)").arg(error.number); }
+}
+QString AccessTableModel::formattedText(const QModelIndex& index) const {
+    if(!index.isValid() || index.model()!=this || index.row()<0 || index.row()>=rowCount() || index.column()<0 || index.column()>=columnCount()) throw VbaRuntimeError(5,"Formatted cell index is invalid");
+    if(metadataError_) throw VbaRuntimeError(metadataError_,"Formatted column metadata is unavailable");
+    const auto mask=formats_.value(record().fieldName(index.column()).toCaseFolded());
+    const auto raw=QSqlTableModel::data(index,Qt::EditRole);
+    if(mask.isEmpty() || raw.isNull() || columnType(index.column()).contains("BOOL",Qt::CaseInsensitive)) return clipboardText(index);
+    if(raw.metaType().id()==QMetaType::QByteArray || columnType(index.column()).contains("BLOB",Qt::CaseInsensitive)) throw VbaRuntimeError(3251,"Binary cells have no text format");
+    return QString::fromStdString(formatAccessValue(qtFieldValue(raw,columnType(index.column())),mask.toUtf8().toStdString(),true).asText());
 }
 QString AccessTableModel::clipboardText(const QModelIndex& index) const {
     if(!index.isValid() || index.model()!=this) throw VbaRuntimeError(5,"Clipboard cell index is invalid");

@@ -79,7 +79,7 @@ inline NativeDatasheetSnapshot nativeDatasheetSnapshot(QTableView& grid,const QS
         QStringList record;
         for(int column:columns) {
             const auto index=model->index(row,column);
-            record.append(checkedText(table ? table->clipboardText(index) : query->clipboardText(index)));
+            record.append(checkedText(table ? table->formattedText(index) : query->clipboardText(index)));
             check();
         }
         snapshot.rows.append(std::move(record)); snapshot.sourceRows.append(row);

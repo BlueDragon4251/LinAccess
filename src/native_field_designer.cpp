@@ -47,7 +47,8 @@ void editNativeFields(QWidget* parent,QSqlDatabase database,const QString& table
     auto* propertyValidationText=new QLineEdit(propertyPage);propertyValidationText->setObjectName("native-field-property-validation-text");propertyValidationText->setMaxLength(255);propertyForm->addRow("Fehlermeldung zur Gültigkeitsregel",propertyValidationText);
     auto* propertyCaption=new QLineEdit(propertyPage);propertyCaption->setObjectName("native-field-property-caption");propertyCaption->setMaxLength(255);propertyForm->addRow("Beschriftung (Caption)",propertyCaption);
     auto* propertyDescription=new QLineEdit(propertyPage);propertyDescription->setObjectName("native-field-property-description");propertyDescription->setMaxLength(255);propertyForm->addRow("Beschreibung",propertyDescription);
-    auto* saveDisplay=new QPushButton("Beschriftung/Beschreibung speichern",propertyPage);saveDisplay->setObjectName("native-field-display-save");propertyLayout->addWidget(saveDisplay);
+    auto* propertyFormat=new QLineEdit(propertyPage);propertyFormat->setObjectName("native-field-property-format");propertyFormat->setMaxLength(255);propertyFormat->setPlaceholderText("z.B. #,##0.00 oder yyyy-mm-dd");propertyForm->addRow("Anzeigeformat",propertyFormat);
+    auto* saveDisplay=new QPushButton("Anzeigeeigenschaften speichern",propertyPage);saveDisplay->setObjectName("native-field-display-save");propertyLayout->addWidget(saveDisplay);
     auto* targetType=new QComboBox(propertyPage);targetType->setObjectName("native-field-property-type");for(const int code:{1,2,3,4,6,7}) targetType->addItem(typeNames.value(code),code);propertyForm->addRow("Numerischer Zieldatentyp",targetType);
     auto* changeType=new QPushButton("Datentyp verlustfrei ändern",propertyPage);changeType->setObjectName("native-field-change-type");propertyLayout->addWidget(changeType);
     auto* position=new QSpinBox(propertyPage);position->setObjectName("native-field-property-position");position->setRange(0,0);propertyForm->addRow("Feldposition (ab 0)",position);
@@ -61,7 +62,7 @@ void editNativeFields(QWidget* parent,QSqlDatabase database,const QString& table
     auto* close=new QDialogButtonBox(QDialogButtonBox::Close,&dialog);layout->addWidget(close);QObject::connect(close,&QDialogButtonBox::rejected,&dialog,&QDialog::reject);
     std::shared_ptr<VbaObject> table,selectedField;bool catalogValid=true,allNative=false;int selectedType=0;
     const auto error=[&](const std::exception& problem) {QMessageBox::warning(&dialog,"Feld konnte nicht geändert werden",QString::fromUtf8(problem.what()));};
-    const auto disable=[&] {catalogValid=false;append->setEnabled(false);remove->setEnabled(false);apply->setEnabled(false);renameButton->setEnabled(false);move->setEnabled(false);position->setEnabled(false);changeType->setEnabled(false);targetType->setEnabled(false);saveDisplay->setEnabled(false);propertyCaption->setEnabled(false);propertyDescription->setEnabled(false);list->setEnabled(false);};
+    const auto disable=[&] {catalogValid=false;append->setEnabled(false);remove->setEnabled(false);apply->setEnabled(false);renameButton->setEnabled(false);move->setEnabled(false);position->setEnabled(false);changeType->setEnabled(false);targetType->setEnabled(false);saveDisplay->setEnabled(false);propertyCaption->setEnabled(false);propertyDescription->setEnabled(false);propertyFormat->setEnabled(false);propertyFormat->clear();list->setEnabled(false);};
     const auto property=[](const std::shared_ptr<VbaObject>& field,const char* member) {try {return field->member(member,{});}catch(const VbaRuntimeError& problem) {if(problem.number!=3251) throw;return VbaValue::empty();}};
     const auto reload=[&] {
         const auto previous=list->currentRow()>=0 && list->item(list->currentRow(),0) ? list->item(list->currentRow(),0)->text() : QString{};
@@ -92,7 +93,7 @@ void editNativeFields(QWidget* parent,QSqlDatabase database,const QString& table
             selectedType=kind.kind==VbaValue::Kind::Number ? static_cast<int>(kind.number) : 0;
             const bool movable=allNative && mandatory.kind==VbaValue::Kind::Boolean && attributes.kind==VbaValue::Kind::Number && list->rowCount()>1;position->setRange(0,qMax(0,list->rowCount()-1));position->setValue(row);position->setEnabled(movable);move->setEnabled(movable);
             const bool eligible=allNative && mandatory.kind==VbaValue::Kind::Boolean && attributes.kind==VbaValue::Kind::Number && !(static_cast<int>(attributes.number)&16) && (selectedType!=10 || capacity.kind==VbaValue::Kind::Number);
-            const auto display=nativeTableFieldDisplayProperties(database,tableName).value(selectedName->text().toCaseFolded());propertyCaption->setText(display.caption.value_or(QString{}));propertyDescription->setText(display.description.value_or(QString{}));const bool displayEditable=display.nativeOwned;propertyCaption->setEnabled(displayEditable);propertyDescription->setEnabled(displayEditable);saveDisplay->setEnabled(displayEditable);
+            const auto display=nativeTableFieldDisplayProperties(database,tableName).value(selectedName->text().toCaseFolded());propertyCaption->setText(display.caption.value_or(QString{}));propertyDescription->setText(display.description.value_or(QString{}));propertyFormat->setText(display.format.value_or(QString{}));const bool displayEditable=display.nativeOwned;propertyCaption->setEnabled(displayEditable);propertyDescription->setEnabled(displayEditable);propertyFormat->setEnabled(displayEditable);saveDisplay->setEnabled(displayEditable);
             const int numeric=targetType->findData(selectedType);targetType->setCurrentIndex(numeric);targetType->setEnabled(eligible && numeric>=0);changeType->setEnabled(eligible && numeric>=0);
             propertyRequired->setChecked(mandatory.kind==VbaValue::Kind::Boolean && mandatory.boolean);propertyRequired->setEnabled(eligible);
             if(selectedType==10 && capacity.kind==VbaValue::Kind::Number) propertySize->setValue(static_cast<int>(capacity.number));propertySize->setEnabled(eligible && selectedType==10);
@@ -123,8 +124,8 @@ void editNativeFields(QWidget* parent,QSqlDatabase database,const QString& table
     });
     QObject::connect(saveDisplay,&QPushButton::clicked,&dialog,[&] {
         if(!catalogValid || !saveDisplay->isEnabled()) return;const auto fieldName=selectedName->text();
-        try {const auto value=[](const QString& text) {return text.isEmpty() ? VbaValue{} : VbaValue::string(text.toStdString());};updateNativeFieldProperties(database,tableName,fieldName,{{"Caption",value(propertyCaption->text())},{"Description",value(propertyDescription->text())}});}
-        catch(const std::exception& problem) {error(problem);return;}refreshAfterCommit("Beschriftung/Beschreibung gespeichert: "+fieldName);
+        try {const auto value=[](const QString& text) {return text.isEmpty() ? VbaValue{} : VbaValue::string(text.toStdString());};updateNativeFieldProperties(database,tableName,fieldName,{{"Caption",value(propertyCaption->text())},{"Description",value(propertyDescription->text())},{"Format",value(propertyFormat->text())}});}
+        catch(const std::exception& problem) {error(problem);return;}refreshAfterCommit("Anzeigeeigenschaften gespeichert: "+fieldName);
     });
     QObject::connect(changeType,&QPushButton::clicked,&dialog,[&] {
         if(!catalogValid || !changeType->isEnabled()) return;const auto fieldName=selectedName->text();

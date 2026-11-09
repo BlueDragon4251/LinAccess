@@ -52,3 +52,29 @@ through that same context; counter flags remain17 for TableDef and49 for writabl
 Recordset. Property setters retain their own shared family after a supported
 field change. Built-ins cannot be deleted; full catalog/Count remains unsupported.
 DAO1/1 passed (2.46s), app built; no repeated GUI/original import or full-suite claim.
+
+
+Owned native fields now also retain optional Text Format properties through the
+same checked detached/attached DAO Property objects and persistent identities.
+CreateProperty/Append/Item/Value/Delete use the existing type, ownership, lifetime,
+read-only and generation checks. Rename/rebuild preserve the property. The field
+designer edits the mask beside Caption and Description; an empty designer mask
+removes this custom property. Imported Format properties remain unproven and
+explicitly refuse3251; they are not inferred absent from caption provenance.
+
+Native numeric/date/text table display applies nonempty masks through the shared
+native formatter. EditRole and SQL values retain their existing unformatted
+representation. Clipboard copy retains the checked raw typed text contract.
+Native table print/PDF uses a separate checked formattedText adapter, so it emits
+the same formatted values without parsing display strings or printing error text.
+A formatter error is shown as #Fehler(code) in the datasheet and aborts output
+snapshot preparation. Null remains blank and Boolean checkbox display is retained.
+Unsupported masks are preserved as metadata with explicit rendering failure.
+
+This scope covers owned native table fields and editable table-backed models.
+Original MDB field Format extraction, query/view format lineage, automatic
+form/report-control inheritance, DecimalPlaces, complete string/scientific masks
+and Access 2003 display/printing parity remain open. No original files are edited.
+
+Existing DAO/window checks2/2 (8.00s); application built. Actual PDF text includes
+the stored numeric mask; unsupported masks refuse before snapshot output.

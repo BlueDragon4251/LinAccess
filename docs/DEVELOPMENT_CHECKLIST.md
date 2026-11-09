@@ -1978,3 +1978,18 @@ und vorhandene48 GUI-Referenzwerte enthalten. Keine neue Windows-Beobachtung
 oder zusätzliche CTest-Registrierung. Decimal96/28-Grenze und vollständige
 regionale Prozentprofile bleiben offen;456/384/72 unverändert.
 NATIVE_FORMAT_RUNTIME.md; kontinuierlich allgemeine Datenbankfunktionen umsetzen.
+
+Eigene native Tabellenfelder besitzen jetzt eine persistente DAO-Format-Text-
+Eigenschaft mit derselben Detached-/Append-/Value-/Delete-/Identitätslogik wie
+Caption/Description. Feldentwurf kann Masken setzen/löschen. Datenblatt zeigt
+Formatwerte; SQL und EditRole bleiben unverändert. Zwischenablage behält den
+bestehenden rohen typisierten Text. Druck/PDF nutzt eigene geprüfte formatierte
+Werte: ungültige Masken zeigen #Fehler im Raster und brechen die Ausgabe vor
+Erzeugung ab. Native Datum-/Zahlenmasken sind über echte DAO-/Designer-/Raster-
+und PDF-Textextraktion geprüft, einschließlich beibehaltener SQL-Werte, Property-
+Identität/Delete/Recreate und Rename/Schemaumbau. Fehlendes Include im GUI-
+Prüfziel gezielt behoben; danach vorhandene DAO/GUI gemeinsam2/2 (8,00s), App
+gebaut. Originale Format-Eigenschaften werden noch nicht als bekannt behandelt
+(3251 statt erfundener Abwesenheit); Query-Lineage und Formular-/Berichtserbung
+bleiben offen. NATIVE_FIELD_DISPLAY_PROPERTIES.md;456/384/72 unverändert.
+Direkt als Nächstes proveniente Jet4-Formatübernahme mit technischer MDB prüfen.

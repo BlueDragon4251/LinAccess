@@ -34,6 +34,7 @@ public:
     Qt::ItemFlags flags(const QModelIndex& index) const override;
     bool setData(const QModelIndex& index,const QVariant& value,int role=Qt::EditRole) override;
     QString clipboardText(const QModelIndex& index) const;
+    QString formattedText(const QModelIndex& index) const;
     bool repeatPreviousValue(const QModelIndex& target);
     bool setDataBlock(const QModelIndex& first,const QVector<QVector<QString>>& values);
 signals:
@@ -47,7 +48,7 @@ private:
     QString columnType(int column) const;
     QVector<QPersistentModelIndex> rowAnchors(const QSet<int>& rows) const;
     QSet<int> anchoredRows(const QVector<QPersistentModelIndex>& anchors) const;
-    QMap<QString,QString> types_,captions_,descriptions_;
+    QMap<QString,QString> types_,captions_,descriptions_,formats_;
     QSet<QString> generated_;
     int metadataError_{};
     int sortColumn_{-1};
