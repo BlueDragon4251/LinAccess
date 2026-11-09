@@ -75,6 +75,20 @@ If DFirst(Expr:="qty",Domain:="Lookup Ordered",Criteria:="qty Is Not Null")<>10.
 If Not IsNull(DFirst("id","Lookup Ordered","id=99")) Then Err.Raise 5
 If Not IsNull(DLast("id","Lookup Ordered","id=99")) Then Err.Raise 5
 If TypeName(DLast("cash","Lookup Ordered","id=1"))<>"Currency" Then Err.Raise 5
+If DLookup("[qty]*2","lookup_values","id=1")<>21 Then Err.Raise 5
+If DLookup("[qty]+[id]","lookup_values","id=2")<>5.5 Then Err.Raise 5
+If DLookup("[label] & ':' & [id]","lookup_values","id=2")<>"O'Brien:2" Then Err.Raise 5
+If TypeName(DLookup("CCur([qty])","lookup_values","id=1"))<>"Currency" Then Err.Raise 5
+If DLookup("DateAdd('d',1,[moment])","lookup_values","id=1")<>DateSerial(2026,11,5) Then Err.Raise 5
+If Not IsNull(DLookup("[qty]*2","lookup_values","id=99")) Then Err.Raise 5
+If DFirst("[qty]*2","Lookup Ordered")<>21 Then Err.Raise 5
+If Not IsNull(DLast("[qty]*2","Lookup Ordered")) Then Err.Raise 5
+If DMin("[qty]*2","lookup_values")<>7 Then Err.Raise 5
+If DMax("[qty]*2","lookup_values")<>21 Then Err.Raise 5
+If DAvg("[qty]*2","lookup_values")<>14 Then Err.Raise 5
+If DVar("[qty]*2","lookup_values")<>98 Then Err.Raise 5
+If Abs(DStDev("[qty]*2","lookup_values")-Sqr(98))>0.000000001 Then Err.Raise 5
+If DLookup("IIf([id]=1,'FROM SELECT','other')","lookup_values","id=1")<>"FROM SELECT" Then Err.Raise 5
 If DVar("qty","lookup_values")<>24.5 Then Err.Raise 5
 If Abs(Application.DStDev(Domain:="lookup_values",Expr:="qty")-Sqr(24.5))>0.000000001 Then Err.Raise 5
 If Not IsNull(DVar("qty","lookup_values","id=1")) Then Err.Raise 5
@@ -98,7 +112,7 @@ value=DLookup("label","missing_lookup_domain")
 End Sub
 Sub UnsupportedExpression()
 Dim value As Variant
-value=DLookup("qty*2","lookup_values")
+value=DLookup("Sum(qty)","lookup_values")
 End Sub
 )VBA";
     AccessFormPreview form("lookup test",source,module,db);
@@ -112,6 +126,10 @@ End Sub
     assert(query.exec("SELECT label FROM lookup_values WHERE id=1") && query.next() && query.value(0).toString()=="draft"); query.finish();
     assert(form.executeProcedure("MissingDomain",args).errorNumber==3078);
     assert(form.executeProcedure("UnsupportedExpression",args).errorNumber==3251);
+    for(const auto& invalid:QStringList{"qty FROM lookup_values","qty;DELETE FROM lookup_values","(SELECT qty FROM lookup_values)","qty, id","qty AS x","qty) --","unknown_function(qty)","Var(qty)","qty OVER()"}) {
+        int refused=0;try{(void)linaccess::accessScalarDomainExpression(invalid);}catch(const linaccess::VbaRuntimeError& failure){refused=failure.number;}assert(refused==3251);
+    }
+    assert(query.exec("SELECT COUNT(*) FROM lookup_values") && query.next() && query.value(0).toInt()==4);query.finish();
     assert(form.close());
 }
 }

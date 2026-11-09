@@ -49,3 +49,7 @@ integer/date extrema, NULL/missing/empty results, parameters, saved definitions,
 unsupported types and source shadowing. No new CTest target or Windows oracle.
 F067/F068 remain open; catalog stays456/386 confirmed partial scopes/70 open full
 requirements.
+
+Temporary table definitions also participate in view invalidation. Adding a temp
+shadow removes the formerly validated extrema view; dropping the shadow restores
+it from its actual saved definition. The existing schema test checks both paths.

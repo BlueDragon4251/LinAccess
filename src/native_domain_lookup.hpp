@@ -36,7 +36,7 @@ inline VbaValue nativeSqlDomainAggregate(QSqlDatabase database,std::string_view 
     catch(...) { throw linaccess::VbaRuntimeError(3146,"Domain aggregate execution failed"); }
 }
 
-// Field-only typed lookup/extrema/mean. Further expression binding is refused.
+// Typed field lookup and bounded scalar SQL expressions, without source clauses.
 inline VbaValue nativeDomainValue(QSqlDatabase database,const std::vector<VbaValue>& args,std::string_view function="dlookup") {
     if(function=="dsum" || function=="dcount") return nativeSqlDomainAggregate(database,function,args);
     const bool lookup=function=="dlookup" || function=="dfirst";
@@ -70,15 +70,16 @@ inline VbaValue nativeDomainValue(QSqlDatabase database,const std::vector<VbaVal
     if(domain.isEmpty()) throw VbaRuntimeError(3078,"Domain function domain unavailable");
     const auto quoted=[](QString name) { name.replace(']',"]]"); return '['+name+']'; };
     if(field.startsWith('[') && field.endsWith(']')) {
-        const auto inner=field.mid(1,field.size()-2); QString decoded;
+        const auto inner=field.mid(1,field.size()-2);QString decoded;bool identifier=true;
         for(qsizetype index=0;index<inner.size();++index) {
             if(inner[index]==']') {
-                if(index+1>=inner.size() || inner[index+1]!=']') throw VbaRuntimeError(5,"Domain function field delimiter invalid");
+                if(index+1>=inner.size() || inner[index+1]!=']') {identifier=false;break;}
                 ++index;
             }
             decoded+=inner[index];
         }
-        field=decoded;
+        // [a]+[b] is an expression, whereas [a]]b] is one escaped identifier.
+        if(identifier) field=decoded;
     }
     const auto columns=accessQueryColumns(database,compileAccessQuery("SELECT * FROM "+quoted(domain)));
     QString canonical;
@@ -86,8 +87,10 @@ inline VbaValue nativeDomainValue(QSqlDatabase database,const std::vector<VbaVal
         if(!canonical.isEmpty()) throw VbaRuntimeError(5,"Domain function field ambiguous");
         canonical=column;
     }
-    if(canonical.isEmpty()) throw VbaRuntimeError(3251,"Domain function requires an existing field; calculated expressions are unsupported");
-    QString source=QString(lookup ? "SELECT TOP 1 " : "SELECT ")+quoted(canonical)+" FROM "+quoted(domain);
+    const bool calculated=canonical.isEmpty();
+    const auto projection=calculated ? "("+accessScalarDomainExpression(QString::fromStdString(args[0].text))+") AS [__la_domain_value]" : quoted(canonical);
+    if(calculated && !criteria.isEmpty()) (void)accessWhereClause(criteria);
+    QString source=QString(lookup ? "SELECT TOP 1 " : "SELECT ")+projection+" FROM "+quoted(domain);
     if(!criteria.isEmpty()) source+=" WHERE "+criteria;
     const auto plan=compileAccessQuery(source);
     if(!plan.makeTable.isEmpty() || plan.hiddenRank || !plan.sql.trimmed().startsWith("SELECT",Qt::CaseInsensitive))
@@ -98,7 +101,7 @@ inline VbaValue nativeDomainValue(QSqlDatabase database,const std::vector<VbaVal
         const auto type=types.value(0).toUpper();
         const bool numeric=type.contains("INT") || type.contains("REAL") || type.contains("FLOA") || type.contains("DOUB");
         const bool typedExtremum=(function=="dmin" || function=="dmax") && (type=="CURRENCY_REAL" || type.contains("DATE"));
-        if(selected.size()!=1 || type.contains("BOOL") || (!numeric && !typedExtremum)
+        if(selected.size()!=1 || type.contains("BOOL") || (!numeric && !typedExtremum && !(calculated && type.isEmpty()))
             || ((function=="davg" || function=="dvar" || function=="dstdev") && type=="CURRENCY_REAL"))
             throw VbaRuntimeError(3251,"Domain aggregate field type unsupported or unproven");
         const auto result=executeAccessQueryPlan(database,plan,bindAccessQueryParameters(plan,{}));
@@ -119,7 +122,7 @@ inline VbaValue nativeDomainValue(QSqlDatabase database,const std::vector<VbaVal
     const auto& selected=function=="dlast" ? result.rows.back() : result.rows.front();
     if(selected.front().isNull()) return {};
     const auto type=result.columnTypes.value(0);
-    if(type.isEmpty()) throw VbaRuntimeError(3251,"Domain function field type is not proven");
+    if(type.isEmpty() && !calculated) throw VbaRuntimeError(3251,"Domain function field type is not proven");
     return qtFieldValue(selected.front(),type);
 }
 }

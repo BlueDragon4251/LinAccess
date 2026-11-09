@@ -112,9 +112,15 @@ End Function
         }
         const auto emptyExtrema=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery(QString(extrema).replace("GROUP BY","WHERE c.row_key=99 GROUP BY")),{});
         assert(emptyExtrema.rows.isEmpty() && emptyExtrema.types.value("a")=="CURRENCY_REAL");
+        assert(linaccess::installAccessQueryViews(db)>=0);
+        assert(sql.exec("SELECT [A] FROM fixed_extrema ORDER BY row_key") && sql.next() && sql.value(0).toDouble()==-0.3);sql.finish();
         assert(sql.exec("CREATE TEMP TABLE cross_extrema(row_key INTEGER4,category TEXT,amount CURRENCY_REAL)"));
         int shadowRefused=0;try {(void)linaccess::accessQueryColumns(db,linaccess::compileAccessQuery(extrema));}catch(const linaccess::VbaRuntimeError& error){shadowRefused=error.number;}assert(shadowRefused==3251);
+        assert(linaccess::installAccessQueryViews(db)>=0);
+        assert(sql.exec("SELECT COUNT(*) FROM temp.sqlite_master WHERE type='view' AND name='fixed_extrema'") && sql.next() && sql.value(0).toInt()==0);sql.finish();
         assert(sql.exec("DROP TABLE temp.cross_extrema"));
+        assert(linaccess::installAccessQueryViews(db)>=0);
+        assert(sql.exec("SELECT [A] FROM fixed_extrema ORDER BY row_key") && sql.next() && sql.value(0).toDouble()==-0.3);sql.finish();
         for(const auto* invalid:{"TRANSFORM Sum(cell) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category IN ('A')", "TRANSFORM Count(*) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category", "TRANSFORM Count(*) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category IN ('A','a')", "TRANSFORM Count(*) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category IN ('row_key')", "TRANSFORM Count(*) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category IN ('A',)", "TRANSFORM Count(*) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category IN (1,01)", "TRANSFORM Count(*) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category IN (1.5)", "TRANSFORM Count(*) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category IN (2147483648)", "TRANSFORM Count(*) SELECT row_key FROM cross_dates GROUP BY row_key PIVOT CDate(stamp) IN (1)"}) {
             int refused=0;try {(void)linaccess::compileAccessQuery(invalid);}catch(const linaccess::VbaRuntimeError& error) {refused=error.number;}assert(refused==3251);
         }

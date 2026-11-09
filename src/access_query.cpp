@@ -1814,6 +1814,15 @@ int installAccessQueryViews(QSqlDatabase db, bool freshConnection) {
     // Typed crosstab view expressions also depend on current physical declarations.
     if(query.exec("PRAGMA main.schema_version") && query.next()) revision.addData("schema:"+query.value(0).toByteArray());
     query.finish();
+    // A new temporary table can shadow a previously validated main source.
+    // Include tables only: our own temporary view recreation must not churn the key.
+    if(query.exec("SELECT name,sql FROM temp.sqlite_master WHERE type='table' ORDER BY name")) {
+        while(query.next()) {
+            const auto name=query.value(0).toByteArray(),sql=query.value(1).toByteArray();
+            revision.addData("temp-table:"+QByteArray::number(name.size())+':'+name+QByteArray::number(sql.size())+':'+sql);
+        }
+    } else throw VbaRuntimeError(3146,"Temporary query source catalog unavailable");
+    query.finish();
     const auto key = db.databaseName() + ':' + QString::fromLatin1(revision.result().toHex());
     auto owned = driver->property("la_query_views").toStringList();
     auto internal = driver->property("la_query_internal_views").toStringList();
@@ -2135,6 +2144,29 @@ QString accessWhereClause(const QString& criteria) {
     const auto plan=compileAccessQuery("SELECT * FROM [__la_filter_source] WHERE ("+value+")");const auto tokens=tokenize(plan.sql,true);
     if(tokens.size()<6 || tokens[4].kind!=Token::Word || tokens[4].value.compare("WHERE",Qt::CaseInsensitive)!=0 || !plan.parameters.isEmpty() || !plan.makeTable.isEmpty()) throw VbaRuntimeError(3251,"Filter expression could not be compiled");
     return renderJetTokens(tokens.mid(5));
+}
+
+QString accessScalarDomainExpression(const QString& expression) {
+    const auto value=expression.trimmed();if(value.isEmpty()) throw VbaRuntimeError(5,"Empty domain expression");
+    (void)accessWhereClause(value);
+    const auto tokens=tokenize(value);int depth=0;
+    const QSet<QString> scalar{"abs","nz","isnull","ltrim","rtrim","trim","left","right","mid","instr","replace"};
+    const QSet<QString> predicates{"in","and","or","not"};
+    const QSet<QString> aggregates{"sum","count","avg","min","max","first","last","var","stdev"};
+    for(qsizetype i=0;i<tokens.size();++i) {
+        const auto& token=tokens[i];
+        if(symbol(token,"(")) ++depth;
+        else if(symbol(token,")")) {if(--depth<0) throw VbaRuntimeError(3251,"Unbalanced domain expression");}
+        else if(symbol(token,",") && depth==0) throw VbaRuntimeError(3251,"Domain expression must be scalar");
+        if(token.kind==Token::Word && QSet<QString>{"AS","OVER","FILTER","WINDOW"}.contains(token.value.toUpper())) throw VbaRuntimeError(3251,"Domain expression clauses are unsupported");
+        if((token.kind==Token::Word || token.kind==Token::Identifier) && i+1<tokens.size() && symbol(tokens[i+1],"(")) {
+            const auto function=token.value.toCaseFolded();
+            if(token.kind!=Token::Word || aggregates.contains(function) || (!scalar.contains(function) && !predicates.contains(function) && nativeScalarSqlName(function).isEmpty()))
+                throw VbaRuntimeError(3251,"Domain expression function is unsupported");
+        }
+    }
+    if(depth) throw VbaRuntimeError(3251,"Unbalanced domain expression");
+    return value;
 }
 
 QString editableAccessQueryTable(QSqlDatabase db,const QString& source,QString* filter) {

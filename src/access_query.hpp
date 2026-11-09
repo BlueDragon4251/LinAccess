@@ -75,6 +75,8 @@ private:
 QString accessLikePattern(const QString& value);
 // Checked single predicate compiled through the Jet adapter, without extra clauses.
 QString accessWhereClause(const QString& criteria);
+// Bounded scalar domain expression; no clauses, aggregates or unregistered calls.
+QString accessScalarDomainExpression(const QString& expression);
 AccessQueryPlan compileAccessQuery(const QString& source);
 // Resolves compiled action metadata against the live writable destination.
 QString accessActionSql(QSqlDatabase db,const AccessQueryPlan& plan);

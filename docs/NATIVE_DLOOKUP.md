@@ -101,3 +101,31 @@ NULL observations are skipped; fewer than two Number observations return NULL.
 Actual VBA checks independent hand-calculated sample values, named Application
 calls, one match and no matches. Currency/Date/text/Boolean inputs, calculated
 Expr, DVarP/DStDevP and full Access error/rounding/reference parity remain open.
+
+## Bounded calculated domain expressions
+
+DLookup/DFirst/DLast/DMin/DMax/DAvg/DVar/DStDev now accept bounded scalar Expr
+text in addition to existing field names. The real SQL compiler executes the
+projection over the named domain and checked criteria. Numeric arithmetic,
+concatenation, IIf and supported native scalar calls can be combined with fields.
+Quoted strings containing words such as FROM remain literals. Escaped bracketed
+identifiers still address fields; [qty]+[id] is parsed as an expression rather
+than misread as one bracketed name.
+
+A dedicated token guard rejects added clauses, subqueries, top-level comma
+projections, unbalanced parentheses, aggregate/window calls and functions outside
+the bounded native scalar allowlist. The domain remains an object name, never SQL.
+Prepare inspects output shape without stepping value expressions. Selectors use
+actual returned scalar Qt types when a calculated projection has no stronger
+proven type; proven Currency and Date metadata are retained. Missing rows return
+Null. First/last retain the domain query's existing order semantics; no arbitrary
+order is invented. Numeric calculated extrema/mean/sample statistics validate the
+actual scalar values, and nonnumeric values retain explicit unsupported errors.
+Physical field paths retain their existing type checks.
+
+This adds no arbitrary project/library function binder, nested query grammar,
+text/locale extrema, or new mean/variance Currency/Decimal conversion. Existing
+field-only unsupported cases and reference boundaries are not declared complete.
+The existing native-domain fixture checks actual global/Application host execution
+alongside independent SQL state; no new CTest or business record fixture is added.
+F050/F068/F118/F164 remain open and the fixed catalog stays456/386/70.

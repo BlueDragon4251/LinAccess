@@ -4448,3 +4448,20 @@ SQL_STATISTICAL_AGGREGATES.md beschreibt Umfang und Microsoft-Dokumentationsbasi
 Abschließend bestehendes SQL-Bündel4/4 bestanden (0,13s), Anwendung neu gebaut;
 keine neuen CTests oder Windows-/Original-/Gesamtsuiten-Nachweise. Noch kein neues
 Paket; folgt aus dem aktuellen Stand. F067/F068/F071 und456/386/70 unverändert.
+
+
+## 2026-11-09: Berechnete Domänenausdrücke
+
+DLookup/DFirst/DLast/DMin/DMax/DAvg/DVar/DStDev unterstützen begrenzte skalare
+SQL-Ausdrücke, statt ausschließlich Feldnamen. Echte Projektion/Typen/Null, Currency-
+und Datumsidentität, Zahlen-/Textausdrücke und statistische Ergebnisse sind im
+bestehenden nativen VBA-Host geprüft. Tokenprüfung sperrt Zusatzklauseln, Subqueries,
+verschachtelte Aggregate/Window-Aufrufe, mehrere Projektionen und fremde Funktionen.
+NATIVE_DLOOKUP.md hält Grenzen fest; keine Text-/Locale-Extrema oder beliebige
+Projektfunktionsbindung. Abfrageansichten invalidieren nun auch bei temporären
+Tabellen, einschließlich tatsächlichem Entfernen/Wiederherstellen der zuvor
+validierten Min/Max-Ansicht bei Überschattung. Bestehendes Bündel5/5 (12,21s)
+bestanden, Anwendung gebaut; kein neuer CTest/Windows-/Original-/Gesamtsuitenlauf.
+Letzte geprüfte DEB ist eaaeb73, inklusive Build-ID/MDBTools1.0.1/SQLite3.54.1;
+alle vier Fixture-/drei Uploadhashes unverändert. Diese neue Domänenetappe ist
+noch nicht paketiert. F050/F067/F068/F118/F164 und456/386/70 unverändert.
