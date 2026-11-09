@@ -1543,6 +1543,7 @@ bool AccessFormPreview::supportsControlFont(const linaccess::AccessVisualControl
 void AccessFormPreview::applyControlFont(QWidget* widget,const linaccess::AccessVisualControl& control) {
     if (!supportsControlFont(control)) return;
     auto font=widget->font();
+    font.setStyleName(QString{}); // Resolve the requested weight/italic rather than a retained named regular face.
     if (control.font.name) font.setFamily(*control.font.name);
     font.setPointSize(control.font.size.value_or(control.type=="CommandButton" ? 10 : 8));
     const auto weight=control.font.weight.value_or(400);

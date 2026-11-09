@@ -2106,3 +2106,19 @@ liche Prüfung. Änderungen an dieser Formularprüfung benötigen damit nicht me
 die Übersetzung des gesamten übrigen GUI-Prüfquelltexts. Bestehendes GUI-Ziel
 1/1 (14,34s) bestanden; keine behauptete gemessene Compiler-Prozentverbesserung.
 Produktlaufzeit unverändert51c122d; letzte DEB15131f0;456/386/70 unverändert.
+
+
+## 2026-11-09: echte Schrift-/Farbauswahl eigener Controls
+
+Qt-Auswahldialoge speichern geprüfte FontName/Size/Weight/Italic/Underline und
+RGB-ForeColor; TextBox/Label zusätzlich BackColor/BackStyle transparent/opaque.
+Standarddarstellung löscht Overrides. Persistenter Zieleintrag plus Auswahl-/
+Fokuswiederherstellung verhindert nach Modalrückkehr die Änderung eines anderen
+Controls. Keine Windows-Font-/Pixelparität behaupten. FREE_FORM_CONTROLS.md.
+
+Tatsächliche Picker/Mausklicks, Save/Undo/Redo/Reload, native Paletten/Transparenz
+und aufgelöster QFontInfo-Schnitt geprüft. GUI-Testsetup auf wirklich installierten
+Fett/Kursiv-Schnitt korrigiert; Modal-Auswahlwechsel behoben. Abschließend nur
+fehlgeschlagenes GUI-Ziel1/1 (14,70s) wiederholt/bestanden; Layout1/1 (13,09s)
+bereits bestanden. Kein neuer CTest, keine Gesamtsuite/Original/Windows/Kern-
+Ausführung; aktuelle DEB-Prüfung folgt.456/386/70 unverändert; F080/F081/F148 offen.

@@ -3361,3 +3361,19 @@ Textfeld, Tab-Ausschluss und echte Tastatur-Zielwahl im bestehenden Layout/GUI
 gebündelt2/2 (12,28/14,29s) bestanden. Details FREE_FORM_CONTROLS.md.
 Keine neue CTest-ID oder aktuelle Gesamtsuite/Windows/Original/DEB-Prüfung;
 letzte DEB15131f0. F080/F081/F104/F148 und456/386/70 bleiben offen/unverändert.
+
+
+## 2026-11-09: echte Schrift-/Farbauswahl eigener Controls
+
+Qt-Auswahldialoge speichern geprüfte FontName/Size/Weight/Italic/Underline und
+RGB-ForeColor; TextBox/Label zusätzlich BackColor/BackStyle transparent/opaque.
+Standarddarstellung löscht Overrides. Persistenter Zieleintrag plus Auswahl-/
+Fokuswiederherstellung verhindert nach Modalrückkehr die Änderung eines anderen
+Controls. Keine Windows-Font-/Pixelparität behaupten. FREE_FORM_CONTROLS.md.
+
+Tatsächliche Picker/Mausklicks, Save/Undo/Redo/Reload, native Paletten/Transparenz
+und aufgelöster QFontInfo-Schnitt geprüft. GUI-Testsetup auf wirklich installierten
+Fett/Kursiv-Schnitt korrigiert; Modal-Auswahlwechsel behoben. Abschließend nur
+fehlgeschlagenes GUI-Ziel1/1 (14,70s) wiederholt/bestanden; Layout1/1 (13,09s)
+bereits bestanden. Kein neuer CTest, keine Gesamtsuite/Original/Windows/Kern-
+Ausführung; aktuelle DEB-Prüfung folgt.456/386/70 unverändert; F080/F081/F148 offen.

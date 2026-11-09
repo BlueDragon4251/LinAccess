@@ -41,6 +41,10 @@
 #include <QCryptographicHash>
 #include <QClipboard>
 #include <QCheckBox>
+#include <QFontDialog>
+#include <QFontInfo>
+#include <QFontDatabase>
+#include <QColorDialog>
 #include <QStyleOptionButton>
 #include <QComboBox>
 #include <QDialog>
@@ -430,6 +434,15 @@ End Sub
             stateRow(7);editor->findChild<QCheckBox*>("native-form-control-locked")->setChecked(true);editor->findChild<QCheckBox*>("native-form-control-tab-stop")->setChecked(false);
             stateRow(8);editor->findChild<QCheckBox*>("native-form-control-visible")->setChecked(false);editor->findChild<QCheckBox*>("native-form-control-enabled")->setChecked(false);
             assert(!editor->findChild<QCheckBox*>("native-form-control-tab-stop")->isEnabled());
+            stateRow(0);grid->item(0,7)->setText("420");
+            QTimer::singleShot(0,&window,[&] {auto* picker=qobject_cast<QFontDialog*>(QApplication::activeModalWidget());assert(picker);QFont font;bool found=false;for(const auto& family:QFontDatabase::families()) {for(const auto& style:QFontDatabase::styles(family)) if(QFontDatabase::bold(family,style) && QFontDatabase::italic(family,style)) {font=QFontDatabase::font(family,style,12);found=true;break;}if(found) break;}assert(found);font.setUnderline(true);picker->setCurrentFont(font);picker->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();});
+            QTest::mouseClick(editor->findChild<QPushButton*>("native-form-control-font"),Qt::LeftButton);assert(grid->currentRow()==0);
+            for(const auto& choice:QList<QPair<QString,QColor>>{{"native-form-control-fore-color",QColor(12,34,56)},{"native-form-control-back-color",QColor(230,220,210)}}) {
+                const auto wanted=choice.second;QTimer::singleShot(0,&window,[wanted] {auto* picker=qobject_cast<QColorDialog*>(QApplication::activeModalWidget());assert(picker);picker->setCurrentColor(wanted);picker->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();});
+                QTest::mouseClick(editor->findChild<QPushButton*>(choice.first),Qt::LeftButton);
+                assert(grid->currentRow()==0);
+            }
+            stateRow(2);editor->findChild<QCheckBox*>("native-form-control-transparent")->setChecked(true);
             grid->item(1,1)->setText("EntryValue");editor->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
             assert(editor->isVisible() && editor->findChild<QLabel*>("native-form-controls-status")->text().contains("(5)"));
             grid->item(1,1)->setText("ComputedValue");editor->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
@@ -448,6 +461,18 @@ End Sub
     auto* entry=freeForm->findChild<QLineEdit*>("access-control-EntryValue");auto* computed=freeForm->findChild<QLineEdit*>("access-control-ComputedValue");
     auto* button=freeForm->findChild<QPushButton*>("access-control-ApplyValue");auto* check=freeForm->findChild<QCheckBox*>("access-control-EnabledFlag");auto* choice=freeForm->findChild<QComboBox*>("access-control-Choice");
     assert(entry && computed && button && check && choice && !entry->isReadOnly() && computed->isReadOnly() && choice->count()==2);
+    if(entry->font().pointSize()!=12 || entry->font().weight()!=QFont::Bold || !entry->font().italic() || !entry->font().underline()) {
+        const auto metadata=freeDefinition.value("controls").toArray().first().toObject().value("font").toObject();
+        std::cerr<<"Authored font diagnostic: widget="<<entry->font().pointSize()<<','<<entry->font().weight()<<','<<entry->font().italic()<<','<<entry->font().underline()<<" stored="<<metadata.value("size").toInt()<<','<<metadata.value("weight").toInt()<<','<<metadata.value("italic").toBool()<<','<<metadata.value("underline").toBool()<<'\n';
+    }
+    assert(entry->font().pointSize()==12 && entry->font().weight()==QFont::Bold && entry->font().italic() && entry->font().underline());
+    assert(QFontInfo(entry->font()).weight()>=QFont::Bold && QFontInfo(entry->font()).italic());
+    if(entry->palette().color(QPalette::Active,QPalette::Text)!=QColor(12,34,56) || entry->palette().color(QPalette::Active,QPalette::Base)!=QColor(230,220,210)) {
+        const auto metadata=freeDefinition.value("controls").toArray().first().toObject();
+        std::cerr<<"Authored colors diagnostic: text="<<entry->palette().color(QPalette::Active,QPalette::Text).name().toStdString()<<" base="<<entry->palette().color(QPalette::Active,QPalette::Base).name().toStdString()<<" stored="<<metadata.value("fore_color").toInt(-1)<<','<<metadata.value("back_color").toInt(-1)<<'\n';
+    }
+    assert(entry->palette().color(QPalette::Active,QPalette::Text)==QColor(12,34,56) && entry->palette().color(QPalette::Active,QPalette::Base)==QColor(230,220,210));
+    auto* resultLabel=freeForm->findChild<QLabel*>("access-control-ResultLabel");assert(resultLabel && !resultLabel->autoFillBackground() && resultLabel->palette().color(QPalette::Active,QPalette::Window).alpha()==0);
     auto* masked=freeForm->findChild<QLineEdit*>("access-control-MaskedValue");assert(masked && masked->isReadOnly() && masked->echoMode()==QLineEdit::Password && masked->text()=="mask-value" && masked->displayText()!=masked->text());
     auto* hiddenLabel=freeForm->findChild<QLabel*>("access-control-HiddenLabel");assert(hiddenLabel && hiddenLabel->isHidden() && !hiddenLabel->isEnabled());
     assert(!(computed->focusPolicy()&Qt::TabFocus) && !(masked->focusPolicy()&Qt::TabFocus));

@@ -103,3 +103,29 @@ tab stops and a real keyboard Tab transition from text input to its configured
 combo target. Existing default/format/multicolumn/SQL checks remain in the same
 fixture. No new test target, full-suite/original/Windows/installer run is claimed.
 F080/F081/F104/F148 and catalog counts remain unchanged.
+
+## Authored typography and colors
+
+Real Qt font/color dialogs store the chosen font family, integer point size 1–127,
+weight 0–1000, italic/underline and RGB foreground colors. Supported TextBox/Label
+backgrounds additionally store RGB color and opaque/transparent BackStyle. Other
+background adapters remain disabled/refused. Standarddarstellung removes these
+overrides. Font/color properties are validated before storing the native object.
+No Windows font/weight/pixel equivalence is implied; Linux font availability and
+Qt substitution remain relevant. The requested face resolves without a retained
+named regular style overriding weight/italic.
+
+Modal choices retain their persistent target and restore that selection/focus on
+return, including cancellation. This prevents following choices from reaching a
+previously focused control row. Metadata is merged again after the modal choice.
+The existing GUI fixture uses actual font/color dialogs and real mouse clicks,
+then Save/Undo/Redo/reload, live palettes, transparency and QFontInfo to verify the
+actual resolved face. It selects an actually installed bold/italic face; assuming
+that the initial family offered that face was an invalid test setup.
+
+Final GUI 1/1 (14.70 s) and layout 1/1 (13.09 s) passed. Earlier GUI diagnostics
+found the unsupported test face and modal focus restoring another control row;
+those specific paths were corrected and only the failed GUI target repeated.
+The live palette/typeface checks are not a Windows rendering or physical desktop
+screenshot proof. No new test target, catalog ID or full-suite/original/core run
+is claimed. F080/F081/F148 remain open.
