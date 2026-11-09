@@ -2949,3 +2949,25 @@ Beobachtung/Paketprüfung; DEBf4e9ff8. NATIVE_STANDARD_MODULES_RUNTIME.md;
 F052/F178/F042/F135 und456/384/72 unverändert. Direkt weiter: optionale Makro-
 argumente einschließlich ausdrücklich leerem OpenArgs verlustfrei bearbeiten und
 vollständige OpenForm-/OpenReport-Makroargumente ausführen.
+
+
+## Fortschreibung 2026-11-09: verlustfreie optionale Makroargumente
+Argumente… hat Übergeben-Schalter und bewahrt ausdrücklich leeren Text getrennt
+vom Standardwert. Präsenz über Laden/Teilmakrowechsel/Aktionsreihenfolge/Speichern
+und Zusatzargumente erhalten; Übersichtsänderungen inferieren neu, Pflichtwerte
+bleiben erforderlich. Vollständige native OpenForm7-/OpenReport6-Makroargumente.
+Optionales JSON-null bezeichnet einheitlich Missing, kein Datenbank-/VBA-Null;
+Pflicht-null bleibt ungültig. Alte Formularbefehle nutzen ihre bewährten Defaults,
+MessageBox verarbeitet ausgelassene Werte explizit. Kein erfundenes DoCmd-API.
+Vorhandene GUI/Layout2/2 (20,59s) ohne Korrekturlauf bestanden: echte Editor-
+Schalter/Move/Gruppe/Save/Reopen, leeres OpenArgs bleibt String und wird in beiden
+Hosts tatsächlich von Null unterschieden; reale alte Befehle mit Default-Löchern
+und MessageBox-Icon-Default. Anschließend nur irreführende optionale Übersichts-
+spaltenbeschriftungen entfernt, keine Logikänderung. Frische App/DEB native-macro-
+presence/package/linaccess-0.7.0-Linux.deb mit Payload/Rechten/Build-ID/bytegleicher
+SQLite und echtem MDBTools1.0.1/SQLite3.54.1-Backendcheck (JOIN/NULL/Zähler) geprüft.
+Uploads3/3 und Fixtures4/4 hashgleich. Keine neue CTest-ID/Gesamtsuite/Windows-
+Beobachtung. Originaltest zuletzt f86d8eb:3/3 inkl.Original116,22s; F129/3075 offen.
+NATIVE_MACROS_RUNTIME.md; F088/F052/F178/F135 und456/384/72 unverändert.
+Direkt weiter mit echter SetValue-Makrozuweisung über vorhandene native Formular-
+/Steuerelementobjekte und bestehende Ausdrucksauswertung; dokumentierte Grenzen.

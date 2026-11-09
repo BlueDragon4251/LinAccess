@@ -446,3 +446,33 @@ focus/text selection, nested and post-RunCode cursor observation in both macro
 hosts, outer success/error cleanup and foreign-cursor protection are covered.
 Matching freshly linked app/DEB payload/build-ID/SQLite/backend check passed;
 original upload3/3 and fixture4/4 hashes remain unchanged.
+
+
+## Explicit argument presence and complete opening actions
+
+Argumente… now has an explicit Übergeben switch for every optional argument.
+Unchecking uses the default; checking can explicitly supply an empty text. The
+row draft retains argument presence alongside text, including arguments beyond
+the three summary columns. Loading, group switches, row moves and unchanged Save
+preserve explicit empty values. Editing a summary cell infers presence from its
+new text; the detailed dialog provides the explicit empty/default distinction.
+Required arguments remain required. Surplus drafts after changing actions stay
+visible for explicit clearing or validation rather than disappearing silently.
+
+OpenForm actions now accept all seven native arguments; OpenReport accepts six,
+using the shared real opener. Optional JSON null now consistently means Missing
+for every native action optional slot, replacing the earlier limited special
+cases. It does not represent a nullable database value or blanket VBA Null
+coercion. Required null values remain invalid. Legacy preview commands map those
+omissions to their existing default representation; FindRecord/RunMacro and the
+new opening parsers retain their own Missing defaults. MessageBox defaults handle
+omitted icon/title/beep values explicitly.
+
+Validation: matching logic GUI/layout2/2 passed (20.59s), no correction. Actual
+seven-argument editor Save/reopen/group/row moves preserve empty OpenArgs as JSON
+text; real form initialization/field checks distinguish it from omitted/Null in
+both hosts. Real legacy table open/navigation/SQL/requery/select/close and omitted
+MessageBox type are exercised in both hosts. Afterwards only the two misleading
+summary-column optional labels were removed; no logic changed. Fresh app/DEB
+payload/permissions/build-ID/SQLite/backend checks passed. Upload3/3 and fixture4/4
+hashes remain unchanged; no new CTest target or Windows reference observation.
