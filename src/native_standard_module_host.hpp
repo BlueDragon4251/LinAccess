@@ -77,6 +77,7 @@ public:
     bool isNativeType(std::string_view type) const override {return type=="access.docmd";}
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         const auto key=QString::fromUtf8(name.data(),name.size()).toCaseFolded();
+        if(key=="deleteobject") return VbaArgumentSignature{{"ObjectType","ObjectName"},0};
         if(key=="runmacro") return VbaArgumentSignature{{"MacroName","RepeatCount","RepeatExpression"},1};
         if(key=="runsql") return VbaArgumentSignature{{"SQLStatement","UseTransaction"},1};
         if(key=="opentable") return VbaArgumentSignature{{"TableName","View","DataMode"},1};
@@ -102,6 +103,11 @@ public:
         std::vector<VbaValue> values;for(const auto& argument:args) {values.push_back(scalarVbaValue(argument));host.check();}
         const auto number=[&](std::size_t index,int fallback) {return index>=values.size() || values[index].kind==VbaValue::Kind::Missing ? fallback : static_cast<int>(coerceVbaModuleValue(values[index],"long").number);};
         const auto target=[&] {if(values.empty() || values[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"Object name is required");return QString::fromStdString(coerceVbaModuleValue(values[0],"string").asText());};
+        if(key=="deleteobject") {
+            if(values.size()!=2 || values[0].kind==VbaValue::Kind::Missing || values[1].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(3251,"DeleteObject requires explicit type and name");
+            const int type=number(0,0);const auto object=QString::fromStdString(coerceVbaModuleValue(values[1],"string").asText());QVariantMap result;
+            if(!QMetaObject::invokeMethod(owner_,"deleteDatabaseObject",Qt::DirectConnection,Q_RETURN_ARG(QVariantMap,result),Q_ARG(int,type),Q_ARG(QString,object))) throw VbaRuntimeError(3251,"Native object deletion is unavailable");resultError(result);host.check();return VbaValue::empty();
+        }
         if(key=="runsql") {
             if(values.empty() || values.size()>2) throw VbaRuntimeError(450,"RunSQL requires SQL and optional UseTransaction");
             const auto sql=target().toStdString();const bool transaction=values.size()<2 || values[1].kind==VbaValue::Kind::Missing || coerceVbaModuleValue(values[1],"boolean").boolean;

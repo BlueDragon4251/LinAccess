@@ -3,6 +3,7 @@
 #include "mainwindow.hpp"
 #include "native_macro.hpp"
 #include "native_macro_editor_draft.hpp"
+#include "native_macro_storage.hpp"
 #include "native_module_definition.hpp"
 #include "native_standard_module_host.hpp"
 #include "native_form_event_editor.hpp"
@@ -376,9 +377,16 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     });
     connect(viewMenu,&QMenu::aboutToShow,this,[this,renameQuery] {const auto* item=explorer_->currentItem();bool owned=false;if(db_.isOpen() && item && item->data(0,Qt::UserRole).toString()=="query" && !QApplication::activeModalWidget()) try {(void)linaccess::accessQuerySource(db_,item->text(0),nullptr,&owned,true);}catch(const std::exception&) {}renameQuery->setEnabled(owned);});
     auto* deleteObject=viewMenu->addAction("Ausgewähltes Objekt löschen...");deleteObject->setObjectName("native-object-delete");
-    const auto selectedOwned=[this] {const auto* item=explorer_->currentItem();if(!db_.isOpen() || !item || QApplication::activeModalWidget()) return false;const auto kind=item->data(0,Qt::UserRole).toString();try {if(kind=="query") {bool owned=false;(void)linaccess::accessQuerySource(db_,item->text(0),nullptr,&owned,true);return owned;}if(kind=="table") {const auto fields=linaccess::nativeTableFieldDisplayProperties(db_,item->text(0));return !fields.isEmpty() && std::all_of(fields.cbegin(),fields.cend(),[](const auto& field) {return field.nativeOwned;});}}catch(const std::exception&) {}return false;};
+    const auto selectedOwned=[this] {const auto* item=explorer_->currentItem();if(!db_.isOpen() || !item || QApplication::activeModalWidget()) return false;const auto kind=item->data(0,Qt::UserRole).toString();try {if(kind=="macro") return linaccess::readNativeMacroRevision(db_,item->text(0)).has_value();if(kind=="query") {bool owned=false;(void)linaccess::accessQuerySource(db_,item->text(0),nullptr,&owned,true);return owned;}if(kind=="table") {const auto fields=linaccess::nativeTableFieldDisplayProperties(db_,item->text(0));return !fields.isEmpty() && std::all_of(fields.cbegin(),fields.cend(),[](const auto& field) {return field.nativeOwned;});}}catch(const std::exception&) {}return false;};
     connect(deleteObject,&QAction::triggered,this,[this,selectedOwned] {
-        if(!selectedOwned()) return;const auto* item=explorer_->currentItem();const auto kind=item->data(0,Qt::UserRole).toString(),name=item->text(0);const int type=kind=="table" ? 0 : 1;
+        if(!selectedOwned()) return;const auto* item=explorer_->currentItem();const auto kind=item->data(0,Qt::UserRole).toString(),name=item->text(0);
+        if(kind=="macro") {
+            try {const auto revision=linaccess::readNativeMacroRevision(db_,name);if(!revision) throw linaccess::VbaRuntimeError(2485,"Eigenes Makro ist nicht verfügbar.");const auto identity=db_.databaseName();const auto generation=property("la_project_generation");
+                QMessageBox question(QMessageBox::Question,"Makroobjekt löschen","Makroobjekt „"+name+"“ mit allen Teilmakros löschen? Gespeicherte Verweise werden nicht automatisch angepasst.",QMessageBox::Yes|QMessageBox::No,this);question.setObjectName("native-object-delete-confirm");question.setDefaultButton(QMessageBox::No);if(question.exec()!=QMessageBox::Yes) return;
+                if(!db_.isOpen() || db_.databaseName()!=identity || property("la_project_generation")!=generation) throw linaccess::VbaRuntimeError(3420,"Das Projekt hat sich geändert.");linaccess::deleteNativeMacro(db_,*revision);refreshExplorer();statusBar()->showMessage("Makro gelöscht: "+name);
+            }catch(const std::exception& error) {messageError(this,QString::fromUtf8(error.what()));}return;
+        }
+        const int type=kind=="table" ? 0 : 1;
         try {const auto held=linaccess::makeDaoDatabase(db_)->member(type==0 ? "TableDefs" : "QueryDefs",{linaccess::VbaValue::string(name.toStdString())}).object;
             QMessageBox question(QMessageBox::Question,"Datenbankobjekt löschen","Objekt „"+name+"“ und seine enthaltenen Daten löschen? Gespeicherte Verweise werden nicht automatisch angepasst.",QMessageBox::Yes|QMessageBox::No,this);question.setObjectName("native-object-delete-confirm");question.setDefaultButton(QMessageBox::No);if(question.exec()!=QMessageBox::Yes) return;
             if(QString::fromStdString(held->member("Name",{}).asText())!=name) throw linaccess::VbaRuntimeError(3420,"Das ausgewählte Objekt hat sich geändert.");const auto result=deleteDatabaseObject(type,name);if(const int error=result.value("error").toInt()) throw linaccess::VbaRuntimeError(error,result.value("description").toString().toStdString());statusBar()->showMessage("Objekt gelöscht: "+name);
@@ -622,8 +630,9 @@ QVariantMap MainWindow::renameDatabaseObject(const QString& newName,int objectTy
 QVariantMap MainWindow::deleteDatabaseObject(int objectType,const QString& name) {
     if(!db_.isOpen()) return tableCommandFailure(3420,"Das Projekt ist geschlossen.");
     if(QApplication::activeModalWidget() || queryExecutionDepth_>0) return tableCommandFailure(2046,"Löschen ist in diesem Kontext nicht verfügbar.");
-    if(objectType!=0 && objectType!=1) return tableCommandFailure(3251,"DeleteObject unterstützt hier eigene Tabellen und Abfragen mit ausdrücklichem Objekttyp und Namen.");
+    if(objectType!=0 && objectType!=1 && objectType!=4) return tableCommandFailure(3251,"DeleteObject unterstützt hier eigene Tabellen, Abfragen und Makros mit ausdrücklichem Objekttyp und Namen.");
     try {
+        if(objectType==4) {const auto revision=linaccess::readNativeMacroRevision(db_,name);if(!revision) throw linaccess::VbaRuntimeError(linaccess::importedMacroNameExists(db_,name) ? 3251 : 2485,"Kein eigenes gespeichertes Makroobjekt verfügbar.");linaccess::deleteNativeMacro(db_,*revision);refreshExplorer();return {{"handled",true},{"error",0}};}
         if(objectType==0) {
             const auto fields=linaccess::nativeTableFieldDisplayProperties(db_,name);if(fields.isEmpty() || std::any_of(fields.cbegin(),fields.cend(),[](const auto& field) {return !field.nativeOwned;})) return tableCommandFailure(3251,"DeleteObject benötigt hier eine selbst angelegte native Tabelle.");
             for(auto* model:findChildren<linaccess::AccessTableModel*>()) if(model->tableName().compare(name,Qt::CaseInsensitive)==0) return tableCommandFailure(3251,"Tabelle und zugehörige bearbeitbare Abfragen vor dem Löschen schließen.");
@@ -2197,19 +2206,19 @@ void MainWindow::editModule(const QString& existingName) {
 }
 
 void MainWindow::editMacro(const QString& existingName) {
-    if(!hasProject()) return;const auto old=existingName.isEmpty() ? QJsonObject{} : objectDefinition("macro",existingName);
-    try {if(!existingName.isEmpty()) (void)linaccess::parseNativeMacro(old);}catch(const std::exception& error) {messageError(this,QString::fromUtf8(error.what()));return;}
+    if(!hasProject()) return;QJsonObject old;std::optional<linaccess::NativeMacroRevision> revision;
+    try {if(!existingName.isEmpty()) {revision=linaccess::readNativeMacroRevision(db_,existingName);if(!revision) throw linaccess::VbaRuntimeError(2485,"Gespeichertes Makro ist nicht verfügbar.");QJsonParseError error;const auto document=QJsonDocument::fromJson(revision->definition.toByteArray(),&error);if(error.error!=QJsonParseError::NoError || !document.isObject()) throw linaccess::VbaRuntimeError(13,"Ungültige native Makrodefinition.");old=document.object();(void)linaccess::parseNativeMacro(old);}}catch(const std::exception& error) {messageError(this,QString::fromUtf8(error.what()));return;}
     QDialog dialog(this);dialog.setObjectName("native-macro-designer");dialog.setWindowTitle("Makro bearbeiten");dialog.resize(1000,600);tagProjectObject(&dialog,this,db_,"macro",existingName);
     const QPointer<MainWindow> owner=this;const auto identity=db_.databaseName();const auto generation=property("la_project_generation");
     const auto checkProject=[owner,identity,generation] {if(!owner || !owner->db_.isOpen() || owner->db_.databaseName()!=identity || owner->property("la_project_generation")!=generation) throw linaccess::VbaRuntimeError(3420,"Makro gehört nicht mehr zum aktuellen Projekt.");};
-    auto* layout=new QVBoxLayout(&dialog);auto* name=new QLineEdit(existingName,&dialog);name->setObjectName("native-macro-name");name->setMaxLength(64);name->setPlaceholderText("Name des Makros / der Makrogruppe");layout->addWidget(name);
+    auto* layout=new QVBoxLayout(&dialog);auto* name=new QLineEdit(existingName,&dialog);name->setObjectName("native-macro-name");name->setMaxLength(64);name->setReadOnly(!existingName.isEmpty());name->setPlaceholderText("Name des Makros / der Makrogruppe");layout->addWidget(name);
     auto* groupRow=new QHBoxLayout;auto* grouped=new QCheckBox("Makrogruppe",&dialog);grouped->setObjectName("native-macro-group-mode");grouped->setProperty("la_designer_transient",true);groupRow->addWidget(grouped);
     auto* selector=new QComboBox(&dialog);selector->setObjectName("native-macro-group");selector->setProperty("la_designer_transient",true);groupRow->addWidget(selector,1);
     auto* groupName=new QLineEdit(&dialog);groupName->setObjectName("native-macro-group-name");groupName->setMaxLength(64);groupName->setPlaceholderText("Name des Teilmakros");groupRow->addWidget(groupName,1);
     auto* groupAdd=addButton(groupRow,"Teilmakro hinzufügen");groupAdd->setObjectName("native-macro-group-add");auto* groupRemove=addButton(groupRow,"Teilmakro entfernen");groupRemove->setObjectName("native-macro-group-remove");auto* groupUp=addButton(groupRow,"↑");groupUp->setObjectName("native-macro-group-up");auto* groupDown=addButton(groupRow,"↓");groupDown->setObjectName("native-macro-group-down");layout->addLayout(groupRow);
     auto* list=new QTableWidget(0,5,&dialog);list->setObjectName("native-macro-actions");list->setHorizontalHeaderLabels({"Aktion","Argument 1 (Ziel / SQL / Befehl)","Argument 2 (optional)","Argument 3 (optional)","Bedingung (optional)"});list->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);list->setSelectionBehavior(QAbstractItemView::SelectRows);layout->addWidget(list);
     auto* help=new QLabel("Aktionen laufen von oben nach unten. Eine Makrogruppe startet ohne Teilnamen ihr erstes Teilmakro; gezielter Aufruf: Gruppe.Teilmakro. Verweise werden beim Umbenennen nicht automatisch geändert. RunMacro: Makroname, optionale Anzahl und Wiederholungsbedingung; bei Bedingung darf die Anzahl leer bleiben. RunSQL: SQL und optional Ja/Nein für Transaktion. RunCode: Funktion(...). StopMacro beendet den aktuellen Ablauf.",&dialog);help->setWordWrap(true);layout->addWidget(help);
-    auto* buttons=new QHBoxLayout;auto* add=addButton(buttons,"Aktion hinzufügen");add->setObjectName("native-macro-add");auto* remove=addButton(buttons,"Aktion entfernen");auto* up=addButton(buttons,"Nach oben");auto* down=addButton(buttons,"Nach unten");auto* save=addButton(buttons,"Speichern");save->setObjectName("native-macro-save");layout->addLayout(buttons);installDesignerSaveShortcut(dialog,save);
+    auto* buttons=new QHBoxLayout;auto* add=addButton(buttons,"Aktion hinzufügen");add->setObjectName("native-macro-add");auto* remove=addButton(buttons,"Aktion entfernen");auto* up=addButton(buttons,"Nach oben");auto* down=addButton(buttons,"Nach unten");auto* save=addButton(buttons,"Speichern");save->setObjectName("native-macro-save");auto* deleteMacro=addButton(buttons,"Makroobjekt löschen");deleteMacro->setObjectName("native-macro-delete");deleteMacro->setEnabled(revision.has_value());layout->addLayout(buttons);installDesignerSaveShortcut(dialog,save);
     QVector<linaccess::NativeMacroGroupDraft> groups;int current=0;
     const bool groupMode=old.value("version")==QJsonValue(2);grouped->setChecked(groupMode);
     if(groupMode) for(const auto& value:old.value("groups").toArray()) {const auto group=value.toObject();groups.push_back({group.value("name").toString(),linaccess::nativeMacroDraftRows(group.value("actions").toArray())});}
@@ -2233,8 +2242,14 @@ void MainWindow::editMacro(const QString& existingName) {
         try {checkProject();save->setFocus(Qt::ShortcutFocusReason);if(!linaccess::nativeMacroNameValid(name->text().trimmed())) throw linaccess::VbaRuntimeError(5,"Ungültiger Makro-Objektname.");capture();QJsonObject definition;
             if(grouped->isChecked()) {QJsonArray entries;for(const auto& group:groups) entries.append(QJsonObject{{"name",group.name.trimmed()},{"actions",linaccess::nativeMacroDraftActions(group.rows)}});definition={{"version",2},{"groups",entries}};}
             else definition={{"version",1},{"actions",linaccess::nativeMacroDraftActions(groups[0].rows)}};
-            (void)linaccess::parseNativeMacro(definition);const auto canonical=linaccess::nativeMacroCatalogName(db_,name->text().trimmed());if(!canonical.isEmpty() && canonical!=name->text().trimmed()) throw linaccess::VbaRuntimeError(3251,"Makroname ist bereits mit anderer Groß-/Kleinschreibung vorhanden.");
-            if(saveObject("macro",name->text(),definition)) {tagProjectObject(&dialog,this,db_,"macro",name->text().trimmed());completeDesignerSave(dialog,name->text().trimmed());}
+            (void)linaccess::parseNativeMacro(definition);
+            revision=linaccess::storeNativeMacro(db_,name->text().trimmed(),definition,revision);refreshExplorer();name->setText(revision->name);name->setReadOnly(true);deleteMacro->setEnabled(true);tagProjectObject(&dialog,this,db_,"macro",revision->name);completeDesignerSave(dialog,revision->name);
+        }catch(const std::exception& error) {messageError(&dialog,QString::fromUtf8(error.what()));}
+    });
+    QObject::connect(deleteMacro,&QPushButton::clicked,&dialog,[&] {
+        try {checkProject();if(!revision) return;const auto snapshot=*revision;
+            if(QMessageBox::question(&dialog,"Makroobjekt löschen","Gespeichertes Makroobjekt mit allen Teilmakros und ungespeicherten Änderungen wirklich löschen?",QMessageBox::Yes|QMessageBox::No,QMessageBox::No)!=QMessageBox::Yes) return;
+            checkProject();linaccess::deleteNativeMacro(db_,snapshot);refreshExplorer();dialog.accept();
         }catch(const std::exception& error) {messageError(&dialog,QString::fromUtf8(error.what()));}
     });trackDesignerChanges(dialog);dialog.exec();
 }

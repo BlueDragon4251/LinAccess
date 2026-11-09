@@ -6997,3 +6997,27 @@ bytegleiches SQLite3.54.1 mit tatsächlichem JOIN/NULL-/Counter-Backendcheck.
 Keine neue CTest-ID/Gesamtsuite/Windows-Beobachtung. NATIVE_MACROS_RUNTIME.md;
 F088/F050/F057/F118/F148/F155 und456/384/72 unverändert. Direkt weiter mit
 Speicher-/Löschschutz für eigene Makroobjekte.
+
+
+Eigene Makroobjekte erhalten transaktionalen Speicher-/Löschschutz: neue Namen
+kollidieren CI mit vorhandenen nativen/importierten Makronamen3010 statt Replace;
+gespeicherte Objektnamen sind im Editor readonly. Save und Delete vergleichen
+exakte alte Definition/Name unter Savepoint, staleRevision3251 statt Lost Update.
+Main-Katalog physisch/ohne TEMP-Schatten geprüft, zusätzliche main/temp Trigger
+verweigert; Größenlimit1MiB vor Materialisierung. Lesen/Ändern importierter
+Quellarchive bleibt ausgeschlossen. Eigene Makros löschbar mit Bestätigung im
+Editor/Explorer; auch unlesbare eigene Definitionen über Explorer entfernbar.
+Projektgeneration nach Modalfrage und Definition nach Antwort erneut geprüft.
+DoCmd.DeleteObject acMacro4 für eigene gespeicherte Objekte über bestehende
+Projekt-API ergänzt. Gemeinsame laufende MacroFrames sperren Ersetzen/Löschen
+auch für Gruppen und über Formular-/Modulhostgrenzen; kein globaler Jet-Lockclaim.
+Layout1/1 (11,74s) im Bündel bestanden. GUI fand alte vorgelagerte Case-only-
+Namensprüfung; entfernt zugunsten zentralem3010-Pfad. Nur betroffene GUI erneut
+1/1 (7,41s), App gebaut: echte zweite Verbindung und Revision während bestätigter
+Löschfrage, Native-/Archiv-Kollision, No/Yes, TEMP-/Trigger-Verweigerung, Löschen
+ungültiger eigener Definition, aktive3251-Sperre in beiden Hosts mit folgenden
+SQL-Effekten, anschließendes DeleteObject und unveränderte Archivbytes. Original-
+Uploads3/3 sowie Fixtures4/4 erneut hashgleich. Keine neue CTest-ID/Gesamtsuite/
+Windows-Beobachtung/Paketprüfung; DEB gehört9c80f00. NATIVE_MACRO_STORAGE.md;
+F088/F050/F121/F148/F155 und456/384/72 unverändert. Direkt weiter mit allgemeinen
+Makro-Projektbefehlen und getrenntem Projekt-Ausführungsschutz.

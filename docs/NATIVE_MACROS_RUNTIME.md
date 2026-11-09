@@ -289,3 +289,7 @@ Validation: existing GUI/layout2/2 passed (20.10s), app and matching DEB checked
 Actual editor/CtrlS/reopen/switch/reorder with changed default execution, Unicode
 selection, nested parent/StopMacro/repeat, real Form_Load binding and whole-group
 preflight/duplicate refusal without SQL effects are exercised. No new test target.
+
+[Macro storage/deletion](NATIVE_MACRO_STORAGE.md) now guards names, revisions
+and active invocations; native names are fixed after save. Imported archives
+remain outside write/delete ownership.

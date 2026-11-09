@@ -3,6 +3,11 @@
 #include <QScopeGuard>
 #include <functional>
 namespace linaccess {
+struct NativeMacroFrame {QString connection,database,name;};
+inline QVector<NativeMacroFrame>& nativeMacroFrames() {static thread_local QVector<NativeMacroFrame> frames;return frames;}
+inline bool nativeMacroObjectActive(QSqlDatabase db,const QString& name) {
+    for(const auto& frame:nativeMacroFrames()) if(frame.connection==db.connectionName() && frame.database==db.databaseName() && frame.name.compare(name,Qt::CaseInsensitive)==0) return true;return false;
+}
 inline void runNativeMacro(QSqlDatabase db,const std::vector<VbaValue>& args,
     const std::function<void()>& check,const std::function<VbaValue(const QString&)>& evaluate,
     const std::function<void(const NativeMacroAction&)>& dispatch) {
@@ -18,6 +23,8 @@ inline void runNativeMacro(QSqlDatabase db,const std::vector<VbaValue>& args,
     if(depth>=16) throw VbaRuntimeError(3251,"Native macro call depth exceeded");
     if(!depth) visited=0;++depth;const auto budget=qScopeGuard([] {if(--depth==0) visited=0;});
     check();const auto actions=loadNativeMacro(db,QString::fromStdString(macro.asText()));
+    nativeMacroFrames().push_back({db.connectionName(),db.databaseName(),QString::fromStdString(macro.asText()).section('.',0,0)});
+    const auto frame=qScopeGuard([] {nativeMacroFrames().removeLast();});
     if(!expression && count*actions.size()>10000) throw VbaRuntimeError(3251,"Native macro action budget exceeded");
     for(int repeat=0;;++repeat) {
         if((counted || !expression) && repeat>=count) return;
