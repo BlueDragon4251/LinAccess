@@ -4363,3 +4363,15 @@ Nachweise gebündelt im bestehenden GUI/Layout2/2 (14,98/12,78s) bestanden.
 Details FREE_FORM_CONTROLS.md. Kein neuer CTest, kein Kern-/Windows-/Original-/
 Gesamtsuite-/DEB-Lauf; letzte DEB15131f0. F015/F071/F080/F081/F115 und456/386/70
 bleiben offen/unverändert. Allgemeine Steuerelementeigenschaften folgen.
+
+
+## 2026-11-09: eigene Zustände und Tabreihenfolge
+
+Auswahlpanel für Visible/Enabled/Locked/TabStop/TabIndex im echten Controls-
+Designer, mit Typ-/Bereichsprüfung und bestehenden nativen Laufzeitregeln.
+Labels ohne Tab-Eigenschaften, Locked für TextBox/ListBox. Tatsächlich
+speichern/neuladen, ausgeblendetes deaktiviertes Label, gesperrtes maskiertes
+Textfeld, Tab-Ausschluss und echte Tastatur-Zielwahl im bestehenden Layout/GUI
+gebündelt2/2 (12,28/14,29s) bestanden. Details FREE_FORM_CONTROLS.md.
+Keine neue CTest-ID oder aktuelle Gesamtsuite/Windows/Original/DEB-Prüfung;
+letzte DEB15131f0. F080/F081/F104/F148 und456/386/70 bleiben offen/unverändert.

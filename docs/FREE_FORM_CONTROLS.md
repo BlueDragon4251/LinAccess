@@ -86,3 +86,20 @@ defaults, computed padded display versus numeric Value, masked display versus
 actual technical text and the subsequent real VBA/SQL/list interaction. No new
 CTest, core/Windows/original/full-suite/installer execution is claimed. Full
 F015/F071/F080/F081/F115 requirements and catalog totals remain unchanged.
+
+## Authored state and tab order
+
+A selected-control panel stores Visible, Enabled, Locked, TabStop and TabIndex.
+The actual saved layout applies them through the existing native state/focus
+implementation. Locked authoring is restricted to supported TextBox/ListBox;
+labels have no tab controls. Boolean and integer ranges are checked before save.
+Type changes display only meaningful state settings. Existing controls without
+these fields retain the prior defaults. Equal tab indexes keep native stable
+layout ordering; full Access automatic renumbering/event equivalence is open.
+
+The existing layout/GUI bundle passed 2/2 (12.28 / 14.29 seconds). The actual
+created/reloaded form has a hidden disabled label, locked masked textbox, excluded
+tab stops and a real keyboard Tab transition from text input to its configured
+combo target. Existing default/format/multicolumn/SQL checks remain in the same
+fixture. No new test target, full-suite/original/Windows/installer run is claimed.
+F080/F081/F104/F148 and catalog counts remain unchanged.
