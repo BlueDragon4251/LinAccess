@@ -5016,3 +5016,14 @@ bestanden. Originale Keyboard-Grenze jetzt3146/1023; echter getaggter Klick
 reicht bis2485 (fehlende exportierte Makroquelle). Beide MDB-Kataloge enthalten
 vier Makros, bisheriges Brückenarchiv null. Kein neuer Gesamtsuite-/Windowslauf,
 keine vollständige F129-Erfüllung. Katalog456/386/70 bleibt unverändert.
+
+
+## 2026-11-09: natives Form.RecordsetClone
+
+Eigene DAO-Snapshotcursor über tatsächliche Tabellen-/Abfrageformularergebnisse,
+mit unabhängigem Suchen/Navigieren, Bookmark-Rücknavigation, leerem Ergebnis,
+Requery-Familienwechsel und weiterlebenden gehaltenen Clones. Eigenschaft ohne
+Argumente/schreibgeschützt; keine editierbaren Abfragen behauptet. Bestehende
+Layout-/GUI-Prüfung gebündelt2/2 (12,40/14,29s) bestanden, kein neuer Testtarget
+oder Windows-/Gesamtsuite-/Installerlauf. Details FORM_RECORDSET_CLONE_RUNTIME.md;
+F054/F160 und Katalog456/386/70 bleiben offen/unverändert.

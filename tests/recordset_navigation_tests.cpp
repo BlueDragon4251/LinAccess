@@ -66,7 +66,7 @@ End
 )FORM";
     const QByteArray code=R"VBA(Sub pick_AfterUpdate()
 Dim rows As Object
-Set rows=Me.Recordset.Clone
+Set rows=Me.RecordsetClone
 rows.FindFirst "[id] = " & Str(Nz(Me!pick,0))
 If Not rows.EOF Then Me.Bookmark=rows.Bookmark
 End Sub
@@ -77,7 +77,13 @@ End Sub
     AccessFormPreview form("recordset navigation",layout,code,db); form.show(); form.activateWindow(); QApplication::processEvents();
     auto model=makePreviewFormObject(form);
     auto recordset=model->member("Recordset",{}).object;
-    auto clone=recordset->member("Clone",{}).object;
+    auto clone=model->objectMember("RecordsetClone",{}).object;
+    auto other=model->member("RecordsetClone",{}).object;
+    assert(other!=clone && other->isNativeType("dao.recordset"));
+    int readonlyError=0;try {model->assign("RecordsetClone",VbaValue{});} catch(const VbaRuntimeError& error) {readonlyError=error.number;}
+    assert(readonlyError==383);
+    int argumentError=0;try {model->member("RecordsetClone",{VbaValue::numeric(1)});} catch(const VbaRuntimeError& error) {argumentError=error.number;}
+    assert(argumentError==450);
     clone->member("FindFirst",{VbaValue::string("id=3")});
     const auto third=clone->member("Bookmark",{});
     const auto first=model->member("Bookmark",{});
@@ -110,6 +116,30 @@ End Sub
     assert(number==3159);
     assert(form.close() && clone->item("id").asNumber()==3);
     number=0; try { recordset->member("Clone",{}); } catch (const VbaRuntimeError& failure) { number=failure.number; }
+    assert(number==2450);
+
+    const auto queryLayout=QByteArray("Begin Form\nRecordSource =\"SELECT id,label FROM records WHERE id>=2 ORDER BY id DESC\"\nBegin Section\nEnd\nEnd\n");
+    AccessFormPreview queryForm("query clone",queryLayout,{},db);
+    auto queryModel=makePreviewFormObject(queryForm);
+    auto queryClone=queryModel->member("RecordsetClone",{}).object;
+    assert(queryClone->member("RecordCount",{}).asNumber()==2);
+    queryClone->member("MoveFirst",{});assert(queryClone->item("id").asNumber()==3);
+    queryClone->member("MoveNext",{});assert(queryClone->item("id").asNumber()==2);
+    assert(queryModel->item("id").asNumber()==3);
+    queryModel->assign("Bookmark",queryClone->member("Bookmark",{}));
+    assert(queryModel->item("id").asNumber()==2);
+    const auto oldQueryBookmark=queryClone->member("Bookmark",{});
+    assert(!queryClone->member("Updatable",{}).truthy());
+    bool writeDenied=false;try {queryClone->member("Edit",{});} catch(const std::runtime_error& error) {writeDenied=std::string(error.what()).find("read-only")!=std::string::npos;}
+    assert(writeDenied);
+    assert(query.exec("DELETE FROM records WHERE id>=2"));queryModel->member("Requery",{});
+    auto emptyClone=queryModel->member("RecordsetClone",{}).object;
+    assert(emptyClone->member("RecordCount",{}).asNumber()==0);
+    assert(emptyClone->member("BOF",{}).truthy() && emptyClone->member("EOF",{}).truthy());
+    number=0;try {queryModel->assign("Bookmark",oldQueryBookmark);} catch(const VbaRuntimeError& error) {number=error.number;}
+    assert(number==3159 && queryClone->item("id").asNumber()==2);
+    assert(queryForm.close() && queryClone->item("id").asNumber()==2);
+    number=0;try {queryModel->member("RecordsetClone",{});} catch(const VbaRuntimeError& error) {number=error.number;}
     assert(number==2450);
 }
 

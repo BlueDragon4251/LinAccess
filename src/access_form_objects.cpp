@@ -1005,6 +1005,7 @@ public:
             return linaccess::VbaValue::longInteger(static_cast<std::int32_t>(preview.recordRows_.size()+1));
         }
         if (key == "recordsource") return linaccess::VbaValue::string(bytes(preview.layout_.recordSource));
+        if (key=="recordsetclone") return preview.recordsetSnapshot()->member("Clone",{});
         if (key=="recordset") {
             (void)preview.recordsetSnapshot();
             return linaccess::VbaValue::reference(std::make_shared<PreviewRecordsetObject>(preview));
@@ -1081,7 +1082,7 @@ public:
     }
     linaccess::VbaValue objectMember(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         const auto key=text(name).toCaseFolded();
-        if (!args.empty() || key=="page" || key=="pages" || key=="name" || key=="caption" || key=="visible" || key=="tag" || key=="dataentry" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="selheight" || key=="recordsource" || key=="currentrecord" || key=="openargs" || key=="modal" || key=="popup" || key=="dirty" || key=="newrecord" || key=="controls" || key=="requery" || key=="recalc" || key=="repaint" || key=="undo" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="setfocus" || key=="filter" || key=="filteron" || key=="orderby" || key=="orderbyon")
+        if (!args.empty() || key=="page" || key=="pages" || key=="name" || key=="caption" || key=="visible" || key=="tag" || key=="dataentry" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="selheight" || key=="recordsource" || key=="recordset" || key=="recordsetclone" || key=="bookmark" || key=="currentrecord" || key=="openargs" || key=="modal" || key=="popup" || key=="dirty" || key=="newrecord" || key=="controls" || key=="requery" || key=="recalc" || key=="repaint" || key=="undo" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="setfocus" || key=="filter" || key=="filteron" || key=="orderby" || key=="orderbyon")
             return member(name,args);
         if (auto value=checked().getModuleMember(name,true)) return *value;
         return objectItem(bytes(checked().controlMemberName(text(name))));
@@ -1099,6 +1100,7 @@ public:
             checked().setDocumentVisible(visible); return;
         }
         if (key=="selheight") throw linaccess::VbaRuntimeError(438,"Changing record selection height unsupported");
+        if (key=="recordsetclone") throw linaccess::VbaRuntimeError(383,"RecordsetClone is read-only");
         if (key=="recordset") throw linaccess::VbaRuntimeError(3251,"Replacing the form recordset is unsupported");
         if (key=="bookmark") {
             const auto target=linaccess::daoBookmarkPosition(preview.recordsetSnapshot(),value)+1;

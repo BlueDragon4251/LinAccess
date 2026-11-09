@@ -1963,3 +1963,14 @@ Originalhashvergleich und Ergebnis-ZIP auch bei Fehlern. Makrodefinitionen bleib
 private Projektquellen außerhalb Git. Beide Skripte syntaktisch mit offiziellem
 PowerShell7.4.6-Parser geprüft; tatsächlicher Windows/Access-COM-Lauf ausstehend.
 Kein Makrotext-Laufzeitparitätsnachweis, Katalog456/386/70 unverändert.
+
+
+## 2026-11-09: natives Form.RecordsetClone
+
+Eigene DAO-Snapshotcursor über tatsächliche Tabellen-/Abfrageformularergebnisse,
+mit unabhängigem Suchen/Navigieren, Bookmark-Rücknavigation, leerem Ergebnis,
+Requery-Familienwechsel und weiterlebenden gehaltenen Clones. Eigenschaft ohne
+Argumente/schreibgeschützt; keine editierbaren Abfragen behauptet. Bestehende
+Layout-/GUI-Prüfung gebündelt2/2 (12,40/14,29s) bestanden, kein neuer Testtarget
+oder Windows-/Gesamtsuite-/Installerlauf. Details FORM_RECORDSET_CLONE_RUNTIME.md;
+F054/F160 und Katalog456/386/70 bleiben offen/unverändert.
