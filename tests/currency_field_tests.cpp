@@ -355,6 +355,14 @@ End Function
         assert(sql.exec("SELECT id,n,hex(payload) FROM typed_grid ORDER BY id DESC LIMIT 1") && sql.next() && sql.value(0).toInt()==5 && sql.value(1).toLongLong()==9223372036854775806LL && sql.value(2).toString()=="0001FF80");sql.finish();
         auto forged=QJsonDocument::fromJson(full).object();auto fields=forged.value("fields").toArray();fields[0]="different_id";forged["fields"]=fields;
         auto* wrong=new QMimeData;wrong->setData(linaccess::nativeGridMime,QJsonDocument(forged).toJson());QApplication::clipboard()->setMimeData(wrong);assert(!sheet.pasteSelection(true) && !cells.isDirty() && cells.rowCount()==5);
+        sheet.setCurrentIndex(cells.index(0,3));sheet.selectionModel()->select(cells.index(0,3),QItemSelectionModel::ClearAndSelect);assert(sheet.canCutSelection());QTest::keyClick(&sheet,Qt::Key_X,Qt::ControlModifier);
+        assert(cells.isDirty() && cells.QSqlTableModel::data(cells.index(0,3),Qt::EditRole).isNull() && QApplication::clipboard()->text()=="0x0001ff80" && cells.canUndoBlock());
+        assert(sql.exec("SELECT hex(payload) FROM typed_grid WHERE id=1") && sql.next() && sql.value(0).toString()=="0001FF80");sql.finish();
+        assert(cells.undoBlock() && cells.redoBlock() && cells.undoBlock() && !cells.isDirty());
+        sheet.setCurrentIndex(cells.index(1,2));sheet.selectionModel()->select(cells.index(1,2),QItemSelectionModel::ClearAndSelect);assert(sheet.cutSelection() && cells.submitTransactionally());
+        assert(sql.exec("SELECT note IS NULL FROM typed_grid WHERE id=2") && sql.next() && sql.value(0).toBool());sql.finish();
+        sheet.setCurrentIndex(cells.index(0,0));sheet.selectionModel()->select(cells.index(0,0),QItemSelectionModel::ClearAndSelect);QApplication::clipboard()->setText("protected-cut");assert(!sheet.canCutSelection() && !sheet.cutSelection() && !cells.isDirty() && QApplication::clipboard()->text()=="protected-cut");
+
 
 
     }

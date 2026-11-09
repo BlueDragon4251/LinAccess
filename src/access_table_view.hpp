@@ -406,6 +406,33 @@ public:
         auto* typed=qobject_cast<AccessTableModel*>(model());if(!typed) return false;
         return redo ? typed->redoBlock() : typed->undoBlock();
     }
+    bool canCutSelection() const {
+        const auto* typed=qobject_cast<AccessTableModel*>(model());
+        if(!typed || typed->isReadOnly() || typed->isDirty() || typed->editStrategy()!=QSqlTableModel::OnManualSubmit || hasPendingEditor() || !selectionModel() || !selectionModel()->hasSelection()) return false;
+        for(const auto& range:selectionModel()->selection()) for(int column=range.left();column<=range.right();++column)
+            if(isColumnHidden(column) || !typed->isPasteColumn(column,true)) return false;
+        return true;
+    }
+    bool cutSelection() {
+        const QPointer<AccessTableView> self=this;QPointer<AccessTableModel> typed=qobject_cast<AccessTableModel*>(model());
+        if(!typed || !finishEditing() || !self || !typed) return false;
+        if(typed->isReadOnly()) return refuse(2448,"Die Datenquelle ist schreibgeschützt.");
+        if(typed->isDirty()) return refuse(2501,"Vor dem Ausschneiden eines Bereichs Änderungen speichern oder verwerfen.");
+        if(typed->editStrategy()!=QSqlTableModel::OnManualSubmit) return refuse(3251,"Bereichsausschneiden ist in dieser Ansicht nicht verfügbar.");
+        QVector<QVector<QVariant>> cleared;QVector<QVariant> cells;int previous=-1;QPersistentModelIndex first;
+        try {
+            (void)nativeGridClipboardText(*this,[&](const QModelIndex& index) {
+                if(!typed->isPasteColumn(index.column(),true)) throw VbaRuntimeError(2448,"Cut target is protected");
+                if(!first.isValid()) first=index;
+                if(previous>=0 && previous!=index.row()) {cleared.push_back(cells);cells.clear();}
+                previous=index.row();cells.push_back(QVariant{});return QString{};
+            });
+            if(!cells.isEmpty()) cleared.push_back(cells);
+        } catch(const VbaRuntimeError& error) {return refuse(error.number,"Die Auswahl kann nicht als zusammenhängender Bereich ausgeschnitten werden.");}
+          catch(const std::bad_alloc&) {return refuse(7,"Der Bereich konnte nicht im Speicher vorbereitet werden.");}
+        if(!copySelection() || !self || !typed || !first.isValid()) return false;
+        return typed->setTypedDataBlock(first.row(),first.column(),cleared);
+    }
     bool copySelection() {
         auto* typed=qobject_cast<AccessTableModel*>(model());
         if(!typed || !selectionModel() || !finishEditing()) return false;
@@ -562,6 +589,7 @@ protected:
         };
         auto* native=qobject_cast<AccessTableModel*>(model());
         auto* copy=add("copy","&Kopieren\tStrg+C",native && selectionModel()->hasSelection());
+        auto* cut=add("cut","&Ausschneiden\tStrg+X",canCutSelection());
         const auto* clipboard=QApplication::clipboard()->mimeData();
         auto* paste=add("paste","&Einfügen\tStrg+V",canPasteSelection() && clipboard && clipboard->hasText());
         auto* append=add("paste-append","Datensätze &anfügen",canAppendRecords() && clipboard && clipboard->hasText());
@@ -577,6 +605,7 @@ protected:
         auto* chosen=menu.exec(position);
         if(!self) return;
         if(chosen==copy) (void)copySelection();
+        else if(chosen==cut) (void)cutSelection();
         else if(chosen==paste) (void)pasteSelection();
         else if(chosen==append) (void)pasteSelection(true);
         else if(chosen==zoom) (void)zoomCurrentCell();
@@ -677,6 +706,9 @@ protected:
         }
         if((event->key()==Qt::Key_Z || event->key()==Qt::Key_Y) && selectionModifiers==Qt::ControlModifier) {
             (void)undoPastedBlock(event->key()==Qt::Key_Y);event->accept();return;
+        }
+        if((event->key()==Qt::Key_X && selectionModifiers==Qt::ControlModifier) || (event->key()==Qt::Key_Delete && selectionModifiers==Qt::ShiftModifier)) {
+            (void)cutSelection();event->accept();return;
         }
         if((event->key()==Qt::Key_C || event->key()==Qt::Key_Insert) && selectionModifiers==Qt::ControlModifier) {
             (void)copySelection(); event->accept(); return;

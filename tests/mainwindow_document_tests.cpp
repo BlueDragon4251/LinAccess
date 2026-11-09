@@ -2244,6 +2244,10 @@ End Sub
     assert(table->selectionModel()->selectedIndexes().size()==model->rowCount());
     refreshEdit(); assert(editAction("copy")->isEnabled()); editAction("copy")->trigger();
     assert(QApplication::clipboard()->text()=="m-middle\r\nsaved-through-shortcut" && !model->isDirty());
+    refreshEdit();assert(editAction("cut")->isEnabled());editAction("cut")->trigger();assert(model->isDirty() && model->canUndoBlock());refreshEdit();assert(editAction("undo")->isEnabled());editAction("undo")->trigger();assert(!model->isDirty());
+    table->setCurrentIndex(model->index(0,1));table->selectionModel()->select(model->index(0,1),QItemSelectionModel::ClearAndSelect);
+    const auto cutRange=window.dispatchTableCommand(189);assert(cutRange.value("handled").toBool() && cutRange.value("error").toInt()==0 && model->isDirty());assert(window.dispatchTableCommand(292).value("error").toInt()==0 && !model->isDirty());
+
     table->setCurrentIndex(model->index(0,1)); QApplication::clipboard()->setText("first-range\r\nsecond-range");
     refreshEdit(); assert(editAction("paste")->isEnabled()); editAction("paste")->trigger();
     assert(model->isDirty() && model->index(0,1).data().toString()=="first-range" && model->index(1,1).data().toString()=="second-range");

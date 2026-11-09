@@ -47,3 +47,11 @@ the normal database constraints. Full-row shapes/names are checked before drafts
 change. The generated-field policy survives pending block Undo/Redo. Older grid
 payloads without field names retain positional range semantics. Form-record MIME
 remains separate; differently ordered/partial named record mappings remain open.
+
+Clean native table datasheets can Cut a contiguous visible cell rectangle with
+Ctrl+X, Shift+Delete, the Edit/context menus or RunCommand Cut(189). Copy validates
+and publishes the typed values before the cells become pending SQL NULL values.
+Generated fields/readonly sources are protected; an unrelated dirty cache is
+refused. SQL remains unchanged until normal transactional Save. The same bounded
+block Undo/Redo restores or reapplies the pending clear. This clears cells; it
+is not record deletion or a claimed full Access Cut/clipboard event protocol.

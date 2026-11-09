@@ -854,7 +854,7 @@ QVariantMap MainWindow::dispatchTableCommand(int command) {
         } else if(command==199 || command==292) {
             if(!table->undoPastedBlock(command==199)) return tableModelFailure(model,2046);
         } else if(command==189) {
-            return tableCommandFailure(3251,"Dieser Bearbeitungsbefehl außerhalb eines aktiven Textfelds ist noch nicht implementiert.");
+            if(!table->cutSelection()) return tableModelFailure(model,2046);
         } else if(command==179) {
             if(!table->zoomCurrentCell()) return tableModelFailure(model,2046);
         } else if(command==163 || command==164) {

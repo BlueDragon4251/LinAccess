@@ -907,3 +907,17 @@ neuer SQL-Schlüssel und verweigerte fremde Feldform geprüft. Positionsbereiche
 ältere Grid-MIME bleiben getrennt; anders geordnete/partielle Namenszuordnung und
 Formular-MIME-Interop bleiben offen. TYPED_GRID_CLIPBOARD.md; F340/F168 und456/384/72
 unverändert. Direkt weitere Bearbeitungsanforderungen umsetzen.
+
+Saubere native Tabellen-Datenblätter unterstützen jetzt Ausschneiden sichtbarer
+zusammenhängender Zellbereiche per Strg+X/Umschalt+Entf, Bearbeiten-/Kontextmenü und
+RunCommand Cut189. Die typisierte Zwischenablage erhält die geprüften Quellwerte;
+danach werden nur Cache-Zellen auf SQL NULL gesetzt. SQL bleibt bis zum normalen
+transaktionalen Save unverändert. Dieselbe begrenzte Bereichs-Undo/Redo-Strecke
+stellt die Werte wieder her. AutoWert-/Readonly-/verdeckte Ziele und fremde
+Entwürfe bleiben geschützt. Vorhandene GUI/Feld-Prüfungen gemeinsam2/2 (6,91s),
+App gebaut: echtes Menü/Dispatcher/Qt-Tastatur, Binär-Cut ohne frühe SQL-Änderung,
+Undo/Redo, persistentes NULL statt leerem Text und verweigerter AutoWert-Cut bei
+unveränderter Zwischenablage geprüft. Keine neue CTest-ID oder Windows-Beobachtung.
+Dies ist Zellbereichsleeren mit Undo, keine Datensatzlöschung oder volle Access-
+Cut-/Ereignisparität. TYPED_GRID_CLIPBOARD.md; F340/F168 und456/384/72 unverändert.
+Ohne Zwischenabschluss weiterimplementieren.
