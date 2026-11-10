@@ -51,3 +51,5 @@ layout observation; it is not evidence of working original report output. No new
 private VBA invocation or business fixture replacement was added. No new CTest/catalog identity; F050/F080/F085/F087/F105/F130
 remain broad requirements. Latest checked DEB/Original/inventory is code299b946f,
 before StrConv/RNG/page-band/group changes. No new Windows parity assertion.
+
+Bounded native repeated group headers and live Section access are now documented in [NATIVE_REPORT_REPEAT_HEADER.md](NATIVE_REPORT_REPEAT_HEADER.md); broader grouping/Windows bounds remain.

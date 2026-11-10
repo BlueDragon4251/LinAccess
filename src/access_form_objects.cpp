@@ -1,5 +1,6 @@
 #include "access_form_objects.hpp"
 #include "access_query.hpp"
+#include "native_report_grouping.hpp"
 #include "native_macro.hpp"
 #include "native_macro_runner.hpp"
 #include "native_macro_message_box.hpp"
@@ -953,6 +954,7 @@ public:
                 for(const auto& control:preview.layout_.controls) if(control.section==section_ && control.canGrow) enabled=true;
             return linaccess::VbaValue::logical(enabled);
         }
+        if(key=="repeatsection") return linaccess::VbaValue::logical(groupHeader(preview).repeatHeader);
         if(key=="forcenewpage") {
             return linaccess::VbaValue::byte(forceNewPage(preview));
         }
@@ -961,9 +963,21 @@ public:
     void assign(std::string_view name,const linaccess::VbaValue& value) override {
         auto& preview=checked();
         const auto key=text(name).toCaseFolded();
-        if(key!="forcenewpage" && key!="backcolor") throw linaccess::VbaRuntimeError(3251,"Section mutation unsupported");
+        if(key!="forcenewpage" && key!="backcolor" && key!="repeatsection") throw linaccess::VbaRuntimeError(3251,"Section mutation unsupported");
         if(preview.reportAggregateCaching_) throw linaccess::VbaRuntimeError(3251,"Section mutation during rendering unsupported");
         const auto scalar=linaccess::scalarVbaValue(value);
+        if(key=="repeatsection") {
+            auto& section=groupHeader(preview);
+            const bool enabled=linaccess::coerceVbaModuleValue(scalar,"boolean").boolean;
+            if(enabled==section.repeatHeader) return;
+            if(enabled) {
+                auto candidate=preview.layout_;
+                for(auto& band:candidate.reportGroupSections) if(band.section==section_) band.repeatHeader=true;
+                if(!linaccess::nativeReportGrouping(candidate,preview.dataColumns_,preview.dataTypes_,{}))
+                    throw linaccess::VbaRuntimeError(3251,"Repeating header context is unsupported");
+            }
+            section.repeatHeader=enabled;refresh(preview);return;
+        }
         if(key=="backcolor") {
             if(scalar.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null BackColor");
             const auto encoded=static_cast<qint32>(linaccess::sqlFieldValue(scalar,"INTEGER4").toLongLong());
@@ -987,6 +1001,11 @@ public:
         refresh(preview);
     }
 private:
+    linaccess::AccessReportGroupSection& groupHeader(AccessFormPreview& preview) const {
+        if(preview.layout_.kind==linaccess::AccessDocumentKind::Report)
+            for(auto& band:preview.layout_.reportGroupSections) if(band.section==section_ && band.header && band.levelProven) return band;
+        throw linaccess::VbaRuntimeError(3251,"RepeatSection requires a proven report group header");
+    }
     void refresh(AccessFormPreview& preview) {
         if(preview.reportPageView_) preview.reportPageView_->setProperty("la_report_pages_valid",false);
         preview.refreshReportPageView();
@@ -1081,8 +1100,16 @@ public:
                 if(scalar.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null section index");
                 const auto index=linaccess::sqlFieldValue(scalar,"INTEGER4").toLongLong();
                 static const QStringList sections{"Section","FormHeader","FormFooter","PageHeader","PageFooter"};
-                if(index<0 || index>=sections.size()) throw linaccess::VbaRuntimeError(3251,"Section index unavailable; group sections unsupported");
-                section=sections[index];
+                if(index<0 || index>=25) throw linaccess::VbaRuntimeError(3251,"Section index unavailable");
+                if(index<sections.size()) section=sections[index];
+                else {
+                    if(preview.layout_.kind!=linaccess::AccessDocumentKind::Report) throw linaccess::VbaRuntimeError(3251,"Group sections require a report");
+                    const int level=(index-5)/2;const bool header=(index-5)%2==0;
+                    for(const auto& band:preview.layout_.reportGroupSections) if(band.level==level && band.header==header) {
+                        if(!band.levelProven) throw linaccess::VbaRuntimeError(3251,"Group section index is unproven");
+                        if(!section.isEmpty()) throw linaccess::VbaRuntimeError(5,"Group section index ambiguous");section=band.section;
+                    }
+                }
             }
             if(section.isEmpty() || !preview.layout_.sectionHeights.contains(section))
                 throw linaccess::VbaRuntimeError(5,"Section unavailable");

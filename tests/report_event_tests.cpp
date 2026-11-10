@@ -221,9 +221,48 @@ End)BAND");
             assert(printedPrefixes==QStringList({"ROW31:0.4004","ROW33:0.6006","ROW32:1.1011","ROW22:0.2002","ROW21:0.3003","ROW23:0.3003","ROW12:0.0002","ROW11:0.0003"}));
             const QRegularExpression marker("ROW[0-9]+");auto matches=marker.globalMatch(text);QStringList rows;while(matches.hasNext()) rows.append(matches.next().captured());assert(rows.mid(0,8)==QStringList({"ROW31","ROW33","ROW32","ROW22","ROW21","ROW23","ROW12","ROW11"}));
         }
+        const auto groupOwner=makePreviewFormObject(grouped);
+        for(int index:{5,6,7,8}) {const auto section=groupOwner->member("Section",{linaccess::VbaValue::integer(index)}).object;assert(groupOwner->member("Section",{section->member("Name",{})}).object==section && section->member("Parent",{}).object==groupOwner);}
         const auto restoredSummary=makePreviewControlsObject(grouped)->member("Item",{linaccess::VbaValue::string("native_report_summary")}).object->member("Value",{});assert(restoredSummary.asText()=="REPORT:2.1024:8:ROW33:ROW11");assert(grouped.close());
         auto unsupportedGrouped=groupedPacket.layout;unsupportedGrouped.replace("GroupOn =0","GroupOn =1");AccessFormPreview intervalGroup("Unsupported group interval",unsupportedGrouped,{},db,nullptr,false,{},std::nullopt,0,-1,groupedPacket.recordSource);assert(intervalGroup.hasDataSource());assert(!intervalGroup.exportReportPdf(groupedPdf));assert(groupedBytes.open(QIODevice::ReadOnly) && groupedBytes.readAll()==previousGrouped);groupedBytes.close();assert(intervalGroup.close());
         auto unprovenGrouped=groupedPacket.layout;unprovenGrouped.replace("GroupOn =0\n","");AccessFormPreview unprovenGroup("Unproven group metadata",unprovenGrouped,{},db,nullptr,false,{},std::nullopt,0,-1,groupedPacket.recordSource);assert(unprovenGroup.hasDataSource());assert(!unprovenGroup.exportReportPdf(groupedPdf) && unprovenGroup.close());
+        const QByteArray repeatCode=R"VBA(Public Sub ToggleHeader()
+If acGroupLevel1Header<>5 Or acGroupLevel1Footer<>6 Or acGroupLevel2Header<>7 Or acGroupLevel2Footer<>8 Then Err.Raise 5
+Dim section As Access.Section
+Set section=Me.Section(acGroupLevel1Header)
+If Not TypeOf section Is Access.Section Then Err.Raise 5
+section.RepeatSection=Not section.RepeatSection
+End Sub
+)VBA";
+        for(const bool repeat:{false,true}) {
+            const QJsonObject repeatDefinition{{"sql","SELECT 'GROUP_REPEAT_MARK' AS group_key,'ITEM' & id AS row_marker FROM native_group_rows WHERE outer_key='B' ORDER BY id"},
+                {"groups",QJsonArray{QJsonObject{{"field","group_key"},{"header",true},{"repeat_header",repeat}}}}, {"detail_force_new_page",2}};
+            const auto repeatPacket=linaccess::nativeStoredReport("Native repeating group",repeatDefinition,db);
+            const auto repeatLayout=linaccess::parseAccessFormLayout(QString::fromUtf8(repeatPacket.layout));assert(repeatLayout.reportGroupSections.size()==1 && repeatLayout.reportGroupSections.front().repeatHeader==repeat);
+            AccessFormPreview repeated("Native repeating group",repeatPacket.layout,repeatCode,db,nullptr,false,{},std::nullopt,0,-1,repeatPacket.recordSource);
+            assert(repeated.hasDataSource() && repeated.findChild<QPrintPreviewWidget*>("access-report-pages")->pageCount()==3);
+            const auto repeatPdf=output.filePath("repeat-groups.pdf");assert(repeated.exportReportPdf(repeatPdf));
+            if(!groupTextTool.isEmpty()) {
+                QProcess reader;reader.start(groupTextTool,{"-layout",repeatPdf,"-"});assert(reader.waitForFinished(10000) && reader.exitCode()==0);const auto text=QString::fromUtf8(reader.readAllStandardOutput());QStringList pages;
+                for(const auto& page:text.split(QChar(12))) if(!page.trimmed().isEmpty()) pages.append(page);assert(pages.size()==3);
+                for(int page=0;page<3;++page) {assert(pages[page].contains("ITEM"+QString::number(31+page)));assert(pages[page].count("GROUP_REPEAT_MARK")==((page==0 || repeat) ? 2 : 1));}
+            }
+            assert(repeated.findChild<QLineEdit*>("access-control-row_marker")->text()=="ITEM31");
+            const auto owner=makePreviewFormObject(repeated);const auto section=owner->member("Section",{linaccess::VbaValue::integer(5)}).object;
+            const auto sectionName=section->member("Name",{}).asText();assert(owner->member("Section",{linaccess::VbaValue::string(sectionName)}).object==section);
+            assert(section->member("RepeatSection",{}).kind==linaccess::VbaValue::Kind::Boolean && section->member("RepeatSection",{}).boolean==repeat);
+            std::vector<linaccess::VbaValue> toggleArguments;const auto toggled=repeated.executeProcedure("ToggleHeader",toggleArguments);assert(toggled.status==linaccess::VbaExecutionStatus::Completed && section->member("RepeatSection",{}).boolean==!repeat);
+            section->assign("RepeatSection",linaccess::VbaValue::logical(repeat));int nullCode=0;try{section->assign("RepeatSection",linaccess::VbaValue{});}catch(const linaccess::VbaRuntimeError& failure){nullCode=failure.number;}assert(nullCode==94 && section->member("RepeatSection",{}).boolean==repeat);
+            assert(repeated.findChild<QPrintPreviewWidget*>("access-report-pages")->pageCount()==3 && repeated.close());int closedCode=0;try{(void)section->member("RepeatSection",{});}catch(const linaccess::VbaRuntimeError& failure){closedCode=failure.number;}assert(closedCode==2450);
+
+            if(repeat) {
+                auto unsupported=repeatPacket.layout;const int begin=unsupported.indexOf("Begin BreakHeader"),end=unsupported.indexOf("Begin Section",begin);assert(begin>=0 && end>begin);auto header=unsupported.mid(begin,end-begin);header.replace("ControlSource =\"[group_key]\"","ControlSource =\"[row_marker]\"");unsupported.replace(begin,end-begin,header);assert(unsupported!=repeatPacket.layout);
+                AccessFormPreview unproven("Unproven repeated header",unsupported,{},db,nullptr,false,{},std::nullopt,0,-1,repeatPacket.recordSource);
+                QFile prior(repeatPdf);assert(prior.open(QIODevice::ReadOnly));const auto before=prior.readAll();prior.close();assert(!unproven.exportReportPdf(repeatPdf));assert(prior.open(QIODevice::ReadOnly) && prior.readAll()==before);prior.close();
+                const auto badHeader=makePreviewFormObject(unproven)->member("Section",{linaccess::VbaValue::integer(5)}).object;badHeader->assign("RepeatSection",linaccess::VbaValue::logical(false));int unsupportedCode=0;try{badHeader->assign("RepeatSection",linaccess::VbaValue::logical(true));}catch(const linaccess::VbaRuntimeError& failure){unsupportedCode=failure.number;}assert(unsupportedCode==3251 && !badHeader->member("RepeatSection",{}).boolean);assert(unproven.close());
+                auto invalid=repeatDefinition;auto groups=invalid["groups"].toArray();auto group=groups[0].toObject();group.insert("header",false);groups[0]=group;invalid.insert("groups",groups);int code=0;try{(void)linaccess::nativeStoredReport("Invalid repeat",invalid,db);}catch(const linaccess::VbaRuntimeError& failure){code=failure.number;}assert(code==5);
+            }
+        }
         auto* reportPages=paged.findChild<QPrintPreviewWidget*>("access-report-pages");
         auto* reportTabs=paged.findChild<QTabWidget*>("access-report-view-tabs");
         auto* pageNumber=paged.findChild<QSpinBox*>("access-report-page-number");

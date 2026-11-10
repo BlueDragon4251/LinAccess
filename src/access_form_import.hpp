@@ -92,7 +92,7 @@ struct AccessReportGroup {
     std::optional<bool> sortOrder,groupHeader,groupFooter;
     std::optional<int> groupOn,groupInterval,keepTogether;
 };
-struct AccessReportGroupSection {QString section;int level{};bool header{},levelProven{};};
+struct AccessReportGroupSection {QString section;int level{};bool header{},levelProven{},repeatHeader{};};
 struct AccessFormLayout {
     AccessDocumentKind kind{AccessDocumentKind::Form};
     QString caption;

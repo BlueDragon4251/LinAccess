@@ -204,7 +204,7 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
         if (form.kind==AccessDocumentKind::Report) {
             if(current.type.compare("BreakLevel",Qt::CaseInsensitive)==0 && key=="ControlSource" && !value.trimmed().isEmpty())
                 form.reportPrintLimitations.append("BreakLevel");
-            if (((key=="CanShrink" || key=="RepeatSection"
+            if (((key=="CanShrink" || (key=="RepeatSection" && !(current.breakSection>=0 && current.type=="BreakHeader"))
                   || key=="HideDuplicates" || key=="Vertical") && accessBoolean(value,false))
                 || (key=="CanGrow" && accessBoolean(value,false) && current.type!="Section"
                     && !(current.type=="TextBox" && (current.controlTemplate || current.control>=0)))
@@ -242,6 +242,9 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
             if(!valid || setting<0 || setting>3) throw std::runtime_error("Invalid report page header/footer setting");
             if(key.compare("PageHeader",Qt::CaseInsensitive)==0) form.reportPageHeader=setting;else form.reportPageFooter=setting;
             continue;
+        }
+        if(current.breakSection>=0 && current.type=="BreakHeader" && key=="RepeatSection") {
+            form.reportGroupSections[current.breakSection].repeatHeader=accessBoolean(value,false);continue;
         }
         if(current.breakSection>=0 && key=="BreakLevel") {
             bool valid=false;const int level=value.toInt(&valid);if(!valid || level<0 || level>=10) throw std::runtime_error("Invalid group section level");

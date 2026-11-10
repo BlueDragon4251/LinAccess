@@ -9,7 +9,7 @@
 #include <optional>
 namespace linaccess {
 struct NativeReportGroupPlan {
-    struct Level {int column{};bool descending{};QString header,footer;};
+    struct Level {int column{};bool descending{};QString header,footer;bool repeatHeader{};};
     QVector<Level> levels;
     QVector<int> order;
     QVector<QVector<QPair<int,int>>> ranges; // Sorted row, half-open scope per level.
@@ -48,6 +48,15 @@ inline std::optional<NativeReportGroupPlan> nativeReportGrouping(const AccessFor
             if(!band.levelProven) return {};
             auto& target=band.header ? level.header : level.footer;
             if(!target.isEmpty() || !layout.sectionHeights.contains(band.section)) return {};
+            if(band.header && band.repeatHeader) {
+                // A repeated native header shows the representative group key.
+                // Arbitrary row-dependent imported header expressions need an oracle.
+                for(const auto& control:layout.controls) if(control.section==band.section && control.type=="TextBox") {
+                    auto field=control.controlSource.trimmed();if(field.startsWith('[') && field.endsWith(']')) field=field.mid(1,field.size()-2);
+                    if(field.compare(columns[column],Qt::CaseInsensitive)!=0 || control.runningSum || control.canGrow) return {};
+                }
+                level.repeatHeader=true;
+            }
             target=band.section;sections.insert(band.section);
         }
         if(*source.groupHeader!=!level.header.isEmpty() || *source.groupFooter!=!level.footer.isEmpty()) return {};

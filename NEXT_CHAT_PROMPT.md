@@ -4093,3 +4093,21 @@ Kategorien73/5/3/9/10, kein Access-Ergebnisoracle; Original-Layout-PDF0 positiv/
 3 Verweigerungen, bekannte Makro-/Tastaturgrenzen bleiben. Das Paket enthält
 CStr/OverGroup/Stringadapter und liegt vor dieser Such-/Trim-Erweiterung.
 Ohne Zwischenabschluss weitere allgemeine offene Anforderungen implementieren.
+
+
+Wiederholte native Gruppenköpfe/Abschnitts-API (2026-11-10):
+NATIVE_REPORT_REPEAT_HEADER.md. Echter Gruppendesigner speichert repeat_header,
+Quellgenerator explizites RepeatSection und tatsächliche native Abschnittsnamen.
+Planer wiederholt aktive Gruppenköpfe mit belegter Gruppenschlüsselbindung,
+berücksichtigt Höhe/Seitenrollen und beendet geschlossene Bereiche. Beliebige
+zeilenabhängige Headerausdrücke, andere RepeatSection-Kontexte/Spalten/Unterberichte
+bleiben außerhalb dieses Umfangs; bestehende Guards/Dateiatomizität bleiben.
+Section-Indizes5..24 für belegte Gruppenpaare, öffentliche erste4 AcSection-
+Gruppenkonstanten, Name/Index-Identität, Boolean RepeatSection lesen/schreiben
+mit Vorabprüfung/Neuzeichnung, Null94/geschlossen2450. Tatsächliche VBA-Umschaltung
+und dreiseitige PDFs an/aus, Identitäten zweier Stufen, Restaurierung/Dateierhalt
+geprüft. GUI12,75s bestanden (20s unverändert), nach gezielter Fixturekorrektur
+Layout1/1 in10,45s; kein neuer kombinierter2/2- oder Windows-Nachweis.
+Keine neuen CTest-/Katalog-IDs;456/386/70. Vorstufe00f8e4ef privat/Baum geprüft.
+DEB/Original/Inventar weiterhin678a7fd8 (116,95/46,27s,7Hash gleich), vor Such-/Trim
+und dieser Erweiterung. Ohne Zwischenabschluss weitere offene Anforderungen.

@@ -23,7 +23,7 @@ std::optional<QJsonArray> editNativeReportGroups(QWidget* owner,QSqlDatabase dat
     if(columns.isEmpty() || columns.size()>32 || initial.size()>10) throw VbaRuntimeError(3251,"Report grouping source/level bound exceeded");
     QDialog dialog(owner);dialog.setObjectName("native-report-group-designer");dialog.setWindowTitle("Bericht gruppieren und sortieren");dialog.resize(900,420);
     auto* layout=new QVBoxLayout(&dialog);layout->addWidget(new QLabel("Die Reihenfolge der Zeilen bestimmt die Gruppenstufen. Berechnungen im Gruppenfuß gelten jeweils für diese Gruppe.",&dialog));
-    auto* table=new QTableWidget(0,4,&dialog);table->setObjectName("native-report-groups-list");table->setHorizontalHeaderLabels({"Feld","Sortierung","Gruppenkopf","Berechnung im Gruppenfuß (optional)"});table->horizontalHeader()->setSectionResizeMode(3,QHeaderView::Stretch);table->setSelectionBehavior(QAbstractItemView::SelectRows);layout->addWidget(table,1);
+    auto* table=new QTableWidget(0,5,&dialog);table->setObjectName("native-report-groups-list");table->setHorizontalHeaderLabels({"Feld","Sortierung","Gruppenkopf","Berechnung im Gruppenfuß (optional)","Kopf auf Folgeseiten"});table->horizontalHeader()->setSectionResizeMode(3,QHeaderView::Stretch);table->horizontalHeader()->setSectionResizeMode(4,QHeaderView::ResizeToContents);table->setSelectionBehavior(QAbstractItemView::SelectRows);layout->addWidget(table,1);
     auto* actions=new QHBoxLayout;
     auto button=[&](const QString& title,const QString& name) {auto* item=new QPushButton(title,&dialog);item->setObjectName(name);actions->addWidget(item);return item;};
     auto* add=button("Hinzufügen","native-report-group-add");auto* remove=button("Entfernen","native-report-group-remove");auto* up=button("Nach oben","native-report-group-up");auto* down=button("Nach unten","native-report-group-down");actions->addStretch();layout->addLayout(actions);
@@ -31,12 +31,15 @@ std::optional<QJsonArray> editNativeReportGroups(QWidget* owner,QSqlDatabase dat
     const auto rowData=[&](int row) {return QJsonObject{{"field",qobject_cast<QComboBox*>(table->cellWidget(row,0))->currentText()},
         {"descending",qobject_cast<QComboBox*>(table->cellWidget(row,1))->currentIndex()==1},
         {"header",qobject_cast<QCheckBox*>(table->cellWidget(row,2))->isChecked()},
-        {"footer_expression",qobject_cast<QLineEdit*>(table->cellWidget(row,3))->text().trimmed()}};};
+        {"footer_expression",qobject_cast<QLineEdit*>(table->cellWidget(row,3))->text().trimmed()},
+        {"repeat_header",qobject_cast<QCheckBox*>(table->cellWidget(row,4))->isChecked()}};};
     const auto fill=[&](int row,const QJsonObject& item) {
         auto* field=new QComboBox(table);field->addItems(columns);const auto wanted=item.value("field").toString();int selected=-1;for(int index=0;index<columns.size();++index) if(columns[index].compare(wanted,Qt::CaseInsensitive)==0) selected=index;field->setCurrentIndex(wanted.isEmpty() ? 0 : selected);table->setCellWidget(row,0,field);
         auto* sort=new QComboBox(table);sort->addItems({"Aufsteigend","Absteigend"});sort->setCurrentIndex(item.value("descending").toBool() ? 1 : 0);table->setCellWidget(row,1,sort);
         auto* header=new QCheckBox(table);header->setAccessibleName("Gruppenkopf");header->setChecked(item.value("header").toBool(true));table->setCellWidget(row,2,header);
         auto* footer=new QLineEdit(item.value("footer_expression").toString(),table);footer->setPlaceholderText("=Count(*) oder =Sum([Feld])");table->setCellWidget(row,3,footer);
+        auto* repeat=new QCheckBox(table);repeat->setAccessibleName("Gruppenkopf auf Folgeseiten wiederholen");repeat->setToolTip("Bei mehrseitigen Gruppen den Gruppenkopf auf jeder Folgeseite erneut anzeigen.");repeat->setChecked(item.value("repeat_header").toBool());table->setCellWidget(row,4,repeat);
+
     };
     for(const auto& value:initial) {if(!value.isObject()) throw VbaRuntimeError(5,"Invalid stored report group");const int row=table->rowCount();table->insertRow(row);fill(row,value.toObject());}
     QObject::connect(add,&QPushButton::clicked,&dialog,[&] {if(table->rowCount()>=10) {status->setText("Höchstens zehn Gruppenstufen sind möglich.");return;}const int row=table->rowCount();table->insertRow(row);fill(row,{});table->setCurrentCell(row,0);});

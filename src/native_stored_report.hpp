@@ -104,7 +104,7 @@ inline NativeStoredReport nativeStoredReport(QString name,const QJsonObject& def
             <<"Left ="+QString::number(i*width+30)<<"Width ="+QString::number(width-60)<<"Height =300"<<"End";
     lines<<"End";
     for(int level=0;level<groups.size();++level) if(groups[level].header) {
-        const auto& group=groups[level];lines<<"Begin BreakHeader"<<"BreakLevel ="+QString::number(level)<<"Height =450"<<"KeepTogether =-1"
+        const auto& group=groups[level];lines<<"Begin BreakHeader"<<"Name ="+quoted(unique("native_group_header_section_"+QString::number(level)))<<"BreakLevel ="+QString::number(level)<<"Height =450"<<"KeepTogether =-1"<<"RepeatSection ="+QString::number(group.repeatHeader ? -1 : 0)
             <<"Begin TextBox"<<"Name ="+quoted(unique("native_group_header_"+QString::number(level)))<<"ControlSource ="+quoted("["+group.field+"]")
             <<"Left =30"<<"Top =30"<<"Width ="+QString::number(reportWidth-60)<<"Height =300"<<"FontWeight =700";
         if(const auto format=formats.value(group.field.toCaseFolded());!format.isUndefined()) {if(!format.isString()) throw VbaRuntimeError(5,"Invalid native report group Format");lines<<"Format ="+quoted(format.toString());}
@@ -121,7 +121,7 @@ inline NativeStoredReport nativeStoredReport(QString name,const QJsonObject& def
     }
     lines<<"End";
     for(int level=groups.size()-1;level>=0;--level) if(!groups[level].footer.isEmpty()) {
-        lines<<"Begin BreakFooter"<<"BreakLevel ="+QString::number(level)<<"Height =450"<<"KeepTogether =-1"
+        lines<<"Begin BreakFooter"<<"Name ="+quoted(unique("native_group_footer_section_"+QString::number(level)))<<"BreakLevel ="+QString::number(level)<<"Height =450"<<"KeepTogether =-1"
             <<"Begin TextBox"<<"Name ="+quoted(unique("native_group_footer_"+QString::number(level)))<<"ControlSource ="+quoted(groups[level].footer)
             <<"Left =30"<<"Top =30"<<"Width ="+QString::number(reportWidth-60)<<"Height =300"<<"FontWeight =700"<<"End"<<"End";
     }

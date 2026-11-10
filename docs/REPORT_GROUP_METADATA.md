@@ -51,3 +51,5 @@ https://learn.microsoft.com/en-us/office/vba/api/access.grouplevel.groupfooter
 https://learn.microsoft.com/en-us/office/vba/api/access.grouplevel.groupon
 https://learn.microsoft.com/en-us/office/vba/api/access.grouplevel.groupinterval
 https://learn.microsoft.com/en-us/office/vba/api/access.grouplevel.keeptogether
+
+Bounded native repeated group headers and live Section access are now documented in [NATIVE_REPORT_REPEAT_HEADER.md](NATIVE_REPORT_REPEAT_HEADER.md); broader grouping/Windows bounds remain.

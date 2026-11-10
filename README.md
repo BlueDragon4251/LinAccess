@@ -1295,3 +1295,5 @@ Laufende Berichtssummen je Gruppe oder über alle Datensätze: [Umfang und Ausga
 SQL-Zeichenfolgen mit nativen VBA-Regeln: [Str, Left/Right/Mid und Replace](docs/NATIVE_SQL_STRINGS.md).
 
 Native SQL-Suche und Leerzeichenbehandlung: [InStr, StrComp und Trim](docs/NATIVE_SQL_SEARCH_TRIM.md).
+
+Gruppenköpfe auf Folgeseiten und native Abschnitts-API: [Umfang](docs/NATIVE_REPORT_REPEAT_HEADER.md).

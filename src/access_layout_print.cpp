@@ -504,38 +504,51 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
     append("FormHeader",0,record);
     if(header) append("PageHeader",height("FormHeader"),record);
     int y=height("FormHeader")+header;
+    int bodyTop=header;QVector<std::optional<QPair<int,int>>> activeHeaders(grouping->levels.size());
     const auto finishPage=[&] {if(footer) append("PageFooter",pageHeight-footer,record);};
-    const auto startPage=[&](int row,bool reportFooter=false) {
+    const auto startPage=[&](int row,bool reportFooter=false) -> bool {
         ++pageNumber;record=row;
         header=pageBandHeight("PageHeader",layout_.reportPageHeader,false,reportFooter);
         footer=pageBandHeight("PageFooter",layout_.reportPageFooter,false,reportFooter);
         if(header) append("PageHeader",0,record);y=header;
+        if(pageHeight<=header+footer) return false;
+        if(!reportFooter) for(int level=0;level<grouping->levels.size();++level) {
+            const auto& group=grouping->levels[level];const auto scope=activeHeaders[level];
+            if(!group.repeatHeader || !scope || row<scope->first+1 || row>scope->second) continue;
+            const int size=height(group.header);if(y+size>=pageHeight-footer) return false;
+            append(group.header,y,scope->first+1,*scope);y+=size;
+        }
+        bodyTop=y;return true;
     };
     bool pendingBodyBreak=(layout_.reportHeaderForceNewPage&2)!=0;
     const auto appendGroup=[&](const QString& section,int row,QPair<int,int> scope) {
         const int size=height(section);if(section.isEmpty() || size==0) return true;
-        if(pendingBodyBreak && y>header) {finishPage();startPage(row);}pendingBodyBreak=false;
-        if(size>pageHeight-header-footer) return false;
-        if(y+size>pageHeight-footer) {finishPage();startPage(row);}
-        if(pageHeight<=header+footer || size>pageHeight-header-footer) return false;
+        if(pendingBodyBreak && y>bodyTop) {finishPage();if(!startPage(row)) return false;}pendingBodyBreak=false;
+        if(size>pageHeight-bodyTop-footer) return false;
+        if(y+size>pageHeight-footer) {finishPage();if(!startPage(row)) return false;}
+        if(pageHeight<=header+footer || size>pageHeight-bodyTop-footer) return false;
         append(section,y,row,scope);y+=size;return true;
     };
     const auto closeGroups=[&](int row) {
-        for(int level=grouping->levels.size()-1;level>=0;--level)
-            if(grouping->ranges[level][row].second==row+1 && !appendGroup(grouping->levels[level].footer,row+1,grouping->ranges[level][row])) return false;
+        for(int level=grouping->levels.size()-1;level>=0;--level) if(grouping->ranges[level][row].second==row+1) {
+            if(!appendGroup(grouping->levels[level].footer,row+1,grouping->ranges[level][row])) return false;
+            activeHeaders[level].reset();
+        }
         return true;
     };
     for (int row=0;row<recordRows_.size();++row) {
-        if(pendingBodyBreak && y>header) {finishPage();startPage(row+1);}pendingBodyBreak=false;
-        for(int level=0;level<grouping->levels.size();++level)
-            if(grouping->ranges[level][row].first==row && !appendGroup(grouping->levels[level].header,row+1,grouping->ranges[level][row])) return false;
-        if((layout_.detailForceNewPage&1) && y>header) {finishPage();startPage(row+1);}
+        if(pendingBodyBreak && y>bodyTop) {finishPage();if(!startPage(row+1)) return false;}pendingBodyBreak=false;
+        for(int level=0;level<grouping->levels.size();++level) if(grouping->ranges[level][row].first==row) {
+            if(!appendGroup(grouping->levels[level].header,row+1,grouping->ranges[level][row])) return false;
+            if(!grouping->levels[level].header.isEmpty()) activeHeaders[level]=grouping->ranges[level][row];
+        }
+        if((layout_.detailForceNewPage&1) && y>bodyTop) {finishPage();if(!startPage(row+1)) return false;}
         const int size=detailHeights[row];
         if(pageHeight<=header+footer) return false;
-        if (size<=pageHeight-header-footer && y+size>pageHeight-footer) { finishPage(); startPage(row+1); }
+        if (size<=pageHeight-bodyTop-footer && y+size>pageHeight-footer) { finishPage(); if(!startPage(row+1)) return false; }
         record=row+1;
         if(pageHeight<=header+footer) return false;
-        if(size<=pageHeight-header-footer) {
+        if(size<=pageHeight-bodyTop-footer) {
             append("Section",y,record); y+=size;
             pendingBodyBreak=(layout_.detailForceNewPage&2)!=0;if(!closeGroups(row)) return false;continue;
         }
@@ -571,17 +584,17 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
                 }
             }
             if(end<=slice) {
-                if(y>header) { finishPage(); startPage(record); continue; }
+                if(y>bodyTop) { finishPage(); if(!startPage(record)) return false; continue; }
                 return false;
             }
             bands.append({"Section",y,record,pageNumber,end-slice,slice,{}});
             y+=end-slice; slice=end;
-            if(slice<size) { finishPage(); startPage(record); }
+            if(slice<size) { finishPage(); if(!startPage(record)) return false; }
         }
         pendingBodyBreak=(layout_.detailForceNewPage&2)!=0;if(!closeGroups(row)) return false;
     }
-    if((pendingBodyBreak || (layout_.reportFooterForceNewPage&1) || separateFooter) && hasReportFooter && y>header) {finishPage();startPage(record,true);}
-    if (y+height("FormFooter")>pageHeight-footer) {finishPage();startPage(record,true);}
+    if((pendingBodyBreak || (layout_.reportFooterForceNewPage&1) || separateFooter) && hasReportFooter && y>bodyTop) {finishPage();if(!startPage(record,true)) return false;}
+    if (y+height("FormFooter")>pageHeight-footer) {finishPage();if(!startPage(record,true)) return false;}
     if(pageHeight<=header+footer || y+height("FormFooter")>pageHeight-footer) return false;
     append("FormFooter",y,record);finishPage();
     if (pageNumber>32767) return false;
