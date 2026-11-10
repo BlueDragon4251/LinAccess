@@ -5494,6 +5494,33 @@ End Function
     assert(basedDefault.status==VbaExecutionStatus::Completed && basedDefault.returnValue=="65535");
     assert(evaluate("AscW(String:=ChrW$(CharCode:=937))").asNumber()==937);
     assert(evaluate("Chr$(CharCode:=34)").asText()=="\"");
+    const auto typedNames=executeVbaProcedure(R"VBA(
+Private saved&
+Sub Bump(ByRef count%)
+count%=count%+1
+End Sub
+Sub TypedNames()
+Dim count%, total&, fraction!, precise#, money@, text$
+Const step%=2
+count%=step%+1
+total&=count%+4
+saved&=total&
+fraction!=1.5
+precise#=2.25
+money@=0.125
+text$="literal count% and object!field"
+Bump count%
+Me!TypedNames=CStr(count%) & ":" & CStr(total&) & ":" & CStr(fraction!) & ":" & CStr(precise#) & ":" & CStr(money@) & ":" & text$
+Me!CanonicalNames=CStr(count) & ":" & CStr(total)
+End Sub
+)VBA","TypedNames",host);
+    assert(typedNames.status==VbaExecutionStatus::Completed);
+    assert(host.fields["TypedNames"]=="4:7:1.5:2.25:0.125:literal count% and object!field");
+    assert(host.fields["CanonicalNames"]=="4:7");
+    const auto mismatchedName=executeVbaProcedure("Sub Mismatch()\nDim value As Variant\nvalue=3\nMe!Invalid=value%\nEnd Sub","Mismatch",host);
+    assert(mismatchedName.status==VbaExecutionStatus::Error && mismatchedName.errorNumber==13);
+    const auto invalidTypedDeclaration=executeVbaProcedure("Sub InvalidTyped()\nDim value% As Integer\nEnd Sub","InvalidTyped",host);
+    assert(invalidTypedDeclaration.status!=VbaExecutionStatus::Completed);
     testVbaDebugger();
     testVbaDebugOutput();
     testVbaProperties();

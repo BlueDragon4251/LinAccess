@@ -6439,3 +6439,25 @@ Servicepfade, Zustand/Entwürfe/Neuzeichnen/geschlossenes Ziel geprüft. Keine n
 CTest-/Katalog-IDs;456/386/70. Vorstufe65844569 privat/Baum geprüft. DEB bislang
 5c82c365 (118,77/46,44s,7Hash gleich); neue Paket-/Original-/Inventarprüfung folgt.
 Weiter mit der dokumentierten VBA-Bezeichner-Typzeichenlücke; keine Zwischenabschlüsse.
+
+
+Paketbeleg für Modulfensterauswahl (2026-11-10):
+Privater veröffentlichter Stand daff0f1323c8e2a6b4c6adf01e6bc52897fc6d85,
+Baum91cc1d75bd46f2386a40f92339703eeabd33b4b2. DEB unter
+work/module-window-selection/package-proof/package/linaccess-0.7.0-Linux.deb:
+Bau, CPack und check-deb erfolgreich. Bestehendes Original-/Inventarbündel2/2
+in165,73s (Inventar46,34s, Original119,39s); sieben geschützte Hashes unverändert.
+Dies belegt keine vollständige Access-Parität; bestehende Oracle-/Originalgrenzen
+bleiben.456/386/70 unverändert. Aktuelle Typzeichenentwicklung liegt nach diesem Paket.
+
+
+Native skalare Bezeichner-Typzeichen (2026-11-10):
+VBA_IDENTIFIER_TYPES.md beschreibt %/&/!/#/@/$ an lokalen Dim-/Static-
+Deklarationen, skalaren Parametern, Modulvariablen und Konstanten; kanonische
+Variablenbindung, deklarationsbasierter Typabgleich und ByRef-Erhalt. Kein
+Quelltext-Strippen, kein Variant-Subtype-Ersatz, kein veränderlicher Rahmen im
+Syntaxcache. As-Doppelangabe wird verweigert. Vorhandenes core_tests nach
+Korrektur der Konstantensyntax/ByRef-Bindung1/1 in0,53s bestanden. Funktionsnamen,
+Array-/ReDim-Deklarationen, Schleifen, implizite Typzeichen und qualifizierte
+Projektmember bleiben offen. Keine neue CTest-/Katalog-ID;456/386/70 unverändert.
+Nächste Implementierung: Typzeichen an Funktionsnamen samt Signatur-/Rückgabebindung.

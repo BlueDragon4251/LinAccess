@@ -180,6 +180,7 @@ public:
     // Used only by a real procedure frame, after normal name resolution.
     std::function<std::optional<VbaValue>(std::string_view)> undeclaredIdentifier;
     std::function<VbaValue(std::string_view,const VbaValue&)> variableValue;
+    std::function<std::optional<std::string>(std::string_view)> typedIdentifier;
     VbaFunctionResolver()=default;
     VbaFunctionResolver(std::nullptr_t) {}
     template<class Function> requires (!std::is_same_v<std::remove_cvref_t<Function>,VbaFunctionResolver>

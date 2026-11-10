@@ -1,3 +1,4 @@
+#include "vba_identifier_type.hpp"
 #include "vba_error_text.hpp"
 #include "vba_random.hpp"
 #include "vba_project_types.hpp"
@@ -312,6 +313,16 @@ std::vector<Token> tokenize(std::string_view input,bool accessExpression=false,b
             while (pos < input.size() &&
                    (std::isalnum(static_cast<unsigned char>(input[pos])) || static_cast<unsigned char>(input[pos]) >= 0x80 || input[pos] == '_')) ++pos;
             if (pos<input.size() && input[pos]=='$') ++pos;
+            else if(!accessExpression && numericSuffixes && pos<input.size() && std::string_view("%!#@").find(input[pos])!=std::string_view::npos) {
+                // Bang followed by a field name remains member access.
+                auto after=pos+1; while(after<input.size() && std::isspace(static_cast<unsigned char>(input[after]))) ++after;
+                const bool field=input[pos]=='!' && after<input.size() && (std::isalnum(static_cast<unsigned char>(input[after])) || static_cast<unsigned char>(input[after])>=128 || input[after]=='_' || input[after]=='[');
+                if(!field) ++pos;
+            } else if(!accessExpression && numericSuffixes && pos<input.size() && input[pos]=='&') {
+                // Preserve adjacent concatenation. A terminator or operator is unambiguous.
+                auto after=pos+1; while(after<input.size() && std::isspace(static_cast<unsigned char>(input[after]))) ++after;
+                if(after==input.size() || std::string_view(",)+-*/\\^=<>:").find(input[after])!=std::string_view::npos) ++pos;
+            }
             tokens.push_back({Token::Type::Word, std::string(input.substr(start, pos - start))});
         } else if(ch=='&' && pos+2<input.size()
             && (((input[pos+1]=='h' || input[pos+1]=='H') && std::isxdigit(static_cast<unsigned char>(input[pos+2])))
@@ -1139,7 +1150,7 @@ private:
             require(")");
             return value;
         }
-        const auto tok = consume();
+        auto tok = consume();
         if (tok.type==Token::Type::Bracket) {
             if (!host_) return {};
             const auto root=lower(tok.value);
@@ -1208,6 +1219,9 @@ private:
         if (tok.type != Token::Type::Word)
             throw error("Ungültiger VBA-Ausdruck: " + tok.value);
         auto word = lower(tok.value);
+        if(host_ && !accessExpression_ && resolver_.typedIdentifier && !vbaIdentifierType(word).empty()) {
+            if(auto canonical=resolver_.typedIdentifier(word)) {word=*canonical;tok.value=*canonical;}
+        }
         if(!accessExpression_ && nextSymbol(".") && index_+1<tokens_.size() && tokens_[index_+1].type==Token::Type::Word
             && !locals_.contains(word) && (!host_ || !host_->hasInstanceIdentifier(word))) {
             const auto qualified=word+"."+lower(tokens_[index_+1].value);
@@ -1531,6 +1545,8 @@ private:
                     omitted.push_back(missing);
                     references.push_back(!missing && index_ == start + 1 && tokens_[start].type == Token::Type::Word
                         ? tokens_[start].value : "");
+                    if(!references.back().empty() && host_ && !accessExpression_ && resolver_.typedIdentifier)
+                        if(auto canonical=resolver_.typedIdentifier(references.back())) references.back()=*canonical;
                     if(host_ && index_==start+3 && tokens_[start].type==Token::Type::Word && tokens_[start+1].value=="(" && tokens_[start+2].value==")") {
                         const auto variable=locals_.find(lower(tokens_[start].value));
                         if(variable!=locals_.end() && isVbaArray(variable->second)) references.back()=tokens_[start].value;

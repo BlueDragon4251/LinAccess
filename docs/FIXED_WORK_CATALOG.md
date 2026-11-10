@@ -692,3 +692,15 @@ Servicepfade, Zustand/Entwürfe/Neuzeichnen/geschlossenes Ziel geprüft. Keine n
 CTest-/Katalog-IDs;456/386/70. Vorstufe65844569 privat/Baum geprüft. DEB bislang
 5c82c365 (118,77/46,44s,7Hash gleich); neue Paket-/Original-/Inventarprüfung folgt.
 Weiter mit der dokumentierten VBA-Bezeichner-Typzeichenlücke; keine Zwischenabschlüsse.
+
+
+Native skalare Bezeichner-Typzeichen (2026-11-10):
+VBA_IDENTIFIER_TYPES.md beschreibt %/&/!/#/@/$ an lokalen Dim-/Static-
+Deklarationen, skalaren Parametern, Modulvariablen und Konstanten; kanonische
+Variablenbindung, deklarationsbasierter Typabgleich und ByRef-Erhalt. Kein
+Quelltext-Strippen, kein Variant-Subtype-Ersatz, kein veränderlicher Rahmen im
+Syntaxcache. As-Doppelangabe wird verweigert. Vorhandenes core_tests nach
+Korrektur der Konstantensyntax/ByRef-Bindung1/1 in0,53s bestanden. Funktionsnamen,
+Array-/ReDim-Deklarationen, Schleifen, implizite Typzeichen und qualifizierte
+Projektmember bleiben offen. Keine neue CTest-/Katalog-ID;456/386/70 unverändert.
+Nächste Implementierung: Typzeichen an Funktionsnamen samt Signatur-/Rückgabebindung.
