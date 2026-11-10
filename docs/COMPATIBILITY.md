@@ -6458,3 +6458,15 @@ Zeitstempel, Link-/Löschgrenzen und typisierter VBA-Aufruf.456/386/70 unveränd
 keine neuen Test-/Katalog-IDs. Vorstufe45a6f86a privat remote/Baum geprüft.
 Aktuelles geprüftes DEB bleibt ad42eada vor abgeleiteten Snapshots/Ordner-Metadaten.
 Ohne Zwischenabschluss weitere allgemeine offene Anforderungen fortsetzen.
+
+
+Native DateCreated/DateLastAccessed für File und Folder: vorhandene
+NATIVE_FILE_SYSTEM_OBJECT.md dokumentiert tatsächliche Linux-statx-Zeitstempel,
+Verfügbarkeits-/Objektartprüfung und3251 bei fehlender Erstellzeit; keine
+Änderungs-/Inode-/Jetzt-Ersatzwerte. Vorhandene lokale Date-/Range-Konvertierung
+nimmt zusätzlich geprüfte Unixsekunden an. App/Core gebaut; einmaliges bestehendes
+Core-Bündel1/1 in5,45s bestanden: echte getrennte Zugriffs-/Änderungszeiten,
+typisiertes VBA, tatsächliche/ausdrücklich fehlende Erstellzeit und Löschgrenzen.
+Keine neuen Test-/Katalog-IDs;456/386/70 unverändert. Vorstufe1da6ad45 privat
+remote/Baum geprüft. Geprüftes DEB weiterhin ad42eada vor späteren Umfängen.
+Ohne Zwischenabschluss weitere allgemeine offene Anforderungen umsetzen.

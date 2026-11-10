@@ -290,3 +290,30 @@ No new CTest/catalog IDs; F091 remains open,456/386/70 unchanged.
 Public contracts (not an Access2003/Windows FSO execution oracle):
 https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/size-property-filesystemobject-object
 https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/datelastmodified-property
+
+
+## Actual access and creation timestamps
+
+Native File and Folder now expose DateLastAccessed and DateCreated. Linux statx
+requests the actual access/birth timestamp and checks its returned availability
+mask and the actual object kind. No inode-change time, modification time or current
+clock substitutes for creation time. Filesystems/kernels without the requested
+timestamp refuse3251; permission errors70, absent files53/folders76, other failures75.
+Final symlinks and changed object kinds refuse3251. This does not resolve all
+ancestor-link races, network providers, Windows reparse points or filesystem
+access-time update policies. Linux relatime/noatime remains the real filesystem
+policy. Properties are read-only, accept no arguments, and return native Date
+through the existing local-time/range conversion. That conversion now also accepts
+checked Unix seconds directly, avoiding a needless filesystem-clock roundtrip for
+statx values. Existing modified-time/FileDateTime behavior retains the same path.
+
+App/core built, one existing core_tests bundle passed5.45s. Actual file and directory
+access/modified times deliberately differ by a day; both direct objects and typed
+VBA preserve that distinction. Creation time, when available, remains distinct
+from the deliberately old access time; unavailable creation time is checked3251.
+Missing objects and getter arity are covered. No new CTest/catalog IDs;456/386/70.
+No Windows FSO/Access execution-oracle or complete interface claim.
+
+Public contracts:
+https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/datecreated-property
+https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/datelastaccessed-property

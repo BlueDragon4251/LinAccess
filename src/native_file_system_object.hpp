@@ -72,7 +72,7 @@ public:
             }
             return {};
         }
-        if(method!="path" && method!="name" && method!="size" && method!="datelastmodified" && method!="parentfolder") throw VbaRuntimeError(3251,"Native file member is not implemented");
+        if(method!="path" && method!="name" && method!="size" && method!="datelastmodified" && method!="datecreated" && method!="datelastaccessed" && method!="parentfolder") throw VbaRuntimeError(3251,"Native file member is not implemented");
         if(!args.empty()) throw VbaRuntimeError(450,"File property takes no arguments");
         if(method=="path") return VbaValue::string(path_.string());
         if(method=="name") return VbaValue::string(path_.filename().string());
@@ -83,6 +83,7 @@ public:
         if(error==std::errc::permission_denied) throw VbaRuntimeError(70,"Filesystem permission denied");
         if(error) throw VbaRuntimeError(75,"Native file metadata unavailable");
         if(!std::filesystem::is_regular_file(status)) throw VbaRuntimeError(3251,"File metadata requires a regular file");
+        if(method=="datecreated" || method=="datelastaccessed") return nativeFileTimestamp(path_,method=="datecreated",false);
         if(method=="datelastmodified") {
             const auto modified=std::filesystem::last_write_time(path_,error);
             if(error==std::errc::permission_denied) throw VbaRuntimeError(70,"Filesystem permission denied");
@@ -257,9 +258,10 @@ public:
             auto collection=std::make_shared<VbaFilesObject>(path_,method=="subfolders");
             return args.empty() ? VbaValue::reference(collection) : collection->member("Item",args);
         }
-        if(method!="path" && method!="name" && method!="parentfolder" && method!="size" && method!="datelastmodified") throw VbaRuntimeError(3251,"Native Folder member is not implemented");
+        if(method!="path" && method!="name" && method!="parentfolder" && method!="size" && method!="datelastmodified" && method!="datecreated" && method!="datelastaccessed") throw VbaRuntimeError(3251,"Native Folder member is not implemented");
         if(!args.empty()) throw VbaRuntimeError(450,"Folder property takes no arguments");
         if(method=="size") return size();
+        if(method=="datecreated" || method=="datelastaccessed") return nativeFileTimestamp(path_,method=="datecreated",true);
         if(method=="datelastmodified") {
             (void)nativeFolderReference(path_);
             std::error_code error;const auto modified=std::filesystem::last_write_time(path_,error);metadataFailure(error);

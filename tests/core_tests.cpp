@@ -35,6 +35,8 @@ void testVbaDebugger();
 #include <fstream>
 #include <cstdlib>
 #include <chrono>
+#include <fcntl.h>
+#include <sys/stat.h>
 
 namespace {
 class TestSequence final : public linaccess::VbaObject {
@@ -3584,9 +3586,37 @@ Me!FolderMetadataSize=CStr(folder.Size)
 Me!FolderMetadataDate=CStr(Year(stamp)) & ":" & CStr(Month(stamp)) & ":" & CStr(Day(stamp))
 End Sub)VBA","ReadFolderMetadata",host);
         assert(folderMetadata.status==VbaExecutionStatus::Completed && host.fields["FolderMetadataSize"]=="10" && host.fields["FolderMetadataDate"]=="2003:2:3");
+        const auto metadataFile=fso->member("GetFile",{VbaValue::string((metadataRoot/"root.dat").string())}).object;
+        timespec knownTimes[2]{{metadataStamp,0},{metadataStamp-86400,0}};
+        assert(::utimensat(AT_FDCWD,(metadataRoot/"root.dat").c_str(),knownTimes,AT_SYMLINK_NOFOLLOW)==0);
+        assert(::utimensat(AT_FDCWD,metadataRoot.c_str(),knownTimes,AT_SYMLINK_NOFOLLOW)==0);
+        const auto expectedAccess=evaluate("CDate(\"2003-02-03 04:05:06\")");
+        for(const auto& object:{metadataFile,metadataFolder}) {
+            const auto accessed=object->member("DateLastAccessed",{});
+            assert(accessed.kind==VbaValue::Kind::Date && std::abs(accessed.number-expectedAccess.number)<1e-9);
+            const auto changed=object->member("DateLastModified",{});
+            assert(changed.kind==VbaValue::Kind::Date && std::abs(accessed.number-changed.number-1)<1e-9);
+            metadataError([&] {object->member("DateLastAccessed",{VbaValue::integer(1)});},450);
+            try {
+                const auto created=object->member("DateCreated",{});
+                assert(created.kind==VbaValue::Kind::Date && created.number>accessed.number+365);
+            } catch(const VbaRuntimeError& error) {assert(error.number==3251);}
+        }
+        const auto timestampProbe=executeVbaProcedure(R"VBA(Sub ReadFilesystemTimes()
+Dim fs As Scripting.FileSystemObject, folder As Scripting.Folder, file As Scripting.File
+Set fs=New Scripting.FileSystemObject
+Set folder=fs.GetFolder(Me!FolderMetadataRoot)
+Set file=fs.GetFile(Me!FolderMetadataRoot & "/root.dat")
+If Year(folder.DateLastAccessed)<>2003 Or Year(file.DateLastAccessed)<>2003 Then Err.Raise 5
+If DateDiff("d",folder.DateLastModified,folder.DateLastAccessed)<>1 Then Err.Raise 5
+End Sub)VBA","ReadFilesystemTimes",host);
+        assert(timestampProbe.status==VbaExecutionStatus::Completed);
         assert(fs::remove_all(metadataRoot)==6);
         metadataError([&] {metadataFolder->member("Size",{});},76);
         metadataError([&] {metadataFolder->member("DateLastModified",{});},76);
+        metadataError([&] {metadataFolder->member("DateCreated",{});},76);
+        metadataError([&] {metadataFolder->member("DateLastAccessed",{});},76);
+        metadataError([&] {metadataFile->member("DateLastAccessed",{});},53);
         const auto renameRoot=directory/"folder-rename-probe";assert(fs::create_directory(renameRoot));
         host.fields["FolderRenameRoot"]=renameRoot.string();
         const auto renameFolder=executeVbaProcedure(R"VBA(Sub RenameFolder()
