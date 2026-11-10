@@ -1,4 +1,5 @@
 #include "vba_error_text.hpp"
+#include "vba_random.hpp"
 #include "vba_project_types.hpp"
 #include "vba_condition.hpp"
 #include "native_utf.hpp"
@@ -1894,6 +1895,7 @@ int lastRaisedVbaError(VbaHost& host) {
     (void)state->member("Number",{});
     return state->lastRaisedNumber;
 }
+std::shared_ptr<VbaRandomState> VbaHost::randomState() {if(!randomState_) randomState_=std::make_shared<VbaRandomState>();return randomState_;}
 std::shared_ptr<VbaObject> VbaHost::errorObject() {if(!errorObject_) errorObject_=makeVbaErrorObject();return errorObject_;}
 std::shared_ptr<VbaModuleState> VbaHost::moduleState(std::string_view module) {
     const auto key=std::string(module);
@@ -2132,7 +2134,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                 if (external) declaration = validateVbaProcedure(*external, instruction.argument);
             }
             if(declaration.status==VbaExecutionStatus::ProcedureMissing
-               && (lower(instruction.argument)=="doevents" || lower(instruction.argument)=="syscmd")) continue;
+               && (lower(instruction.argument)=="doevents" || lower(instruction.argument)=="syscmd" || lower(instruction.argument)=="randomize")) continue;
             if (declaration.status != VbaExecutionStatus::Completed)
                 return {VbaExecutionStatus::Unsupported, "Aufgerufene Prozedur nicht verfügbar oder nicht unterstützt", instruction.line};
         }
@@ -2655,6 +2657,13 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         }
         VbaExecutionResult nested;
         const bool named=std::any_of(argumentNames.begin(),argumentNames.end(),[](const std::string& value){ return !value.empty(); });
+        const auto invokeRandomSeed=[&] {
+            if(needsValue) throw VbaRuntimeError(3251,"Randomize is a Sub, not a function");
+            if(actuals.size()>1) throw VbaRuntimeError(450,"Randomize takes at most one argument");
+            if(!argumentNames.empty() && !argumentNames[0].empty() && lower(argumentNames[0])!="number") throw VbaRuntimeError(448,"Randomize named argument not found");
+            randomizeVbaGenerator(host,actuals.empty() ? VbaValue::missing() : actuals[0]);refreshAliases();return VbaValue::empty();
+        };
+
         if(named) {
             std::string targetModule(module);
             std::vector<Statement> compiled; std::vector<Parameter> parameters;
@@ -2684,6 +2693,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                 }
                 return host.applicationObject()->member("SysCmd",ordered);
             }
+            if(declaration.status==VbaExecutionStatus::ProcedureMissing && lower(std::string(name))=="randomize") return invokeRandomSeed();
             if(declaration.status!=VbaExecutionStatus::Completed) throw VbaRuntimeError(3251,"Named arguments require a supported VBA procedure declaration");
             if(std::any_of(parameters.begin(),parameters.end(),[](const Parameter& parameter){ return parameter.paramArray; }))
                 throw VbaRuntimeError(3251,"Named ParamArray calls are not implemented");
@@ -2711,6 +2721,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                 if(external) nested=executeProcedure(*external,name,host,actuals,&bindings);
             }
         }
+        if(nested.status==VbaExecutionStatus::ProcedureMissing && lower(std::string(name))=="randomize") return invokeRandomSeed();
         if(nested.status==VbaExecutionStatus::ProcedureMissing && lower(std::string(name))=="syscmd")
             return host.applicationObject()->member("SysCmd",actuals);
         if(nested.status==VbaExecutionStatus::ProcedureMissing && lower(std::string(name))=="doevents") {

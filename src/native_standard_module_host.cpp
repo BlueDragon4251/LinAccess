@@ -50,6 +50,7 @@ NativeStandardModuleHost::NativeStandardModuleHost(QWidget* owner,QSqlDatabase d
         : owner_(owner),db_(std::move(db)),guard_(std::move(guard)){}
 void NativeStandardModuleHost::check() const{if(!owner_ || !db_.isOpen()) throw VbaRuntimeError(3420,"Module execution context is closed");if(owner_->thread()!=QThread::currentThread()) throw VbaRuntimeError(3251,"Module application context requires its GUI thread");guard_();}
 std::shared_ptr<VbaObject> NativeStandardModuleHost::errorObject(){check();return projectVbaErrorObject(db_);}
+std::shared_ptr<VbaRandomState> NativeStandardModuleHost::randomState(){check();return projectVbaRandomState(db_);}
 void NativeStandardModuleHost::enterModule(std::string_view){check();enterNativeUiExecution();}
 void NativeStandardModuleHost::leaveModule() noexcept {leaveNativeUiExecution();}
 std::optional<std::string> NativeStandardModuleHost::field(std::string_view){throw VbaRuntimeError(438,"Me requires a real form instance");}

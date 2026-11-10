@@ -517,6 +517,46 @@ End Function)BOUND";
     }
 }
 
+void testNativeRandomGenerator() {
+    using namespace linaccess;FakeForm host,independent;
+    const auto eval=[&](const std::string& source) {return evaluateVbaExpression(source,host,{});};
+    const auto initial=eval("Rnd(0)");assert(initial.numericType==VbaValue::NumericType::Single && initial.number>=0 && initial.number<1);
+    assert(evaluateVbaExpression("Rnd(0)",independent,{}).number==initial.number);
+    const auto seeded=eval("Rnd(-7)");std::vector<double> sequence;for(int i=0;i<8;++i) sequence.push_back(eval(i%2 ? "Rnd" : "Rnd(Number:=1)").number);
+    assert(eval("Rnd(-7)").number==seeded.number);for(const auto expected:sequence) {const auto value=eval("Rnd()");assert(value.numericType==VbaValue::NumericType::Single && value.number==expected && value.number>=0 && value.number<1 && eval("Rnd(0)").number==expected);}
+    assert(evaluateVbaExpression("Rnd(0)",independent,{}).number==initial.number);
+    const std::string source=R"VBA(Function SeededSequence() As Single
+Dim ignored As Single
+ignored=Rnd(-1)
+Randomize Number:=42
+SeededSequence=Rnd
+End Function
+Sub TimerSeed()
+Randomize
+VBA.Randomize
+Randomize Empty
+End Sub
+Function QualifiedSeed() As Single
+Dim ignored As Single
+ignored=VBA.Rnd(-1)
+VBA.Randomize 42
+QualifiedSeed=VBA.Rnd()
+End Function)VBA";
+    const auto one=executeVbaProcedure(source,"SeededSequence",host),two=executeVbaProcedure(source,"SeededSequence",host),qualified=executeVbaProcedure(source,"QualifiedSeed",host);
+    for(const auto* result:{&one,&two,&qualified}) {if(result->status!=VbaExecutionStatus::Completed) std::cerr<<"Random procedure error="<<result->errorNumber<<" line="<<result->line<<" reason="<<result->explanation<<'\n';assert(result->status==VbaExecutionStatus::Completed && result->typedReturnValue->numericType==VbaValue::NumericType::Single);}
+    assert(one.typedReturnValue->number==two.typedReturnValue->number && one.typedReturnValue->number==qualified.typedReturnValue->number);
+    const auto timer=executeVbaProcedure(source,"TimerSeed",host);assert(timer.status==VbaExecutionStatus::Completed);assert(eval("Rnd").number>=0 && eval("Rnd").number<1);
+    for(const auto& [expression,expected]:std::vector<std::pair<std::string,int>>{{"Rnd(Null)",94},{"Rnd(\"bad\")",13},{"Rnd(1e100)",6},{"Rnd(1,2)",450},{"Randomize(1)",3251}}) {
+        const auto saved=eval("Rnd(0)").number;int number=0;try {eval(expression);}catch(const VbaRuntimeError& error) {number=error.number;}assert(number==expected && eval("Rnd(0)").number==saved);
+    }
+    const auto shadow=executeVbaProcedure(R"VBA(Function Rnd() As Long
+Rnd=77
+End Function
+Function Shadowed() As Long
+Shadowed=Rnd
+End Function)VBA","Shadowed",host);assert(shadow.status==VbaExecutionStatus::Completed && shadow.typedReturnValue->number==77);
+}
+
 void testCharacterFunctions() {
     using namespace linaccess;
     FakeForm host;
@@ -1358,6 +1398,7 @@ End Sub
     testRoundFunction();
     testNativeMathFunctions();
     testCharacterFunctions();
+    testNativeRandomGenerator();
     testDefaultTypeInspection();
     testTypedNot();
     {

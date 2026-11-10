@@ -1,5 +1,6 @@
 #include "vba_array_return_fixture.hpp"
 #include "vba_array.hpp"
+#include "vba_module_context.hpp"
 #include "native_standard_module_host.hpp"
 #include "jet_sql_functions.hpp"
 #include "access_query.hpp"
@@ -123,5 +124,35 @@ End Function
     const auto scalar=executeAccessQueryPlan(db,compileAccessQuery("SELECT LinArrayCallCount() AS NativeCount"),{});assert(scalar.rows.size()==1 && scalar.rows[0][0].toInt()==0);
     QDialog moduleOwner;NativeStandardModuleHost moduleHost(&moduleOwner,db,[]{});result=executeVbaProcedure(nativeArrayReturnFixture,"LinArrayReturnLongs",moduleHost);assert(result.status==VbaExecutionStatus::Completed && vbaArrayElementType(*result.typedReturnValue)=="long" && sqlCount()==1);
     assert(arraySql.exec("DELETE FROM main._la_objects WHERE kind='module' AND name='TypedArrayReturnFixture'"));arraySql.finish();installJetSqlFunctions(db);
+
+    const std::string randomSource=R"VBA(Function NativeRandSeed() As Single
+Dim ignored As Single
+ignored=Rnd(-1)
+Randomize 7
+NativeRandSeed=Rnd(0)
+End Function
+Function NativeRandNext() As Single
+NativeRandNext=Rnd()
+End Function
+Function NativeRandPeek() As Single
+NativeRandPeek=Rnd(0)
+End Function)VBA";
+    QDialog randomOwner;NativeStandardModuleHost randomHost(&randomOwner,db,[]{});
+    auto independentDb=QSqlDatabase::addDatabase("QSQLITE","native-random-independent");independentDb.setDatabaseName(":memory:");assert(independentDb.open());
+    NativeStandardModuleHost independentHost(&randomOwner,independentDb,[]{});
+    const auto initialRandom=evaluateVbaExpression("Rnd(0)",independentHost,{}).number;
+    const auto invokeRandom=[&](const char* name,VbaHost& host) {const auto result=executeVbaProcedure(randomSource,name,host);if(result.status!=VbaExecutionStatus::Completed)std::cerr<<"Project random error="<<result.errorNumber<<" reason="<<result.explanation<<'\n';assert(result.status==VbaExecutionStatus::Completed);return result.typedReturnValue->number;};
+    assert(invokeRandom("NativeRandSeed",randomHost)==invokeRandom("NativeRandSeed",independentHost));
+    const auto firstRandom=invokeRandom("NativeRandNext",independentHost),secondRandom=invokeRandom("NativeRandNext",independentHost),thirdRandom=invokeRandom("NativeRandNext",independentHost);
+    AccessFormPreview randomA("Random environment A",layout,QByteArray::fromStdString(randomSource),db),randomB("Random environment B",layout,QByteArray::fromStdString(randomSource),db);
+    arguments.clear();auto first=randomA.executeProcedure("NativeRandNext",arguments);arguments.clear();auto second=randomB.executeProcedure("NativeRandNext",arguments);
+    assert(first.status==VbaExecutionStatus::Completed && second.status==VbaExecutionStatus::Completed && first.typedReturnValue->number==firstRandom && second.typedReturnValue->number==secondRandom);
+    assert(invokeRandom("NativeRandPeek",randomHost)==secondRandom);
+    arraySql.prepare("INSERT INTO main._la_objects(kind,name,definition) VALUES('module','NativeRandomFixture',?)");arraySql.addBindValue(QString::fromUtf8(QJsonDocument(QJsonObject{{"version",1},{"vba",QString::fromStdString(randomSource)}}).toJson(QJsonDocument::Compact)));assert(arraySql.exec());arraySql.finish();installJetSqlFunctions(db);
+    assert(arraySql.exec("SELECT NativeRandNext()") && arraySql.next() && arraySql.value(0).toDouble()==thirdRandom);arraySql.finish();assert(invokeRandom("NativeRandPeek",randomHost)==thirdRandom);
+    assert(randomA.close() && randomB.close());
+    assert(arraySql.exec("DELETE FROM main._la_objects WHERE kind='module' AND name='NativeRandomFixture'"));arraySql.finish();installJetSqlFunctions(db);
+    resetVbaProjectState(independentDb);assert(evaluateVbaExpression("Rnd(0)",independentHost,{}).number==initialRandom);
+    independentDb.close();int closedRandom=0;try {evaluateVbaExpression("Rnd()",independentHost,{});}catch(const VbaRuntimeError& failure) {closedRandom=failure.number;}assert(closedRandom==3420);
 
 }

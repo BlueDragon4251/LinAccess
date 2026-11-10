@@ -11,5 +11,6 @@ QMap<QString,QByteArray> standardVbaModuleSources(QSqlDatabase db,QMap<QString,Q
 std::shared_ptr<VbaModuleState> standardVbaModuleState(QSqlDatabase db,std::string_view source);
 std::vector<std::shared_ptr<VbaModuleState>> publicVbaModuleStates(QSqlDatabase db);
 std::shared_ptr<VbaObject> projectVbaErrorObject(QSqlDatabase db);
+std::shared_ptr<VbaRandomState> projectVbaRandomState(QSqlDatabase db);
 void resetVbaProjectState(QSqlDatabase db);
 }

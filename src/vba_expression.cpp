@@ -1,4 +1,5 @@
 #include "vba_error_text.hpp"
+#include "vba_random.hpp"
 #include "vba_project_types.hpp"
 #include "vba_conditional.hpp"
 #include "vba_condition.hpp"
@@ -822,7 +823,7 @@ public:
 bool vbaIntrinsicName(const std::string& name) {
     static const std::unordered_set<std::string> intrinsics{
                 "error","error$","array","lbound","ubound","isarray","ismissing","isobject","iserror","cverr","vartype","typename",
-                "createobject","doevents","msgbox","inputbox","inputbox$","round","asc","ascw","chr","chr$","chrw","chrw$",
+                "createobject","rnd","randomize","doevents","msgbox","inputbox","inputbox$","round","asc","ascw","chr","chr$","chrw","chrw$",
                 "cbyte","cint","clng","csng","cdbl","cbool","cvar","ccur","cdec","cdate","cstr","str","str$","format","format$","formatnumber","formatcurrency","formatpercent","formatdatetime",
                 "left","left$","right","right$","mid","mid$","trim","trim$","ltrim","ltrim$","rtrim","rtrim$","len","lenb",
                 "ucase","ucase$","lcase","lcase$","instr","strcomp","instrrev","strreverse","strconv","replace","split","join","filter",
@@ -1447,6 +1448,23 @@ private:
             }
             return currentDirectory();
         }
+        if(word=="rnd" && !nextSymbol("(") && !accessExpression_) {
+            if(!host_) return {};
+            if(!qualifiedIntrinsic) {
+                if(const auto variable=locals_.find(word);variable!=locals_.end()) return readLocal(word,variable->second);
+                if(resolver_.argumentSignature) if(const auto signature=resolver_.argumentSignature(tok.value);signature && signature->localProcedure) {
+                    if(!signature->function) throw error("A Sub cannot be used as a function expression",3251);
+                    std::vector<VbaValue> arguments;return resolver_(tok.value,arguments,VbaArgumentReferences{});
+                }
+                if(auto value=host_->resolveIdentifier(tok.value,objectContext)) return bindArithmeticValue(*value,VbaValue::ArithmeticBinding::Unbound);
+            }
+            return nextVbaRandom(*host_,VbaValue::missing());
+        }
+        if(word=="randomize" && qualifiedIntrinsic && !nextSymbol("(")) {
+            if(!host_) return {};
+            if(!statementContext_) throw error("Randomize is a Sub, not a function",3251);
+            randomizeVbaGenerator(*host_,VbaValue::missing());return VbaValue::empty();
+        }
         if(word=="doevents" && !nextSymbol("(")) {
             if(!host_) return {};
             if(accessExpression_) throw error("DoEvents is unavailable in calculated expressions",3251);
@@ -1504,7 +1522,7 @@ private:
                         argumentName=lower(consume().value); consume();
                     }
                     const auto start = index_;
-                    const bool builtinDefaults=!localProcedure && (word=="monthname" || word=="weekdayname" || word=="msgbox" || word=="inputbox" || word=="inputbox$" || word=="instr" || word=="instrrev" || word=="strcomp" || word=="strconv" || word=="round" || word=="replace" || word=="split" || word=="join" || word=="filter" || word=="datediff" || word=="datepart" || word=="weekday");
+                    const bool builtinDefaults=!localProcedure && (word=="monthname" || word=="weekdayname" || word=="rnd" || word=="randomize" || word=="msgbox" || word=="inputbox" || word=="inputbox$" || word=="instr" || word=="instrrev" || word=="strcomp" || word=="strconv" || word=="round" || word=="replace" || word=="split" || word=="join" || word=="filter" || word=="datediff" || word=="datepart" || word=="weekday");
                     const bool missing=nextSymbol(",") || nextSymbol(")") || (accessExpression_ && nextSymbol(";"));
                     auto argument=missing ? VbaEvaluatedArgument{builtinDefaults ? VbaValue::empty() : VbaValue::missing(),{}}
                         : argumentExpression((!localProcedure && word=="isobject") || (signature && signature->objectArgument(args.size(),argumentName)));
@@ -1567,6 +1585,7 @@ private:
                     {"filter",{{"SourceArray","Match","Include","Compare"},2}},
                     {"instrrev",{{"StringCheck","StringMatch","Start","Compare"},2}},
                     {"strreverse",{{"Expression"},1}},
+                    {"rnd",{{"Number"},0}}, {"randomize",{{"Number"},0}},
                     {"strconv",{{"String","Conversion","LCID"},2}},
                     {"instr",{{"Start","String1","String2","Compare"},0}},
                     {"strcomp",{{"String1","String2","Compare"},2}},
@@ -2457,6 +2476,15 @@ private:
                     if(condition.kind!=VbaValue::Kind::Null && coerceVbaModuleValue(condition,"boolean").boolean) return variantResult(args[index+1]);
                 }
                 return {};
+            }
+            if(word=="rnd" || word=="randomize") {
+                if(!host_) return {};
+                if(accessExpression_ || jetEval_) throw error("Random state in calculated/Jet expressions is not implemented",3251);
+                if(args.size()>1) throw error("Random generator takes at most one argument",450);
+                const auto value=args.empty() || omitted[0] ? VbaValue::missing() : args[0];
+                if(word=="rnd") return nextVbaRandom(*host_,value);
+                if(!statementContext_) throw error("Randomize is a Sub, not a function",3251);
+                randomizeVbaGenerator(*host_,value);return VbaValue::empty();
             }
             if(word=="strconv") {
                 if(!host_) return {};

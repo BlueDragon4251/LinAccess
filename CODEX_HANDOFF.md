@@ -6224,3 +6224,23 @@ inklusive echter VBA-Funktion, sieben Trenner, Getter-Zähler und Schutzgrenzen.
 Keine neue CTest-/Katalog-ID;456/386/70. Letztes geprüfte DEB/Original/Inventar
 bleibt299b946f (47,60/120,62s, sieben Hashes unverändert), vor dieser Funktion.
 Dokumentations-Vorstufe0a045c94 privat/Baum geprüft. Ohne Zwischenabschluss weiter.
+
+
+Native Rnd/Randomize: NATIVE_RANDOM_GENERATOR.md. Tatsächlicher projektweiter
+24-Bit-Zustand im vorhandenen Modulkontext, geteilt von Formular-/Standardmodul-/
+Editor-/Klassen-/nativen Modul-SQL-Hosts; getrennte Projekte/Reset/geschlossene DB
+geprüft. Rnd liefert Single[0,1), fehlend/positiv nächste,0 aktuellen Wert, negativ
+reproduzierbare Folge. Randomize ist Sub mit optionalem benanntem Number; fehlend/
+Empty echter Systemtimer, sonst geprüfte Double-Konvertierung. Native Argumente
+werden vor Zustandszugriff skalarisiert/konvertiert; fehlerhafte primitive Eingaben
+verändern Zustand nicht. Keine Generatorzustände im Syntax-/Quellcache.
+Öffentliche MIT-VBMath-Algorithmusreferenz mit Attribution/Lizenz und Installregel;
+kein beobachtetes Access-Zufallsfolgen-Orakel, keine Behauptung vollständiger
+volatiler Access-/Jet-Ausdrücke (direkt kalkuliertes/Jet-Rnd ausdrücklich3251).
+App/Core/GUI gebaut. Bestehendes Bündel: GUI12,37s bestanden; Core fand fehlenden
+benannten Randomize-Sub-Fallback. Binder und qualifiziertes argumentloses Randomize
+korrigiert; nur Core neu gebaut/geprüft,1/1 in0,49s bestanden. GUI-20s unverändert.
+Keine neuen CTest-/Katalog-IDs;456/386/70. Vorstufecde2c756 privat/Baum geprüft.
+Letztes DEB/Original/Inventar ist299b946f, vor StrConv/RNG (47,60/120,62s, sieben
+Hashes unverändert). Ohne Zwischenabschluss weiter; nächste Berichtsseitenkopf- /
+Seitenfußoptionen anhand dokumentierter tatsächlicher Semantik implementieren.

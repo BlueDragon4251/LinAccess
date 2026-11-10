@@ -13,6 +13,7 @@ public:
     ~NativeStandardModuleHost() override;
     void check() const;
     std::shared_ptr<VbaObject> errorObject() override;
+    std::shared_ptr<VbaRandomState> randomState() override;
     std::string projectClassName(std::string_view) override;
     bool knowsClassType(std::string_view) override;
     bool canConstructClass(std::string_view) override;

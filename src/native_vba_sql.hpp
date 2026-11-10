@@ -105,6 +105,7 @@ public:
     Host(QSqlDatabase db,Registry& registry):db_(std::move(db)),registry_(registry) {}
     VbaValue calendarName(bool month,int number,bool abbreviated,int firstDay) override {return accessCalendarName(month,number,abbreviated,firstDay);}
     std::shared_ptr<VbaObject> errorObject() override {return projectVbaErrorObject(db_);}
+    std::shared_ptr<VbaRandomState> randomState() override {return projectVbaRandomState(db_);}
     void executionObserved(std::string_view source,std::string_view procedure,const VbaExecutionResult& result,bool stopped) override {recordVbaObservation(db_,source,procedure,result,stopped,"sql_function");}
     std::optional<std::string> field(std::string_view) override { unavailable(); }
     void setField(std::string_view,std::optional<std::string>) override { unavailable(); }

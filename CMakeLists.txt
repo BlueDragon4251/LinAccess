@@ -3,7 +3,7 @@ project(LinAccess VERSION 0.7.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-add_library(linaccess_runtime STATIC src/native_object_types.cpp src/vba_runtime.cpp src/vba_class.cpp src/vba_conditional.cpp src/vba_debugger.cpp src/vba_debug_output.cpp src/vba_expression.cpp src/vba_currency.cpp src/vba_decimal.cpp src/vba_round.cpp src/vba_calendar.cpp src/vba_array.cpp src/vba_analyzer.cpp src/csv.cpp)
+add_library(linaccess_runtime STATIC src/native_object_types.cpp src/vba_runtime.cpp src/vba_class.cpp src/vba_conditional.cpp src/vba_debugger.cpp src/vba_debug_output.cpp src/vba_expression.cpp src/vba_random.cpp src/vba_currency.cpp src/vba_decimal.cpp src/vba_round.cpp src/vba_calendar.cpp src/vba_array.cpp src/vba_analyzer.cpp src/csv.cpp)
 target_include_directories(linaccess_runtime PUBLIC src)
 find_package(Boost 1.74 CONFIG REQUIRED)
 target_link_libraries(linaccess_runtime PRIVATE Boost::headers)
@@ -376,3 +376,5 @@ if(BUILD_TESTING)
     endif()
 endif()
 
+
+install(FILES third_party/visualbasic-random/LICENSE DESTINATION share/doc/linaccess/licenses/visualbasic-random)

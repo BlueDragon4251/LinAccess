@@ -1,5 +1,6 @@
 #include "native_class_definition.hpp"
 #include "vba_module_context.hpp"
+#include "vba_random.hpp"
 #include "execution_capabilities.hpp"
 #include "native_module_definition.hpp"
 #include <QJsonDocument>
@@ -25,6 +26,7 @@ public:
     explicit ProjectModuleContext(QSqlDatabase db):QObject(db.driver()),database(db.databaseName()) {}
     QString database;
     std::shared_ptr<VbaObject> error;
+    std::shared_ptr<VbaRandomState> random;
     std::unordered_map<std::string,std::shared_ptr<VbaModuleState>> frames;
 };
 ProjectModuleContext& context(QSqlDatabase db) {
@@ -122,6 +124,9 @@ std::vector<std::shared_ptr<VbaModuleState>> publicVbaModuleStates(QSqlDatabase 
         if (!state->publicVariables.empty()) states.push_back(std::move(state));
     }
     return states;
+}
+std::shared_ptr<VbaRandomState> projectVbaRandomState(QSqlDatabase db) {
+    auto& state=context(db);if(!state.random) state.random=std::make_shared<VbaRandomState>();return state.random;
 }
 std::shared_ptr<VbaObject> projectVbaErrorObject(QSqlDatabase db) {
     auto& state=context(db);

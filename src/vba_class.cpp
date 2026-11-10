@@ -80,6 +80,7 @@ public:
     void enterModule(std::string_view source) override {services_->enterModule(source);}
     void leaveModule() noexcept override {services_->leaveModule();}
     std::shared_ptr<VbaObject> errorObject() override {return services_->errorObject();}
+    std::shared_ptr<VbaRandomState> randomState() override {return services_->randomState();}
     bool hasClassInstance() const override;
     bool hasInstanceIdentifier(std::string_view) override;
     std::shared_ptr<VbaModuleState> moduleState(std::string_view) override;
