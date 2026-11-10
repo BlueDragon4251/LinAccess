@@ -4731,3 +4731,18 @@ Datensatz erhalten; neuer Datensatz über LastModified. Bisher springt update()
 pauschal zur neuen Identität. Erhaltenen aktuellen Datensatz und LastModified
 getrennt behandeln; leere/BOF/EOF-/entfernte Vorposition nicht ungeprüft als
 Windows-konform behaupten. Danach weitere offene Anforderungen ohne Abschluss.
+
+
+DAO AddNew/Update aktueller Datensatz: DAO_ADDNEW_CURRENT.md dokumentiert Erhalt
+eines zuvor gültigen weiterhin vorhandenen aktuellen Datensatzes und davon
+unabhängiges LastModified des eingefügten Datensatzes. Tabellen/Dynaset, Klone,
+Bookmarkidentität, Cancel/Fehler/Retry und echtes VBA belegt. Erstes DAO-Bündel
+legte QSQLITE-null-lastInsertId bei gültiger physischer Zeilenkennung0 offen;
+gezielt durch tatsächliche SQLite-Verbindungskennung ohne Double/zusätzlichesSQL
+behoben. Nur betroffenen DAO-Lauf wiederholt:1/1 in3,27s bestanden, App gebaut.
+Leere/BOF/EOF/verschwundene Voridentität, Navigation mit Entwurf, dynamische
+Anfügereihenfolge und Windows-Vollorakel bleiben offen. Keine neuen CTest- oder
+Katalog-IDs;456/386/70. Vorstufec77bdf6a privat remote/Baum geprüft. Geprüftes DEB
+weiterhin4ebc3f6c vor Feldherkunft/AddNew. Ohne Zwischenabschluss weitere echte
+DAO-Zustands-/Sprach-/Datenbankanforderungen implementieren; keine AddNew-ADO-
+FieldList/Values-Signatur in DAO erfinden (DAO-AddNew ist parameterlos).

@@ -94,7 +94,7 @@ void testDaoCursors() {
     clone->member("Requery",{}); expect(3159,[&] { clone->assign("Bookmark",third); });
     find(clone,"FindFirst","id=4"); const auto removed=clone->member("Bookmark",{}); clone->member("Delete",{});
     clone->member("AddNew",{}); assert(clone->member("EditMode",{}).asNumber()==2); clone->assignItem("id",VbaValue::numeric(4)); clone->assignItem("label",VbaValue::string("replacement"));
-    clone->member("Update",{}); assert(clone->item("id").asNumber()==4);
+    clone->member("Update",{}); clone->assign("Bookmark",clone->member("LastModified",{})); assert(clone->item("id").asNumber()==4);
     expect(3159,[&] { clone->assign("Bookmark",removed); });
     const auto added=clone->member("LastModified",{}); clone->member("MoveFirst",{}); clone->assign("Bookmark",added); assert(clone->item("id").asNumber()==4);
     auto ordered=database->member("OpenRecordset",{VbaValue::string("SELECT id,label FROM cursor_values ORDER BY id DESC"),VbaValue::numeric(4)}).object;
@@ -104,4 +104,30 @@ void testDaoCursors() {
     ordered->assign("Bookmark",orderedClone->member("Bookmark",{})); assert(ordered->item("id").asNumber()==3);
     ordered->member("Close",{}); assert(orderedClone->item("label").asText()=="updated");
     assert(query.exec("SELECT label FROM cursor_values WHERE id=3") && query.next() && query.value(0).toString()=="updated");
+    query.finish();
+    for(const int mode:{1,2}) {
+        const auto tableName=QString("keep_current_%1").arg(mode);
+        assert(query.exec("CREATE TABLE "+tableName+"(id INTEGER PRIMARY KEY,value INTEGER)"));
+        assert(query.exec("INSERT INTO "+tableName+" VALUES(1,10),(2,20),(3,30)"));query.finish();
+        auto rows=database->member("OpenRecordset",{VbaValue::string(tableName.toStdString()),VbaValue::integer(static_cast<std::int16_t>(mode))}).object;
+        rows->member("MoveNext",{});const auto original=rows->member("Bookmark",{});
+        auto peer=rows->member("Clone",{}).object;peer->member("MoveLast",{});
+        rows->member("AddNew",{});rows->assignItem("id",VbaValue::longInteger(0));rows->assignItem("value",VbaValue::longInteger(40));rows->member("Update",{});
+        assert(rows->item("id").asNumber()==2 && rows->member("Bookmark",{}).bytes==original.bytes);
+        assert(peer->item("id").asNumber()==3 && rows->member("RecordCount",{}).asNumber()==4);
+        const auto added=rows->member("LastModified",{});assert(added.bytes!=original.bytes);
+        rows->assign("Bookmark",added);assert(rows->item("id").asNumber()==0 && rows->item("value").asNumber()==40);
+        rows->member("Edit",{});rows->assignItem("value",VbaValue::longInteger(41));rows->member("Update",{});
+        assert(rows->item("id").asNumber()==0 && rows->member("LastModified",{}).bytes==added.bytes);
+        rows->member("AddNew",{});rows->assignItem("id",VbaValue::longInteger(9));rows->member("CancelUpdate",{});
+        assert(rows->item("id").asNumber()==0 && rows->member("RecordCount",{}).asNumber()==4);
+        rows->member("AddNew",{});rows->assignItem("id",VbaValue::longInteger(2));
+        expect(3022,[&] {rows->member("Update",{});});assert(rows->member("EditMode",{}).asNumber()==2);
+        rows->assignItem("id",VbaValue::longInteger(9));rows->member("Update",{});
+        assert(rows->item("id").asNumber()==0 && rows->member("LastModified",{}).bytes!=added.bytes);
+        rows->assign("Bookmark",rows->member("LastModified",{}));assert(rows->item("id").asNumber()==9);
+        assert(query.exec("SELECT COUNT(*) FROM "+tableName) && query.next() && query.value(0).toInt()==5);query.finish();
+        peer->member("Close",{});rows->member("Close",{});
+    }
+
 }

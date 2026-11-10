@@ -1137,6 +1137,21 @@ If r.Fields("value").SourceField<>"value" Or r.Fields("value").SourceTable<>"cop
 End Sub)VBA","CopyDefinition",host);
     if(result.status!=VbaExecutionStatus::Completed) std::cerr<<"CopyQueryDef VBA: "<<result.errorNumber<<" line "<<result.line<<" "<<result.explanation<<'\n';
     assert(result.status==VbaExecutionStatus::Completed);
+    const auto current=executeVbaProcedure(R"VBA(Function KeepCurrentDuringAdd As Long
+Dim rows As DAO.Recordset
+Set rows=CurrentDb.OpenRecordset("copy_rows")
+rows.MoveLast
+rows.AddNew
+rows!id=3
+rows!value=30
+rows.Update
+If rows!id<>2 Then Err.Raise 5
+rows.Bookmark=rows.LastModified
+If rows!id<>3 Or rows!value<>30 Then Err.Raise 5
+KeepCurrentDuringAdd=rows!id
+rows.Close
+End Function)VBA","KeepCurrentDuringAdd",host);
+    assert(current.status==VbaExecutionStatus::Completed && current.typedReturnValue->number==3);
 }
 
 void testOwnedQueryDefs() {
@@ -2383,7 +2398,7 @@ void testShadowedDaoRowIdentity() {
     phase="append second alias";
     const auto append=[&](const char* name) {auto field=table->member("CreateField",{VbaValue::string(name),VbaValue::integer(10),VbaValue::longInteger(8)}).object;field->assign("DefaultValue",VbaValue::string("'also'"));table->member("Fields",{}).object->member("Append",{VbaValue::reference(field)});};append("Extra");cursor->member("Requery",{});auto clone=cursor->member("Clone",{}).object;
     phase="add new";
-    cursor->member("AddNew",{});cursor->assign("Value",VbaValue::longInteger(30));cursor->member("Update",{});assert(cursor->item("ID").asNumber()==3 && cursor->item("rowid").asText()=="same" && cursor->item("_rowid_").asText()=="same");
+    cursor->member("AddNew",{});cursor->assign("Value",VbaValue::longInteger(30));cursor->member("Update",{});cursor->assign("Bookmark",cursor->member("LastModified",{}));assert(cursor->item("ID").asNumber()==3 && cursor->item("rowid").asText()=="same" && cursor->item("_rowid_").asText()=="same");
     phase="edit user alias";
     cursor->member("Edit",{});cursor->assign("rowid",VbaValue::string("renamed"));cursor->member("Update",{});assert(cursor->item("ID").asNumber()==3 && cursor->item("rowid").asText()=="renamed");assert(clone->member("RecordCount",{}).asNumber()==2);cursor->member("Delete",{});
     assert(sql.exec("SELECT ID,Value,rowid FROM Aliases") && sql.next() && sql.value(0).toInt()==1 && sql.value(1).toInt()==10 && sql.value(2).toString()=="same" && !sql.next());sql.finish();

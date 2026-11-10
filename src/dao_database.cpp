@@ -1153,6 +1153,7 @@ private:
     void update() {
         require(!closed_ && !readOnly_ && mode_ != Mode::Browse, "DAO: No editable record buffer");
         const bool adding = mode_ == Mode::Add;
+        const auto previousCurrent=adding && position_>=0 && position_<data_->ids.size() ? data_->ids[position_] : QVariant{};
         SqliteExecutionBudget budget(db_);
         const auto generated=adding ? generatedAccessColumns(db_,source_) : QSet<QString>{};
         QVariant id = adding ? QVariant{} : data_->ids[position_];
@@ -1181,11 +1182,16 @@ private:
                 if(query.lastError().isValid()) queryFailure(query);
             }
         }
-        if (adding) id = query.lastInsertId();
+        // QSQLITE's QVariant lastInsertId can be null for the valid rowid zero.
+        // Read the actual connection value without treating zero as absence.
+        if (adding) id=QVariant::fromValue<qlonglong>(sqlite3_last_insert_rowid(data_->workspace->connection));
         if(!adding && position_>=0 && position_<data_->ids.size()) data_->ids[position_]=id;
         mode_ = Mode::Browse; pending_.clear(); changed_.clear(); chunkFields_.clear();
-        reload(false); position_ = data_->ids.indexOf(id);
-        if(position_>=0) lastModified_=bookmarkAt(position_); else lastModified_.reset();
+        reload(false);
+        const auto modifiedPosition=data_->ids.indexOf(id);
+        if(modifiedPosition>=0) lastModified_=bookmarkAt(modifiedPosition); else lastModified_.reset();
+        const auto previousPosition=previousCurrent.isNull() ? -1 : data_->ids.indexOf(previousCurrent);
+        position_=adding && previousPosition>=0 ? previousPosition : modifiedPosition;
     }
     std::shared_ptr<RecordsetData> data_{std::make_shared<RecordsetData>()};
     QSqlDatabase db_;
