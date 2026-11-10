@@ -2129,6 +2129,36 @@ FROM calendar_inputs WHERE marker=1)SQL");
             int actual=0;try{(void)database->member("OpenRecordset",{linaccess::VbaValue::string(failure.first)});}catch(const linaccess::VbaRuntimeError& error){actual=error.number;}
             if(actual!=failure.second) std::cerr<<"Typed numeric scalar error actual="<<actual<<" expected="<<failure.second<<"\n";assert(actual==failure.second);
         }
+        calendarPhase="typed formatting family";
+        const auto formatSource=QStringLiteral("SELECT Format(offset_date,'0.00') AS date_number,Format$(enabled,'0') AS logical_number,FormatNumber(amount,2,-1,0,0) AS money_number,FormatCurrency(amount,2,-1,0,0) AS money_label,FormatPercent(amount,0,-1,0,0) AS ratio,FormatDateTime(stamp,4) AS time_label,FormatNumber(9007199254740993,offset_date,-1,0,0) AS exact_integer,Format$(elapsed,'0') AS single_number FROM calendar_inputs WHERE marker=1");
+        const auto formatValues=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery(formatSource),{});
+        assert(formatValues.rows.size()==1 && formatValues.columnTypes==QVector<QString>(8,"TEXT"));
+        // Existing native Single-to-Decimal formatting uses seven significant digits.
+        const QStringList formatExpected{"2.00","-1","1.50","$1.50","150%","12:34","9007199254740993.00","16777220"};
+        for(int index=0;index<8;++index) {if(formatValues.rows[0][index].toString()!=formatExpected[index]) std::cerr<<"Technical format fixture column="<<index<<" actual="<<formatValues.rows[0][index].toString().toStdString()<<"\n";assert(formatValues.rows[0][index].toString()==formatExpected[index]);}
+        const auto formatFields=database->member("OpenRecordset",{linaccess::VbaValue::string(formatSource.toStdString())}).object;
+        assert(formatFields->item("money_number").kind==linaccess::VbaValue::Kind::Text && formatFields->item("logical_number").text=="-1");
+        int formatFieldTypeError=0;try{(void)formatFields->member("Fields",{linaccess::VbaValue::string("money_number")}).object->member("Type",{});}catch(const linaccess::VbaRuntimeError& error){formatFieldTypeError=error.number;}
+        assert(formatFieldTypeError==3251);formatFields->member("Close",{});
+        const auto formatFilter=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT marker FROM calendar_inputs WHERE marker=1 AND Format$(enabled,'0')='-1'"),{});
+        assert(formatFilter.rows.size()==1 && formatFilter.rows[0][0].toInt()==1);
+        const auto formatGroups=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT Format(offset_date,'0') AS serial,Count(*) AS tally FROM calendar_inputs GROUP BY Format(offset_date,'0') ORDER BY Format(offset_date,'0') DESC"),{});
+        assert(formatGroups.rows.size()==1 && formatGroups.rows[0][0].toString()=="2" && formatGroups.rows[0][1].toInt()==2);
+        const auto formatNull=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT Format(enabled,'0') FROM calendar_inputs WHERE marker=2"),{});
+        assert(formatNull.rows.size()==1 && formatNull.rows[0][0].isNull());
+        for(const auto& failure:std::vector<std::pair<std::string,int>>{
+            {"SELECT Format$(enabled,'0') FROM calendar_inputs WHERE marker=2",94},
+            {"SELECT FormatNumber(enabled) FROM calendar_inputs WHERE marker=2",94},
+            {"SELECT FormatCurrency(enabled) FROM calendar_inputs WHERE marker=2",94},
+            {"SELECT FormatPercent(enabled) FROM calendar_inputs WHERE marker=2",94},
+            {"SELECT FormatDateTime(stamp) FROM calendar_inputs WHERE marker=2",94},
+            {"SELECT Format(offset_date,0) FROM calendar_inputs WHERE marker=1",13},
+            {"SELECT Format(offset_date,NULL) FROM calendar_inputs WHERE marker=1",94},
+            {"SELECT FormatDateTime(stamp,5) FROM calendar_inputs WHERE marker=1",5},
+            {"SELECT FormatNumber(amount,29) FROM calendar_inputs WHERE marker=1",5}}) {
+            int actual=0;try{(void)database->member("OpenRecordset",{linaccess::VbaValue::string(failure.first)});}catch(const linaccess::VbaRuntimeError& error){actual=error.number;}
+            if(actual!=failure.second) std::cerr<<"Typed format error actual="<<actual<<" expected="<<failure.second<<"\n";assert(actual==failure.second);
+        }
         calendarPhase="DAO fields";
         const auto calendarFields=database->member("OpenRecordset",{linaccess::VbaValue::string(calendarSource.toStdString())}).object;
         assert(calendarFields->member("Fields",{linaccess::VbaValue::string("shifted")}).object->member("Type",{}).asNumber()==8);

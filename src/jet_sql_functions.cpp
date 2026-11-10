@@ -276,6 +276,10 @@ void boundScalarSqlFunction(sqlite3_context* context,int count,sqlite3_value** a
             for(const auto& type:declared) if(!supported.contains(type)) throw VbaRuntimeError(3251,"Scalar SQL source type is unsupported");
         }
         if(dateComparison && declared!=QStringList{"DATETIME","DATETIME"}) throw VbaRuntimeError(450,"Date comparison requires two proven Date operands");
+        if(builtin=="Format" || builtin=="Format$") {
+            if(native.type(args[offset+1])==SQLITE_NULL) throw VbaRuntimeError(94,"Format mask is Null");
+            if(native.type(args[offset+1])!=SQLITE_TEXT) throw VbaRuntimeError(13,"Format mask requires text");
+        }
         VbaVariables values;std::string expression=dateComparison ? std::string{} : std::string(builtin)+"(";
         for(int index=0;index<arguments;++index) {
             auto* argument=args[index+offset];QVariant storage;
@@ -292,7 +296,11 @@ void boundScalarSqlFunction(sqlite3_context* context,int count,sqlite3_value** a
             }
             default: throw VbaRuntimeError(13,"Scalar SQL binary input is unsupported");
             }
-            const auto name="_la_arg"+std::to_string(index);values.emplace(name,qtFieldValue(storage,declared.value(index)));
+            const auto name="_la_arg"+std::to_string(index);
+            // Formatting already preserves unproven SQLite int64 input exactly.
+            // A proven source declaration still goes through checked field decoding.
+            const bool exactFormatInteger=index==0 && builtin.starts_with("Format") && declared.value(index).isEmpty() && native.type(argument)==SQLITE_INTEGER;
+            values.emplace(name,exactFormatInteger ? decimalLiteral(std::to_string(native.integer(argument))) : qtFieldValue(storage,declared.value(index)));
             if(index) expression+=dateComparison ? std::string(builtin) : ",";expression+=name;
         }
         if(!dateComparison) expression+=')';ScalarStringHost host;
@@ -697,6 +705,12 @@ void formatDate(sqlite3_context* context,sqlite3_value** args,bool stringResult)
     } catch (const VbaRuntimeError& error) { functionError(context,error); }
       catch (...) { native.error(context,"Jet date format failed",-1); }
 }
+void format_format_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Format",2,2,true);}
+void format_format_string_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Format$",2,2,true);}
+void format_formatnumber_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"FormatNumber",1,5,true);}
+void format_formatcurrency_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"FormatCurrency",1,5,true);}
+void format_formatpercent_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"FormatPercent",1,5,true);}
+void format_formatdatetime_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"FormatDateTime",1,2,true);}
 void formatNumber(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"FormatNumber",1,5);}
 void formatCurrency(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"FormatCurrency",1,5);}
 void formatPercent(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"FormatPercent",1,5);}
@@ -1009,6 +1023,12 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_first",1,nullptr,&firstStep,&aggregateFinal);
     ensure("linaccess_jet_last",1,nullptr,&lastStep,&aggregateFinal);
     ensure("linaccess_jet_update_value",1,nullptr,&singleStep,&singleFinal);
+    ensure("linaccess_jet_format_typed",-1,&format_format_typed,nullptr,nullptr,SQLITE_UTF8|SQLITE_INNOCUOUS);
+    ensure("linaccess_jet_format_string_typed",-1,&format_format_string_typed,nullptr,nullptr,SQLITE_UTF8|SQLITE_INNOCUOUS);
+    ensure("linaccess_jet_formatnumber_typed",-1,&format_formatnumber_typed,nullptr,nullptr,SQLITE_UTF8|SQLITE_INNOCUOUS);
+    ensure("linaccess_jet_formatcurrency_typed",-1,&format_formatcurrency_typed,nullptr,nullptr,SQLITE_UTF8|SQLITE_INNOCUOUS);
+    ensure("linaccess_jet_formatpercent_typed",-1,&format_formatpercent_typed,nullptr,nullptr,SQLITE_UTF8|SQLITE_INNOCUOUS);
+    ensure("linaccess_jet_formatdatetime_typed",-1,&format_formatdatetime_typed,nullptr,nullptr,SQLITE_UTF8|SQLITE_INNOCUOUS);
     ensure("linaccess_jet_format_string",2,&formatString,nullptr,nullptr);
     ensure("linaccess_jet_format",2,&formatVariant,nullptr,nullptr);
     ensure("linaccess_jet_formatnumber",-1,&formatNumber,nullptr,nullptr,SQLITE_UTF8|SQLITE_INNOCUOUS);

@@ -132,3 +132,34 @@ explizit verweigert; vollständige Windows-/Unicode-/Maskengleichheit bleibt off
 Keine neue Windows-Beobachtung oder CTest-ID. NATIVE_FORMAT_RUNTIME.md;
 456/384/72 unverändert. Nächste Umsetzung: Fokus-/Eingabestrecke formatierter
 bearbeitbarer Formulartextfelder, ohne Anzeigen als Daten zurückzuparsen.
+
+
+Typisierte native SQL-Formatierungsfamilie (2026-11-10)
+-----------------------------------------------------
+Format/Format$, FormatNumber/FormatCurrency/FormatPercent und FormatDateTime
+nutzen bei nachgewiesenen Argumenttypen die gemeinsame native Scalar-Bindung.
+Date/Boolean/Single/Currency werden vor der Formatierung als tatsächliche
+Varianten gelesen. Dies gilt auch für typisierte optionale Argumente und
+verschachtelte Ausdrücke sowie unterstützte Filter-/Gruppier-/Sortierpfade.
+Textquellen werden nicht anhand ihres Inhalts als Date deklariert.
+
+Nicht als Feldtyp nachgewiesene SQLite-int64-Eingaben behalten beim Formatieren
+ihren exakten Decimal-Transport, auch wenn ein anderes Argument die typisierte
+Bindung auslöst. Deklarierte Quelltypen durchlaufen weiterhin die geprüfte
+Felddekodierung. Format/Format$ behalten die vorhandene strikte Textmaskenregel;
+NULL-Masken94 und andere Maskentypen13 werden vor der Ausführung abgewiesen.
+Variant Format(NULL,Maske) bleibt NULL, Format$ und die numerischen bzw.
+DateTime-Formatter behalten ihre vorhandenen NULL94-Regeln.
+
+Dies erweitert die Typübertragung, nicht den Umfang der vorhandenen Masken,
+regionalen Profile oder komplexen Quellen. Locale-Funktionen bleiben volatil;
+keine Determinismusbehauptung und kein neuer Windows-/Access-Ergebnisoracle.
+
+Der bestehende Single-zu-Decimal-Formatpfad verwendet sieben signifikante
+Stellen. Der technische Wert16777216 wird in einer festen Ganzzahlmaske daher
+als16777220 ausgegeben; die SQL-Bindung erhält diese bestehende native Politik.
+Dies ist ausdrücklich kein neu beobachteter Windows-Formatwert.
+
+Berechnete TEXT-Projektionen liefern tatsächliche Text-Variants. Ohne
+nachgewiesene Jet-Textlänge bzw. Text/Memo-Deklaration bleibt DAO Fields.Type
+hier ausdrücklich3251; daraus wird kein dbText-/dbMemo-Typ geraten.

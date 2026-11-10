@@ -7285,3 +7285,18 @@ abschließender DAO-Lauf 1/1 in3.35s bestanden. Keine neuen IDs;
 456/386/70 und offene F068/F071/F105/F122 bleiben. Kein neuer Access-Oracle.
 Vorstand82c0e230ad72024b7fd5a1df44fd0dae0ebde989/Baum9c6ffccfacd6d23f2afae0ddd119c295d28cb380
 privat veröffentlicht und exakt verifiziert; Paket weiterhin9413428.
+
+
+Typisierte SQL-Formatierungsfamilie (2026-11-10): NATIVE_FORMAT_RUNTIME.md.
+Format/Format$, FormatNumber/Currency/Percent und FormatDateTime erhalten
+nachgewiesene Date/Boolean/Single/Currency-Argumente einschließlich Optionen.
+Projektion/Filter/Gruppierung/Sortierung sowie genaue int64-Eingabe mit typisierter
+Nachkommastellenoption geprüft. Strikte Textmasken13/Nullmasken94 und getrennte
+Null-Konventionen erhalten. Bestehende Single-Formatpolitik7 signifikante Stellen
+und berechnetes TEXT ohne proven Text/Memo-DAO-Type (3251) bleiben; technische
+Testannahmen hierzu korrigiert, keine Produktregel gelockert. Tatsächliche Text-
+Variants geprüft. App/DAO/Modell gebaut, Modell0,35s bestanden, abschließender
+betroffener DAO-Lauf1/1 in3.48s bestanden. Keine neuen CTest-/Katalog-IDs;
+456/386/70 unverändert, F067/F068/F071/F121/F122 weiter offen, kein Access-Oracle.
+Vorstandf856c97fa7eadc1df38f6e80fad0784b32bc8160/Baum3bec4863b184a479dc1b92d2ad5ceb0813074925
+privat veröffentlicht/exakt verifiziert. Frisches Paket folgt; letzter Beleg9413428.
