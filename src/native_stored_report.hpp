@@ -7,6 +7,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSet>
+#include <algorithm>
 #include <QSqlQuery>
 
 namespace linaccess {
@@ -36,10 +37,16 @@ inline NativeStoredReport nativeStoredReport(QString name,const QJsonObject& def
         (void)quoted(column); used.insert(column.toCaseFolded());
     }
     const auto groups=nativeReportGroups(definition.value("groups"),columns,columnTypes);
+    const auto runningModeValue=definition.value("running_sum_mode");
+    const int runningMode=runningModeValue.isUndefined() ? 2 : runningModeValue.toInt(-1);
+    if(!runningModeValue.isUndefined() && (!runningModeValue.isDouble() || (runningMode!=1 && runningMode!=2) || runningModeValue.toDouble()!=runningMode))
+        throw VbaRuntimeError(5,"Invalid native running sum mode");
     const auto runningValue=definition.value("running_sum_field");
     if(!runningValue.isUndefined() && !runningValue.isString()) throw VbaRuntimeError(5,"Invalid running sum field");
     const auto runningField=runningValue.toString().trimmed();
     if(!runningField.isEmpty()) {
+        if(runningMode==1 && std::none_of(groups.cbegin(),groups.cend(),[](const auto& group) {return group.header || !group.footer.isEmpty();}))
+            throw VbaRuntimeError(3251,"Running sum over group requires a group header or footer");
         int index=-1;for(int i=0;i<columns.size();++i) if(columns[i].compare(runningField,Qt::CaseInsensitive)==0) {index=i;break;}
         if(index<0) throw VbaRuntimeError(3265,"Running sum field is not in the report source");
         static const QSet<QString> numeric{"INTEGER","INT","INTEGER1","INTEGER2","INTEGER4","REAL","DOUBLE","SINGLE_REAL","CURRENCY_REAL","CURRENCY_TICKS"};
@@ -108,7 +115,7 @@ inline NativeStoredReport nativeStoredReport(QString name,const QJsonObject& def
     for (int i=0;i<columns.size();++i) {
         lines<<"Begin TextBox"<<"Name ="+quoted(columns[i])<<"ControlSource ="+quoted("["+columns[i]+"]");
         if(const auto format=formats.value(columns[i].toCaseFolded());!format.isUndefined()) {if(!format.isString()) throw VbaRuntimeError(5,"Invalid native report field Format");lines<<"Format ="+quoted(format.toString());}
-        if(!runningField.isEmpty() && columns[i].compare(runningField,Qt::CaseInsensitive)==0) lines<<"RunningSum =2";
+        if(!runningField.isEmpty() && columns[i].compare(runningField,Qt::CaseInsensitive)==0) lines<<"RunningSum ="+QString::number(runningMode);
         else if(definition.value("can_grow").toBool()) lines<<"CanGrow =-1";
         lines<<"Left ="+QString::number(i*width+30)<<"Top =30"<<"Width ="+QString::number(width-60)<<"Height =270"<<"End";
     }

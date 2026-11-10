@@ -575,3 +575,19 @@ Kein kompletter Jet-Locale-/Join-/Subquery-Typnachweis, keine neuen CTest-/Katal
 IDs;456/386/70. PRIVAT/Baum geprüfte Vorstufe5ec76beb; Paket noch Anwendung62d00929
 mit Verpackungskorrektur, vor SQL-CStr. Original116,96s/Inventar49,42s/7Hash gleich.
 Ohne Zwischenabschluss weiter mit laufenden nativen Berichtssummen je Gruppe.
+
+
+Native laufende Berichtssumme je Gruppe (2026-11-10): REPORT_RUNNING_SUM.md.
+Echter Designer speichert running_sum_mode1/2; alte Definitionen bleiben2.
+Ungültige Werte/Typen und fehlender tatsächlicher Gruppenkopf/-fuß werden
+verweigert. Detailpräfixe je innerster tatsächlicher Gruppenstufe einmal in
+Drucksortierung berechnet, bei Gruppenwechsel zurückgesetzt; Sortierstufen ohne
+Gruppenband gelten nicht als Gruppenwechsel. Seiten/Neuzeichnen/Kopien zählen
+nicht doppelt. Bestehende Null-/Detail-/CanGrow-/importierte Metadatengrenzen
+bleiben. App/GUI/Layout gebaut: vorhandene GUI12,75s (20s unverändert), gezielt
+Layout nach zeilenbegrenzter PDF-Regex1/1 in10,19s. Acht exakte Currency-Präfixe
+bei verschachtelten/Null-Schlüssel-Gruppen, richtige Gruppen-/Gesamtsummen,
+Speichern/Wiederöffnen/Restaurierung geprüft. Keine neuen CTest-/Katalog-IDs;
+456/386/70. Vorstufe1579977d privat/Baum geprüft. Paket noch app62d00929 mit
+Verpackungskorrektur5ec76beb; vor SQL-CStr/OverGroup. Original116,96s, Inventar
+49,42s,7Hash gleich. Ohne Zwischenabschluss weitere offene Anforderungen umsetzen.

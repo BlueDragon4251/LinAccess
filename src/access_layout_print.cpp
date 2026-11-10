@@ -325,12 +325,15 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
     auto* canvas=findChild<QWidget*>("access-form-canvas");
     if (!canvas || layout_.width<=0 || layout_.height<=0
         || layout_.width/15.0>canvas->width() || layout_.height/15.0>canvas->height()) return false;
+    int runningGroup=-1;
+    for(int level=0;level<grouping->levels.size();++level)
+        if(!grouping->levels[level].header.isEmpty() || !grouping->levels[level].footer.isEmpty()) runningGroup=level;
     QMap<QString,QStringList> calculated;
     QStringList growers;
     for (const auto& control:layout_.controls) {
         if (control.type!="Label" && control.type!="TextBox" && control.type!="Rectangle"
             && control.type!="Line") return false;
-        if(control.runningSum && (control.runningSum!=2 || control.type!="TextBox" || control.section!="Section" ||
+        if(control.runningSum && ((control.runningSum!=1 && control.runningSum!=2) || (control.runningSum==1 && runningGroup<0) || control.type!="TextBox" || control.section!="Section" ||
             control.canGrow || (control.controlSource.trimmed().startsWith('=') && control.controlSource.trimmed()!="=1"))) return false;
         if (control.canGrow) {
             if(control.type!="TextBox" || control.section!="Section" || control.controlSource.trimmed().startsWith('=')) return false;
@@ -427,7 +430,10 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
             if(!counter && column<0) return false;
             auto& values=reportRunningValues_[control.name.toCaseFolded()];
             linaccess::NativeReportAggregate sum("sum");
-            for(const auto& row:recordRows_) {
+            for(int position=0;position<recordRows_.size();++position) {
+                if(control.runningSum==1 && position==grouping->ranges[runningGroup][position].first)
+                    sum=linaccess::NativeReportAggregate("sum");
+                const auto& row=recordRows_[position];
                 const auto value=counter ? linaccess::VbaValue::integer(1) :
                     linaccess::qtFieldValue(row[column],dataTypes_.value(dataColumns_[column].toCaseFolded()));
                 if(value.kind!=linaccess::VbaValue::Kind::Number && value.kind!=linaccess::VbaValue::Kind::Currency && value.kind!=linaccess::VbaValue::Kind::Decimal) return false;

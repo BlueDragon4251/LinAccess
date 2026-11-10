@@ -200,10 +200,13 @@ End)BAND");
         for(const auto* mode:{"-1","4","1.5","invalid"}) {auto invalid=pagedSource;invalid.replace("Begin Report\n",QByteArray("Begin Report\nPageHeader =")+mode+"\n");bool refused=false;try {linaccess::parseAccessFormLayout(QString::fromUtf8(invalid));}catch(const std::exception&) {refused=true;}assert(refused);}
         assert(query.exec("CREATE TABLE native_group_rows(outer_key TEXT,inner_key INTEGER,id INTEGER,value REAL)"));
         assert(query.exec("INSERT INTO native_group_rows VALUES(NULL,1,11,0.0001),(NULL,1,12,0.0002),('A',1,21,0.1001),('A',1,22,0.2002),('A',2,23,0.3003),('B',1,31,0.4004),('B',2,32,0.5005),('B',2,33,0.6006)"));query.finish();
-        const QJsonObject groupedDefinition{{"sql","SELECT outer_key,inner_key,'ROW' & id AS row_marker,CCur(value) AS amount FROM native_group_rows ORDER BY id DESC"},
+        QJsonObject groupedDefinition{{"sql","SELECT outer_key,inner_key,'ROW' & id AS row_marker,CCur(value) AS amount FROM native_group_rows ORDER BY id DESC"},
             {"groups",QJsonArray{QJsonObject{{"field","outer_key"},{"descending",true},{"header",true},{"footer_expression",R"EXPR(="OUTER:" & CStr(Sum([amount])) & ":" & CStr(Count(*)))EXPR"}},
                 QJsonObject{{"field","inner_key"},{"descending",false},{"header",true},{"footer_expression",R"EXPR(="INNER:" & CStr(Sum([amount])) & ":" & CStr(Count(*)))EXPR"}}}},
             {"footer_expression",R"EXPR(="REPORT:" & CStr(Sum([amount])) & ":" & CStr(Count(*)) & ":" & CStr(First([row_marker])) & ":" & CStr(Last([row_marker])))EXPR"}};
+        groupedDefinition.insert("running_sum_field","amount");groupedDefinition.insert("running_sum_mode",1);
+        for(const auto mode:QJsonArray{0,3,1.5,"1"}) {auto invalid=groupedDefinition;invalid.insert("running_sum_mode",mode);int code=0;try{(void)linaccess::nativeStoredReport("Invalid running group",invalid,db);}catch(const linaccess::VbaRuntimeError& failure){code=failure.number;}assert(code==5);}
+        {auto invalid=groupedDefinition;invalid.remove("groups");int code=0;try{(void)linaccess::nativeStoredReport("Missing running group",invalid,db);}catch(const linaccess::VbaRuntimeError& failure){code=failure.number;}assert(code==3251);}
         const auto earlyDate=linaccess::vbaDateValue(linaccess::VbaValue::string("1899-12-29 06:00:00")),lateDate=linaccess::vbaDateValue(linaccess::VbaValue::string("1899-12-29 18:00:00"));assert(linaccess::nativeReportGroupCompare(earlyDate,lateDate)<0);
         const auto groupedPacket=linaccess::nativeStoredReport("Native nested grouping",groupedDefinition,db);
         const auto groupedLayout=linaccess::parseAccessFormLayout(QString::fromUtf8(groupedPacket.layout));assert(groupedLayout.reportGroups.size()==2 && groupedLayout.reportGroupSections.size()==4);
@@ -214,6 +217,8 @@ End)BAND");
         const auto groupTextTool=QStandardPaths::findExecutable("pdftotext");
         if(!groupTextTool.isEmpty()) {QProcess textReader;textReader.start(groupTextTool,{"-layout",groupedPdf,"-"});assert(textReader.waitForFinished(10000) && textReader.exitCode()==0);const auto text=QString::fromUtf8(textReader.readAllStandardOutput()).normalized(QString::NormalizationForm_KC);
             for(const auto* total:{"INNER:0.0003:2","INNER:0.3003:2","INNER:0.3003:1","INNER:0.4004:1","INNER:1.1011:2","OUTER:1.5015:3","OUTER:0.6006:3","OUTER:0.0003:2","REPORT:2.1024:8:ROW31:ROW11"}) assert(text.contains(total));
+            const QRegularExpression prefixes(R"PREFIX((ROW[0-9]+)[ \t]+([0-9]+(?:\.[0-9]+)?))PREFIX");auto prefixMatches=prefixes.globalMatch(text);QStringList printedPrefixes;while(prefixMatches.hasNext()) {const auto match=prefixMatches.next();printedPrefixes.append(match.captured(1)+":"+match.captured(2));}
+            assert(printedPrefixes==QStringList({"ROW31:0.4004","ROW33:0.6006","ROW32:1.1011","ROW22:0.2002","ROW21:0.3003","ROW23:0.3003","ROW12:0.0002","ROW11:0.0003"}));
             const QRegularExpression marker("ROW[0-9]+");auto matches=marker.globalMatch(text);QStringList rows;while(matches.hasNext()) rows.append(matches.next().captured());assert(rows.mid(0,8)==QStringList({"ROW31","ROW33","ROW32","ROW22","ROW21","ROW23","ROW12","ROW11"}));
         }
         const auto restoredSummary=makePreviewControlsObject(grouped)->member("Item",{linaccess::VbaValue::string("native_report_summary")}).object->member("Value",{});assert(restoredSummary.asText()=="REPORT:2.1024:8:ROW33:ROW11");assert(grouped.close());

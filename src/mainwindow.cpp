@@ -2791,10 +2791,16 @@ void MainWindow::editReport(const QString& existingName) {
     auto* canGrow=new QCheckBox("Text vertikal erweitern (CanGrow)",&dialog); canGrow->setObjectName("native-report-cangrow");
     canGrow->setChecked(old.value("can_grow").toBool());
     canGrow->setToolTip("Ausgerichtete oder untereinanderliegende Textfelder mit begrenztem Seitenumbruch zwischen Textzeilen."); outer->addWidget(canGrow);
+    const auto oldRunningMode=old.value("running_sum_mode");
+    if(!oldRunningMode.isUndefined() && (!oldRunningMode.isDouble() || (oldRunningMode.toDouble()!=1 && oldRunningMode.toDouble()!=2))) {messageError(this,"Der gespeicherte Bereich der laufenden Summe ist ungültig.");return;}
+    auto* runningMode=new QComboBox(&dialog);runningMode->setObjectName("native-report-running-mode");
+    runningMode->addItem("Über alle Datensätze",2);runningMode->addItem("Je innerster Gruppe",1);
+    runningMode->setCurrentIndex(runningMode->findData(oldRunningMode.toInt(2)));
+    runningMode->setToolTip("Je Gruppe beginnt die Summe beim Wechsel der innersten Gruppe mit Kopf oder Fuß neu.");
     auto* runningField=new QLineEdit(old.value("running_sum_field").toString(),&dialog);
     runningField->setObjectName("native-report-running-field");runningField->setPlaceholderText("Optional: numerischer Feldname der Datenquelle");
-    runningField->setToolTip("Dieses Detailfeld zeigt die laufende Summe über alle Datensätze. Für dieses Feld wird die Textvergrößerung deaktiviert. Nullwerte werden noch nicht unterstützt.");
-    outer->addWidget(new QLabel("Laufende Summe über alle Datensätze (Feldname)",&dialog));outer->addWidget(runningField);
+    runningField->setToolTip("Dieses Detailfeld zeigt die laufende Summe im gewählten Bereich. Für dieses Feld wird die Textvergrößerung deaktiviert. Nullwerte werden noch nicht unterstützt.");
+    auto* runningRow=new QHBoxLayout;runningRow->addWidget(new QLabel("Laufende Summe (Feldname)",&dialog));runningRow->addWidget(runningField,1);runningRow->addWidget(runningMode);outer->addLayout(runningRow);
     auto* pageHeaderMode=new QComboBox(&dialog);pageHeaderMode->setObjectName("native-report-page-header-mode");
     auto* pageFooterMode=new QComboBox(&dialog);pageFooterMode->setObjectName("native-report-page-footer-mode");
     const QStringList pageModes{"Auf allen Seiten","Nicht mit Berichtskopf","Nicht mit Berichtsfuß","Nicht mit Berichtskopf oder Berichtsfuß"};
@@ -2826,7 +2832,7 @@ void MainWindow::editReport(const QString& existingName) {
     auto* row=new QHBoxLayout; auto* preview=addButton(row,"Vorschau"); preview->setObjectName("native-report-preview");
     auto* pdf=addButton(row,"PDF exportieren"); auto* save=addButton(row,"Speichern"); save->setObjectName("native-report-save"); outer->addLayout(row);
     installDesignerSaveShortcut(dialog,save);
-    const auto definition=[this,&dialog,existingName,old,title,sql,vba,canGrow,runningField,pageBreak,headerBreak,footerExpression,footerBreak,pageHeaderMode,pageFooterMode,groups,visual,hash,checkProject] {
+    const auto definition=[this,&dialog,existingName,old,title,sql,vba,canGrow,runningField,runningMode,pageBreak,headerBreak,footerExpression,footerBreak,pageHeaderMode,pageFooterMode,groups,visual,hash,checkProject] {
         checkProject();auto content=old;
         auto savedName=dialog.property("la_editor_saved_name").toString();
         if(savedName.isEmpty()) savedName=existingName;
@@ -2848,7 +2854,7 @@ void MainWindow::editReport(const QString& existingName) {
         content.insert("title",title->text()); content.insert("sql",sql->toPlainText());
         if(visual->value("sql_sha256").toString()==hash(sql->toPlainText()))content.insert("visual_query",*visual);else content.remove("visual_query");
         content.insert("vba",vba->toPlainText()); content.insert("can_grow",canGrow->isChecked());
-        content.insert("running_sum_field",runningField->text().trimmed());
+        content.insert("running_sum_field",runningField->text().trimmed());content.insert("running_sum_mode",runningMode->currentData().toInt());
         content.insert("groups",*groups);
         content.insert("page_header",pageHeaderMode->currentIndex());content.insert("page_footer",pageFooterMode->currentIndex());
         content.insert("detail_force_new_page",pageBreak->currentIndex());
