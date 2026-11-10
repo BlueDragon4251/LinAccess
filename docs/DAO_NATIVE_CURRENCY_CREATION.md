@@ -15,8 +15,8 @@ Unmeasured excess precision, exponent/call expressions and unsupported ranges
 refuse3251 before replacing the detached default. Reported native DefaultValue
 normalizes the actual stored literal back to its Currency text instead of leaking
 binary64 serialization digits. Existing Required/default SQL enforcement, append
-savepoints and field revision guards are retained. Full Currency schema rebuild/
-type conversion, numeric ValidationRule/relations and every default-expression/
+savepoints and field revision guards are retained. Subsequent checked native schema preservation is documented in
+DAO_NATIVE_CURRENCY_SCHEMA.md. Full Currency schema/type conversion, numeric ValidationRule/relations and every default-expression/
 Windows provider behavior remain separately bounded; no general parity claim.
 
 App/DAO/query-model/Currency targets built. A missing fixture include was corrected

@@ -3789,3 +3789,17 @@ neuen CTest-/Katalog-IDs;456/386/70. Vollständiger Jet-Tickbereich/Decimal/Curr
 Rebuild/Validation/Provider-/Windows-Parität bleibt offen. Vorstufe2af79959 privat
 remote/Baum geprüft; letztes DEB/Originala23c7009 vor späteren Änderungen.
 Ohne Zwischenabschluss weitere allgemeine Anforderungen implementieren.
+
+
+Native Currency-Schemaerhaltung: DAO_NATIVE_CURRENCY_SCHEMA.md dokumentiert
+kanonische Wiederherstellung tatsächlicher Currency-Defaults für bekannte native
+Rekonstruktionen. Default/Required, Feldreihenfolge, Index-Append/Delete und Tabellen-
+Umbenennung erhalten vorhandene Werte/rowids; bestehende Äquivalenz-/Digest-/
+Savepoint-/Rollback-/Metadatenprüfungen unverändert. Feldumbenennung ebenfalls
+belegt. App/DAO gebaut; erste DAO-Fixture erwartete falschen Fehler für angehängtes
+Field.Type (korrekt383); tatsächlicher Designerpfad separat3251 geprüft. Nur DAO
+wiederholt1/1 in3,71s bestanden, unabhängige SQL-Bitvergleiche/NULL-Rollback/
+neue Defaults nach Umbenennungen. Keine neuen CTest-/Katalog-IDs;456/386/70.
+Vorstufe90f672b9 privat remote/Baum geprüft. Currency-Typkonversion/Seek/FK-Schlüssel/
+voller Tickbereich/Originalschema-/Windows-Parität bleiben offen. Letztes DEB/
+Originala23c7009 vor Folgeänderungen; ohne Zwischenabschluss weiterentwickeln.
