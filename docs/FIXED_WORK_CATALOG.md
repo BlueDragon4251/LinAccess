@@ -224,7 +224,7 @@ keine Tests oder Teilpunkte allein zur Erhöhung einer Fortschrittszahl anlegen.
 - [x] **F063** — Canonical MDB/date-literal/Date()/Now() timestamps at second precision.
 - [ ] **F068** — JOIN/DISTINCT/UNION/TOP, TRANSFORM/PIVOT and Access expressions/functions. Checked floating arithmetic is documented in TYPED_SQL_ARITHMETIC.md. Numeric fixed-heading statistics are documented in STATISTICAL_CROSSTABS.md, bounded sums in FIXED_CROSSTAB_SUMS.md and actual First/Last pivots in FIXED_CROSSTAB_SELECTORS.md. Native scalar standard-module SQL/VBA calls are documented in NATIVE_VBA_SQL.md; bounded native NPer/NPV/MIRR/DDB scope is in NATIVE_FINANCIAL_FUNCTIONS.md. The complete requirement remains open.
 - [x] **F069** — Bounded date Format/Format$ masks in SQL/VBA; actual values from ten original date columns, NULL/error/locale/DST tests.
-- [ ] **F071** — Complete date/format masks, wildcard semantics, Null/coercion, DDL/DML and action queries.
+- [ ] **F071** — Complete date/format masks, wildcard semantics, Null/coercion, DDL/DML and action queries. Bounded native StrConv: [scope](NATIVE_STRCONV.md).
 - [x] **F074** — Pure IIf projection-alias chains and leading-dot decimal/exponent literals; three additional original queries produce positive non-NULL results (77/100 execute).
 - [x] **F082** — SaveAsText quoted string continuation/escaping, typed Column/BoundColumn values, basic form aggregates and explicit subform references.
 - [x] **F099** — Native ActiveMenuBar and popup Controls share real project actions; unchanged complex original Form_Open completes, with mixed numeric/String Variant comparison regressions.

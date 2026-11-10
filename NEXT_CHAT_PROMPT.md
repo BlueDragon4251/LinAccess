@@ -3931,3 +3931,16 @@ Makro-/Tastaturgrenzen; weiterhin kein positiver initialisierter Verkauf und kei
 Originalbericht-/Hardwaredrucknachweis. Keine vollständige Parität/Distributions-
 Matrix/Windows-Referenz neu behauptet.456/386/70 unverändert. Ohne Zwischenabschluss
 weiterprogrammieren; nächster allgemeiner VBA-Umfang wird gesondert implementiert.
+
+
+Native StrConv: NATIVE_STRCONV.md. Gemeinsamer Evaluator unterstützt dokumentierte
+ASCII Upper/Lower/ProperCase, Worttrenner NUL/TAB/LF/VT/FF/CR/Space, benannte
+String/Conversion/LCID-Bindung, VBA.StrConv und tatsächlichen String-Rückgabewert.
+Nicht-ASCII/Codepages/East-Asia/expliziteLCID/Nichttext/Null-Quellvertrag bleiben
+mit3251 ausdrücklich außerhalb dieses Umfangs; keine erfundene Windows-Parität.
+Native skalare Objekt-Defaults werden einmal gelesen. Keine Host-/Symbol- /
+Ergebniscaches neu. App/Core gebaut; bestehendes core_tests1/1 in0,52s bestanden,
+inklusive echter VBA-Funktion, sieben Trenner, Getter-Zähler und Schutzgrenzen.
+Keine neue CTest-/Katalog-ID;456/386/70. Letztes geprüfte DEB/Original/Inventar
+bleibt299b946f (47,60/120,62s, sieben Hashes unverändert), vor dieser Funktion.
+Dokumentations-Vorstufe0a045c94 privat/Baum geprüft. Ohne Zwischenabschluss weiter.

@@ -825,7 +825,7 @@ bool vbaIntrinsicName(const std::string& name) {
                 "createobject","doevents","msgbox","inputbox","inputbox$","round","asc","ascw","chr","chr$","chrw","chrw$",
                 "cbyte","cint","clng","csng","cdbl","cbool","cvar","ccur","cdec","cdate","cstr","str","str$","format","format$","formatnumber","formatcurrency","formatpercent","formatdatetime",
                 "left","left$","right","right$","mid","mid$","trim","trim$","ltrim","ltrim$","rtrim","rtrim$","len","lenb",
-                "ucase","ucase$","lcase","lcase$","instr","strcomp","instrrev","strreverse","replace","split","join","filter",
+                "ucase","ucase$","lcase","lcase$","instr","strcomp","instrrev","strreverse","strconv","replace","split","join","filter",
                 "hex","hex$","oct","oct$","space","space$","string","string$","val","abs","int","fix","sgn",
                 "sqr","exp","log","sin","cos","tan","atn","date","time","now","timer","dateadd","datediff","datepart",
                 "monthname","weekdayname","year","month","day","hour","minute","second","weekday","dateserial","timeserial","datevalue","timevalue",
@@ -1352,7 +1352,7 @@ private:
             }
         }
         if(word=="vbobjecterror") return VbaValue::longInteger(-2147221504);
-        static const std::unordered_map<std::string,int> documentConstants{{"vbusecompareoption",-1},{"vbbinarycompare",0},{"vbtextcompare",1},{"vbdatabasecompare",2},{"accopy",2},{"accmdcut",189},{"accmdundo",292},{"accmdredo",199},{"accmdcopy",190},{"accmdpaste",191},{"accmdpasteappend",38},{"acformbar",0},{"aceditmenu",1},{"acmenuver70",70},{"acmenuver20",20},{"acmenuver1x",11},{"acselectrecord",8},{"acdelete",6},{"accmdselectrecord",50},{"accmdselectallrecords",109},{"accmddeleterecord",223},{"acdataerrcontinue",0},{"acdataerrdisplay",1},{"acdeleteok",0},{"acdeletecancel",1},{"acdeleteusercancel",2},{"accmdsortascending",163},{"accmdsortdescending",164},{"accmdsaverecord",97},{"accmdzoombox",179},{"accmdreplace",29},{"accmdfind",30},{"accmdfindnext",341},{"accmdpagesetup",32},{"accmdprint",340},{"accmdprintpreview",54},{"acanywhere",0},{"acentire",1},{"acstart",2},{"acsearchall",2},{"acdown",1},{"acup",0},{"acall",0},{"accurrent",-1},{"accmdrecordsgotofirst",67},{"accmdrecordsgotoprevious",66},{"accmdrecordsgotonext",65},{"accmdrecordsgotolast",68},{"accmdrecordsgotonew",28},{"acdataform",2},{"acdatatable",0},{"acdataquery",1},{"acdatareport",3},{"acactivedataobject",-1},{"acprevious",0},{"acfirst",2},{"acgoto",4},{"acnext",1},{"aclast",3},{"acnewrec",5},{"acdetail",0},{"acheader",1},{"acfooter",2},{"acpageheader",3},{"acpagefooter",4},{"acviewnormal",0},{"acviewpreview",2},{"acviewdesign",1},{"acwindownormal",0},{"acdialog",3},{"achidden",1},{"acicon",2},{"acedit",1},{"acreadonly",2},{"acadd",0},{"acformpropertysettings",-1},{"acformadd",0},{"acformedit",1},{"acformreadonly",2},{"acnormal",0},{"acdesign",1},{"acpreview",2},{"acformds",3},{"accustomcontrol",119},{"acshiftmask",1},{"acctrlmask",2},{"acaltmask",4},{"acdefault",-1},{"actable",0},{"acquery",1},{"acform",2},{"acreport",3},{"acmacro",4},{"acmodule",5},{"acsaveprompt",0},{"acsaveyes",1},{"acsaveno",2}};
+        static const std::unordered_map<std::string,int> documentConstants{{"vbuppercase",1},{"vblowercase",2},{"vbpropercase",3},{"vbwide",4},{"vbnarrow",8},{"vbkatakana",16},{"vbhiragana",32},{"vbunicode",64},{"vbfromunicode",128},{"vbusecompareoption",-1},{"vbbinarycompare",0},{"vbtextcompare",1},{"vbdatabasecompare",2},{"accopy",2},{"accmdcut",189},{"accmdundo",292},{"accmdredo",199},{"accmdcopy",190},{"accmdpaste",191},{"accmdpasteappend",38},{"acformbar",0},{"aceditmenu",1},{"acmenuver70",70},{"acmenuver20",20},{"acmenuver1x",11},{"acselectrecord",8},{"acdelete",6},{"accmdselectrecord",50},{"accmdselectallrecords",109},{"accmddeleterecord",223},{"acdataerrcontinue",0},{"acdataerrdisplay",1},{"acdeleteok",0},{"acdeletecancel",1},{"acdeleteusercancel",2},{"accmdsortascending",163},{"accmdsortdescending",164},{"accmdsaverecord",97},{"accmdzoombox",179},{"accmdreplace",29},{"accmdfind",30},{"accmdfindnext",341},{"accmdpagesetup",32},{"accmdprint",340},{"accmdprintpreview",54},{"acanywhere",0},{"acentire",1},{"acstart",2},{"acsearchall",2},{"acdown",1},{"acup",0},{"acall",0},{"accurrent",-1},{"accmdrecordsgotofirst",67},{"accmdrecordsgotoprevious",66},{"accmdrecordsgotonext",65},{"accmdrecordsgotolast",68},{"accmdrecordsgotonew",28},{"acdataform",2},{"acdatatable",0},{"acdataquery",1},{"acdatareport",3},{"acactivedataobject",-1},{"acprevious",0},{"acfirst",2},{"acgoto",4},{"acnext",1},{"aclast",3},{"acnewrec",5},{"acdetail",0},{"acheader",1},{"acfooter",2},{"acpageheader",3},{"acpagefooter",4},{"acviewnormal",0},{"acviewpreview",2},{"acviewdesign",1},{"acwindownormal",0},{"acdialog",3},{"achidden",1},{"acicon",2},{"acedit",1},{"acreadonly",2},{"acadd",0},{"acformpropertysettings",-1},{"acformadd",0},{"acformedit",1},{"acformreadonly",2},{"acnormal",0},{"acdesign",1},{"acpreview",2},{"acformds",3},{"accustomcontrol",119},{"acshiftmask",1},{"acctrlmask",2},{"acaltmask",4},{"acdefault",-1},{"actable",0},{"acquery",1},{"acform",2},{"acreport",3},{"acmacro",4},{"acmodule",5},{"acsaveprompt",0},{"acsaveyes",1},{"acsaveno",2}};
         if (const auto constant=documentConstants.find(word);constant!=documentConstants.end()) return VbaValue::numeric(constant->second);
         if (word=="screen") return host_ ? host_->applicationObject()->member("Screen",{}) : VbaValue{};
         if (word=="docmd") return host_ ? host_->applicationObject()->member("DoCmd",{}) : VbaValue{};
@@ -1504,7 +1504,7 @@ private:
                         argumentName=lower(consume().value); consume();
                     }
                     const auto start = index_;
-                    const bool builtinDefaults=!localProcedure && (word=="monthname" || word=="weekdayname" || word=="msgbox" || word=="inputbox" || word=="inputbox$" || word=="instr" || word=="instrrev" || word=="strcomp" || word=="round" || word=="replace" || word=="split" || word=="join" || word=="filter" || word=="datediff" || word=="datepart" || word=="weekday");
+                    const bool builtinDefaults=!localProcedure && (word=="monthname" || word=="weekdayname" || word=="msgbox" || word=="inputbox" || word=="inputbox$" || word=="instr" || word=="instrrev" || word=="strcomp" || word=="strconv" || word=="round" || word=="replace" || word=="split" || word=="join" || word=="filter" || word=="datediff" || word=="datepart" || word=="weekday");
                     const bool missing=nextSymbol(",") || nextSymbol(")") || (accessExpression_ && nextSymbol(";"));
                     auto argument=missing ? VbaEvaluatedArgument{builtinDefaults ? VbaValue::empty() : VbaValue::missing(),{}}
                         : argumentExpression((!localProcedure && word=="isobject") || (signature && signature->objectArgument(args.size(),argumentName)));
@@ -1567,6 +1567,7 @@ private:
                     {"filter",{{"SourceArray","Match","Include","Compare"},2}},
                     {"instrrev",{{"StringCheck","StringMatch","Start","Compare"},2}},
                     {"strreverse",{{"Expression"},1}},
+                    {"strconv",{{"String","Conversion","LCID"},2}},
                     {"instr",{{"Start","String1","String2","Compare"},0}},
                     {"strcomp",{{"String1","String2","Compare"},2}},
                     {"pv",{{"Rate","NPer","Pmt","Fv","Type"},3}},
@@ -2456,6 +2457,29 @@ private:
                     if(condition.kind!=VbaValue::Kind::Null && coerceVbaModuleValue(condition,"boolean").boolean) return variantResult(args[index+1]);
                 }
                 return {};
+            }
+            if(word=="strconv") {
+                if(!host_) return {};
+                if(args.size()<2 || args.size()>3 || omitted[0] || omitted[1]) throw error("StrConv requires String and Conversion",450);
+                const auto value=scalarObjectValue(args[0]);
+                const auto conversion=coerceVbaModuleValue(scalarObjectValue(args[1]),"integer").asNumber();
+                if(args.size()==3 && !omitted[2]) {
+                    (void)coerceVbaModuleValue(scalarObjectValue(args[2]),"long");
+                    throw error("StrConv explicit locale conversion requires a Windows locale adapter",3251);
+                }
+                if(conversion<1 || conversion>3) throw error("StrConv supports native upper/lower/proper case only",3251);
+                if(value.kind!=VbaValue::Kind::Text && value.kind!=VbaValue::Kind::Empty) throw error("StrConv requires a proven native text value",3251);
+                auto text=value.asText();(void)utf16String(text);
+                bool initial=true;
+                for(auto& ch:text) {
+                    if(static_cast<unsigned char>(ch)>127) throw error("StrConv non-ASCII conversion requires a Windows locale adapter",3251);
+                    const bool separator=ch==0 || ch==9 || ch==10 || ch==11 || ch==12 || ch==13 || ch==32;
+                    const bool upper=conversion==1 || (conversion==3 && initial);
+                    if(upper && ch>='a' && ch<='z') ch-=('a'-'A');
+                    else if(!upper && ch>='A' && ch<='Z') ch+=('a'-'A');
+                    initial=separator;
+                }
+                return VbaValue::string(std::move(text));
             }
             if(word=="lcase" || word=="lcase$" || word=="ucase" || word=="ucase$") {
                 if(!host_) return {};

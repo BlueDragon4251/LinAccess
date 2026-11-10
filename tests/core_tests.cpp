@@ -524,6 +524,14 @@ void testCharacterFunctions() {
     assert(eval("UCase$(String:=\"aBc 09!\")").asText()=="ABC 09!" && eval("LCase(\"ABC\")").asText()=="abc");
     assert(eval("LCase(Null)").kind==VbaValue::Kind::Null && eval("UCase(Empty)").asText().empty());
     assert(eval("Len(UCase(Chr(0) & \"ab\"))").asNumber()==3);
+    assert(eval("StrConv(String:=\"aBc 09!\",Conversion:=vbUpperCase)").asText()=="ABC 09!");
+    assert(eval("StrConv(\"ABC\",vbLowerCase)").asText()=="abc" && eval("StrConv(Empty,vbProperCase)").asText().empty());
+    assert(eval("StrConv(\"hELLO wORLD o'NEIL a-B\",vbProperCase)").asText()=="Hello World O'neil A-b");
+    for(const int separator:{0,9,10,11,12,13,32}) {
+        const std::string input=std::string("aB")+static_cast<char>(separator)+"cD";
+        const auto result=evaluateVbaExpression("StrConv(s,vbProperCase)",host,{{"s",VbaValue::string(input)}});
+        assert(result.asText()==std::string("Ab")+static_cast<char>(separator)+"Cd");
+    }
     assert(eval("Hex(Number:=459)").asText()=="1CB" && eval("Oct$(459)").asText()=="713");
     assert(eval("Hex$(-1)").asText()=="FFFF" && eval("Oct(-1)").asText()=="177777");
     assert(eval("Hex$(-1.0)").asText()=="FFFFFFFF" && eval("Oct(-1.0)").asText()=="37777777777");
@@ -546,7 +554,18 @@ void testCharacterFunctions() {
     const auto probe=std::make_shared<ScalarProbe>(); probe->value=VbaValue::string("A");
     assert(evaluateVbaExpression("Asc(probe)",host,{{"probe",VbaValue::reference(probe)}}).number==65 && probe->reads==1);
     probe->value=VbaValue::numeric(937); assert(evaluateVbaExpression("ChrW(probe)",host,{{"probe",VbaValue::reference(probe)}}).asText()=="Ω" && probe->reads==2);
+    probe->value=VbaValue::string("aBc");assert(evaluateVbaExpression("StrConv(probe,vbLowerCase)",host,{{"probe",VbaValue::reference(probe)}}).asText()=="abc" && probe->reads==3);
+    const auto converted=executeVbaProcedure(R"VBA(Function ConvertWords() As String
+Dim value As String
+value="hELLO wORLD"
+ConvertWords=VBA.StrConv(Conversion:=vbProperCase,String:=value)
+End Function)VBA","ConvertWords",host);
+    assert(converted.status==VbaExecutionStatus::Completed && converted.typedReturnValue->kind==VbaValue::Kind::Text && converted.typedReturnValue->asText()=="Hello World");
     for(const auto& [expression,code]:std::vector<std::pair<std::string,int>>{
+        {"StrConv(\"x\")",450},{"StrConv(,1)",450},{"StrConv(\"x\",)",450},
+        {"StrConv(\"x\",vbWide)",3251},{"StrConv(\"ö\",vbUpperCase)",3251},
+        {"StrConv(Null,1)",3251},{"StrConv(42,1)",3251},{"StrConv(\"x\",1,1033)",3251},
+        {"StrConv(\"x\",Null)",94},{"StrConv(\"x\",1,Null)",94},
         {"UCase$(Null)",94},{"LCase()",450},{"UCase(\"ö\")",3251},
         {"Space(Null)",94},{"Space$(Null)",94},{"Hex$(Null)",94},{"Oct(2147483648)",6},{"Hex(1,2)",450},
         {"Space(-1)",5},{"Space(1000001)",3251},{"String(2,\"\")",5},{"String$(2,Null)",94},
