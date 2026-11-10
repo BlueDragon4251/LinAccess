@@ -5104,3 +5104,19 @@ fehlende NFKC-Normalisierung der PDF-fi-Ligatur; nur betroffenen vorhandenen Che
 wiederholt. Keine neue CTest-/Katalog-ID;456/386/70. Vorstufe009be44e privat/Baum
 geprüft. DEB/Original/Inventar nochda72e727; gebündelte Aktualisierung folgt.
 Ohne Zwischenabschluss weitere allgemeine Anforderungen fortsetzen.
+
+
+Aktueller Paket-/Original-/Inventarbeleg: Quellcommit299b946ff0aa559f0e4a4893015a9f71b668f605,
+Baumc9fa2d1f78ffd08b0102664f079e88743cb491dc, privat remote/Baum geprüft.
+/workspace/work/report-print-options/package/linaccess-0.7.0-Linux.deb erstellt,
+check-deb bestanden; bestehendes Paket-Integrationsbündel2/2 in168,22s:
+Inventar47,60s, real_kassa_dao_event120,62s; sieben geschützte Hashes unverändert.
+Dieses Paket enthält initiale Currency-Auswahl, unveränderliche Syntaxmuster,
+native Currency-Erstellung/Regeln/Beziehungen/Indexsuche und Berichtsdruckoptionen.
+Neues tatsächliches Inventar299b946f:100/78/22 (73 ohne und5 mit technischen
+Parametern ausgeführt, jeweils ohne Access-Ergebnisorakel;3 Originalspalten,
+9 fehlende Abhängigkeiten,10 Jet-/Bindungsgrenzen). Originalpfad hält bekannte
+Makro-/Tastaturgrenzen; weiterhin kein positiver initialisierter Verkauf und kein
+Originalbericht-/Hardwaredrucknachweis. Keine vollständige Parität/Distributions-
+Matrix/Windows-Referenz neu behauptet.456/386/70 unverändert. Ohne Zwischenabschluss
+weiterprogrammieren; nächster allgemeiner VBA-Umfang wird gesondert implementiert.
