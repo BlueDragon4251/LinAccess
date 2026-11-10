@@ -5736,3 +5736,17 @@ App/DAO gebaut, einmaliges bestehendes dao_execution-Bündel1/1 in3,23s bestande
 einschließlich tatsächlichem typisiertem VBA-Aufruf und unabhängigen SQL-Zeilen.
 Keine neuen Test-/Katalog-IDs,456/386/70; F054/F055 bleiben offen. Vorstufe
 df22cf9b privat remote/Baum geprüft. Kein Gesamtabschluss/Abschlussanruf.
+
+
+DAO Filter/Sort/abgeleitete Snapshots: DAO_DERIVED_SNAPSHOTS.md dokumentiert echte
+SQL-Filterung/Sortierung bestehender querybasierter Cursor über explizites
+OpenRecordset(dbOpenSnapshot). Ausgangscursor unverändert, neue Ergebnisse und
+Klon-Eigenschaften unabhängig; Parameter und Currency-Metadaten bleiben erhalten.
+Editierbare/implizite Modi, Tabellen-/Frozenadapter und volle Oracleidentität offen.
+App gebaut; bestehendes DAO-Bündel1/1 in3,37s bestanden nach Korrektur eines
+Prüfcode-Feldnamens beim Übersetzen. Keine neuen CTest-/Katalog-IDs;456/386/70.
+Vorstufe ad42eadace27a518fbbaf1f7a9819facc1e383c1 privat remote/Baum geprüft:
+neues DEB geprüft, bestehende Integration3/3 in188,36s (GUI19,85/Inventar47,59/
+Original120,91), sieben geschützte Hashes unverändert. Inventar100/78/22;
+Original-Makrogrenze bleibt. Paket liegt vor abgeleiteten Snapshots. Kein
+Gesamtabschluss/Abschlussanruf; weitere allgemeine Anforderungen fortsetzen.

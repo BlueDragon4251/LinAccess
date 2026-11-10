@@ -1049,6 +1049,44 @@ void testRecordsetCopyQueryDef() {
     error([&] {bound->member("CopyQueryDef",{});},3251);
     cursor->member("Close",{}); error([&] {cursor->member("CopyQueryDef",{});},3420);
     assert(independent->member("OpenRecordset",{}).object->item("value").asNumber()==10);
+    auto ordered=database->member("CreateQueryDef",{VbaValue::string(""),VbaValue::string("SELECT id,value FROM copy_rows ORDER BY id DESC")}).object->member("OpenRecordset",{}).object;
+    assert(ordered->member("Filter",{}).asText().empty() && ordered->member("Sort",{}).asText().empty());
+    ordered->assign("Filter",VbaValue::string("value>=10")); ordered->assign("Sort",VbaValue::string("id ASC"));
+    assert(ordered->item("id").asNumber()==2);
+    auto orderedClone=ordered->member("Clone",{}).object;
+    assert(orderedClone->member("Filter",{}).asText()=="value>=10" && orderedClone->member("Sort",{}).asText()=="id ASC");
+    orderedClone->assign("Filter",VbaValue::string("id=2"));
+    assert(ordered->member("Filter",{}).asText()=="value>=10");
+    orderedClone->member("Close",{});
+    auto ascending=ordered->member("OpenRecordset",{VbaValue::integer(4)}).object;
+    assert(ascending->member("Type",{}).asNumber()==4 && !ascending->member("Updatable",{}).truthy());
+    assert(ascending->item("id").asNumber()==1 && ordered->item("id").asNumber()==2);
+    ascending->member("MoveNext",{}); assert(ascending->item("id").asNumber()==2);
+    ordered->assign("Filter",VbaValue::string("value>10"));
+    auto clipped=ordered->member("OpenRecordset",{VbaValue::integer(4)}).object;
+    assert(clipped->member("RecordCount",{}).asNumber()==1 && clipped->item("id").asNumber()==2);
+    clipped->assign("Filter",VbaValue::string("id=1"));
+    assert(clipped->member("OpenRecordset",{VbaValue::integer(4)}).object->member("EOF",{}).truthy());
+    ordered->assign("Filter",VbaValue::string("value>"));
+    error([&] {ordered->member("OpenRecordset",{VbaValue::integer(4)});},3075);
+    assert(ordered->item("id").asNumber()==2 && clipped->item("id").asNumber()==2);
+    ordered->assign("Filter",VbaValue::string("")); ordered->assign("Sort",VbaValue::string("missing DESC"));
+    error([&] {ordered->member("OpenRecordset",{VbaValue::integer(4)});},3251);
+    error([&] {ordered->member("OpenRecordset",{});},3251);
+    error([&] {ordered->member("OpenRecordset",{VbaValue::integer(2)});},3251);
+    error([&] {ordered->assign("Filter",VbaValue{});},94);
+    error([&] {table->assign("Filter",VbaValue::string("id=1"));},3251);
+    bound->assign("Filter",VbaValue::string("id=1")); bound->assign("Sort",VbaValue::string("id DESC"));
+    auto boundDerived=bound->member("OpenRecordset",{VbaValue::integer(4)}).object;
+    assert(boundDerived->item("id").asNumber()==1);
+    auto typed=database->member("CreateQueryDef",{VbaValue::string(""),VbaValue::string("SELECT CCur(value) AS amount FROM copy_rows")}).object->member("OpenRecordset",{}).object;
+    typed->assign("Filter",VbaValue::string("amount>10")); typed->assign("Sort",VbaValue::string("amount DESC"));
+    auto typedDerived=typed->member("OpenRecordset",{VbaValue::integer(4)}).object;
+    assert(typedDerived->item("amount").kind==VbaValue::Kind::Currency && typedDerived->item("amount").currencyUnits==200000);
+    assert(typedDerived->member("Fields",{VbaValue::string("amount")}).object->member("Type",{}).asNumber()==5);
+    ordered->member("Close",{});
+    assert(clipped->item("value").asNumber()==20);
+    error([&] {ordered->member("OpenRecordset",{VbaValue::integer(4)});},3420);
     Host host(db); const auto result=executeVbaProcedure(R"VBA(Sub CopyDefinition()
 Dim q As DAO.QueryDef, r As DAO.Recordset, copied As DAO.QueryDef
 Set q=CurrentDb.CreateQueryDef("","SELECT value FROM copy_rows ORDER BY id")
@@ -1059,6 +1097,10 @@ r.Close
 If Not TypeOf copied Is DAO.QueryDef Then Err.Raise 5
 Set r=copied.OpenRecordset
 If r!value<>10 Then Err.Raise 5
+r.Filter="value>10"
+r.Sort="value DESC"
+Set r=r.OpenRecordset(Type:=dbOpenSnapshot)
+If r!value<>20 Or r.RecordCount<>1 Then Err.Raise 5
 End Sub)VBA","CopyDefinition",host);
     if(result.status!=VbaExecutionStatus::Completed) std::cerr<<"CopyQueryDef VBA: "<<result.errorNumber<<" line "<<result.line<<" "<<result.explanation<<'\n';
     assert(result.status==VbaExecutionStatus::Completed);

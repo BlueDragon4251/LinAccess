@@ -525,6 +525,7 @@ public:
         if (key=="move") return VbaArgumentSignature{{"Rows","Start"},1};
         if (key=="seek") return VbaArgumentSignature{{"Comparison","Key1","Key2","Key3","Key4","Key5","Key6","Key7","Key8","Key9","Key10"},2};
         if (key=="getrows") return VbaArgumentSignature{{"NumRows"},0};
+        if (key=="openrecordset") return VbaArgumentSignature{{"Type"},0};
         if (key=="fields") return VbaArgumentSignature{{"Index"},0};
         return {};
     }
@@ -671,6 +672,21 @@ public:
             noMatch_=false;
             return {};
         }
+        if(key=="filter" || key=="sort") {
+            if(!args.empty()) throw VbaRuntimeError(450,"DAO: Filter/Sort properties take no arguments");
+            checkDerivedSource();
+            return VbaValue::string((key=="filter" ? filter_ : sort_).toStdString());
+        }
+        if(key=="openrecordset") {
+            if(args.size()>1) throw VbaRuntimeError(450,"DAO: Derived OpenRecordset accepts only Type");
+            checkDerivedSource();
+            if(args.empty() || args[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(3251,"DAO: Derived OpenRecordset requires explicit dbOpenSnapshot");
+            if(nativeRecordsetMode(args,0)!=4) throw VbaRuntimeError(3251,"DAO: Derived editable cursor identity is not implemented");
+            if(mode_!=Mode::Browse) throw VbaRuntimeError(3219,"DAO: Pending edit");
+            const auto filtered=filterAccessQueryPlan(db_,queryPlan_,filter_);
+            const auto sorted=sortAccessQueryPlan(db_,filtered,sort_);
+            return VbaValue::reference(std::make_shared<Recordset>(db_,sorted.sql,true,bindings_,sorted,4));
+        }
         if (key=="copyquerydef") {
             if(!args.empty()) throw VbaRuntimeError(450,"DAO: CopyQueryDef takes no arguments");
             if(queryDefinitionSource_.isNull()) throw VbaRuntimeError(3251,"DAO: CopyQueryDef requires a cursor opened by a QueryDef");
@@ -789,6 +805,17 @@ public:
         return value(text(name)); // implicit default Fields(name).Value
     }
     void assign(std::string_view name, const VbaValue& value) override {
+        if(lower(name)=="filter" || lower(name)=="sort") {
+            if(closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");
+            checkTransaction(); checkDerivedSource();
+            const auto scalar=scalarVbaValue(value);
+            if(closed_) throw VbaRuntimeError(3420,"DAO: Recordset closed during property evaluation");
+            checkTransaction();
+            if(scalar.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null Filter/Sort");
+            const auto next=text(coerceVbaModuleValue(scalar,"string").asText());
+            (lower(name)=="filter" ? filter_ : sort_)=next;return;
+        }
+
         if(lower(name)=="index") {
             if(closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");checkTransaction();if(!table_ || recordsetType_!=1) throw VbaRuntimeError(3251,"DAO: Index requires a table-type Recordset");if(mode_!=Mode::Browse) throw VbaRuntimeError(3219,"DAO: Pending edit");const auto revision=data_->revision;const auto scalar=scalarVbaValue(value);checkTransaction();if(closed_) throw VbaRuntimeError(3420,"DAO: Recordset closed during index evaluation");if(mode_!=Mode::Browse || revision!=data_->revision) throw VbaRuntimeError(3219,"DAO: Recordset changed during index evaluation");if(scalar.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null index name");
             const auto requested=text(scalar.asText());std::optional<NativeRecordsetIndex> next;if(!requested.isEmpty()) next=checkedRecordsetIndex(db_,source_,requested);const auto name=next ? next->name : QString{};if(name==indexName_ && next==data_->selectedIndex) return;if(data_->cursors.size()!=1) throw VbaRuntimeError(3251,"DAO: Change Index before creating clones or after closing them");const auto old=indexName_;const auto id=position_>=0 && position_<data_->ids.size() ? data_->ids[position_] : QVariant{};indexName_=name;try {reload(false);if(!id.isNull()) position_=data_->ids.indexOf(id);}catch(...) {indexName_=old;throw;}return;
@@ -953,10 +980,14 @@ public:
         changed_.insert(index);
     }
 private:
+    void checkDerivedSource() const {
+        if(frozen_ || table_ || queryPlan_.sql.isEmpty() || !recordsetType_ || (*recordsetType_!=2 && *recordsetType_!=4))
+            throw VbaRuntimeError(3251,"DAO: Derived snapshots require a query-backed dynaset or snapshot");
+    }
     struct CloneTag {};
     Recordset(const Recordset& source,CloneTag)
         : data_(source.data_),db_(source.db_),source_(source.source_),bindings_(source.bindings_),
-          table_(source.table_),readOnly_(source.readOnly_),frozen_(source.frozen_),recordsetType_(source.recordsetType_),tableGeneration_(source.tableGeneration_),indexName_(source.indexName_),position_(-1),queryPlan_(source.queryPlan_),queryDefinitionSource_(source.queryDefinitionSource_) {
+          table_(source.table_),readOnly_(source.readOnly_),frozen_(source.frozen_),recordsetType_(source.recordsetType_),tableGeneration_(source.tableGeneration_),indexName_(source.indexName_),position_(-1),queryPlan_(source.queryPlan_),queryDefinitionSource_(source.queryDefinitionSource_),filter_(source.filter_),sort_(source.sort_) {
         cloneCounted_=true; ++data_->workspace->clones;
         data_->cursors.insert(this);
     }
@@ -1159,6 +1190,7 @@ private:
     Mode mode_{Mode::Browse};
     AccessQueryPlan queryPlan_;
     QString queryDefinitionSource_;
+    QString filter_,sort_;
     std::weak_ptr<VbaObject> fields_;
     QMap<QString,std::weak_ptr<Field>> fieldObjects_;
 };
