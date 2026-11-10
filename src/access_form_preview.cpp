@@ -2152,11 +2152,12 @@ void AccessFormPreview::loadRecords() {
                     recordSelector_->addItem("Datensatz " + QString::number(i+1));
                 dataSourceAvailable_ = true;
             } else {
+                checkPhysicalRecordSource();
                 dataTypes_ = linaccess::sqliteColumnTypes(db_,source);
                 linaccess::SqliteExecutionBudget budget(db_);
                 QSqlQuery query(db_);
                 auto name=source; name.replace(']',"]]");
-                const auto plan=linaccess::compileAccessQuery("SELECT rowid AS [__la_rowid],* FROM ["+name+"]"+(filterOn_ && !filter_.trimmed().isEmpty() ? " WHERE ("+filter_+")" : QString{}));
+                const auto plan=linaccess::compileAccessQuery("SELECT rowid AS [__la_rowid],* FROM main.["+name+"]"+(filterOn_ && !filter_.trimmed().isEmpty() ? " WHERE ("+filter_+")" : QString{}));
                 QStringList sortColumns; const auto record=db_.record(source);
                 for(int i=0;i<record.count();++i) sortColumns.append(record.fieldName(i));
                 const auto order=orderByOn_ ? linaccess::accessOrderByClause(orderBy_,sortColumns,source) : QString{};
@@ -2437,6 +2438,16 @@ bool AccessFormPreview::commitControls() {
     return pendingControls_.isEmpty(); // Retain drafts created by a reentrant handler.
 }
 
+void AccessFormPreview::checkPhysicalRecordSource() const {
+    if(!db_.isOpen()) throw linaccess::VbaRuntimeError(3420,"Form source connection is closed");
+    const auto source=layout_.recordSource.trimmed();QSqlQuery query(db_);
+    if(!query.prepare("SELECT 1 FROM temp.sqlite_schema WHERE name=? COLLATE NOCASE AND type IN ('table','view')")) throw linaccess::VbaRuntimeError(3146,"Form source scope cannot be checked");
+    query.addBindValue(source);if(!query.exec()) throw linaccess::VbaRuntimeError(3146,"Form source scope cannot be checked");
+    if(query.next()) throw linaccess::VbaRuntimeError(3251,"Form source has a TEMP shadow");query.finish();
+    if(!query.prepare("SELECT 1 FROM main.sqlite_schema WHERE name=? COLLATE NOCASE AND type='table'")) throw linaccess::VbaRuntimeError(3146,"Form physical source cannot be checked");
+    query.addBindValue(source);if(!query.exec()) throw linaccess::VbaRuntimeError(3146,"Form physical source cannot be checked");
+    if(!query.next()) throw linaccess::VbaRuntimeError(3251,"Form physical main source is unavailable");
+}
 bool AccessFormPreview::saveRecord() {
     if (saving_ || recordCommandRunning_ || insertionEventRunning_) return false;
     if (currentRecordIndex_==0 && !layout_.allowAdditions) return !dirty_;
@@ -2450,6 +2461,7 @@ bool AccessFormPreview::saveRecord() {
     if (!dataSourceAvailable_ || !directTable_) return false;
     const auto before = formEvent("BeforeUpdate","Form_BeforeUpdate");
     if (before.cancelled || failed(before)) return false;
+    try {checkPhysicalRecordSource();} catch(const std::exception& error) {status_->setText(QString::fromUtf8(error.what()));return false;}
     const bool userInsertion=currentRecordIndex_==0 && insertionStarted_;
     QSet<QString> generated;
     try { generated=linaccess::generatedAccessColumns(db_,table); }
@@ -2487,6 +2499,7 @@ bool AccessFormPreview::saveRecord() {
         const int index=columnIndex(it.key(),dataColumns_);if(index<0) continue;const auto column=sqlIdentifier(dataColumns_[index]);if(columns.contains(column)) continue;columns.append(column);placeholders.append("?");values.append(it.value());
     }
     if (columns.empty() && currentRecordIndex_>0) return false;
+    try {checkPhysicalRecordSource();} catch(const std::exception& error) {status_->setText(QString::fromUtf8(error.what()));return false;}
     linaccess::AccessCounterSqlScope counterScope(db_);
     QSqlQuery query(db_);
     const int row = currentRecordIndex_-1;
@@ -2496,20 +2509,15 @@ bool AccessFormPreview::saveRecord() {
     if (updating) {
         savedId = rowIds_[row]; QStringList assignments;
         for (const auto& column : columns) assignments << column + "=?";
-        query.prepare("UPDATE " + sqlIdentifier(table) + " SET " + assignments.join(',') + " WHERE rowid=? RETURNING rowid");
+        query.prepare("UPDATE main." + sqlIdentifier(table) + " SET " + assignments.join(',') + " WHERE rowid=? RETURNING rowid");
         values << savedId;
-    } else if (columns.empty()) query.prepare("INSERT INTO "+sqlIdentifier(table)+" DEFAULT VALUES");
-    else query.prepare("INSERT INTO " + sqlIdentifier(table) + " (" + columns.join(',') + ") VALUES (" + placeholders.join(',') + ")");
+    } else if (columns.empty()) query.prepare("INSERT INTO main."+sqlIdentifier(table)+" DEFAULT VALUES RETURNING rowid");
+    else query.prepare("INSERT INTO main." + sqlIdentifier(table) + " (" + columns.join(',') + ") VALUES (" + placeholders.join(',') + ") RETURNING rowid");
     for (const auto& value : values) query.addBindValue(value);
     if (!query.exec()) { status_->setText("SQL: " + query.lastError().text()); return false; }
-    if(updating) {
-        if(!query.next()) { status_->setText("Der Datensatz wurde nicht gespeichert; die Zeile ist nicht verfügbar."); return false; }
-        savedId=query.value(0);
-        if(query.next() || query.lastError().isValid()) { status_->setText("Die gespeicherte Datensatzidentität ist nicht verfügbar."); return false; }
-    } else if (query.numRowsAffected() != 1) {
-        status_->setText("Der Datensatz wurde nicht gespeichert; er wurde möglicherweise extern entfernt."); return false;
-    }
-    if (savedId.isNull()) savedId = query.lastInsertId();
+    if(!query.next()) { status_->setText("Der Datensatz wurde nicht gespeichert; die Zeile ist nicht verfügbar."); return false; }
+    savedId=query.value(0);
+    if(savedId.isNull() || query.next() || query.lastError().isValid()) { status_->setText("Die gespeicherte Datensatzidentität ist nicht verfügbar."); return false; }
     query.finish();
     try {counterScope.complete(true);} catch(const std::exception& error) {status_->setText(QString::fromUtf8(error.what()));return false;}
     QVariantMap oldRecord;

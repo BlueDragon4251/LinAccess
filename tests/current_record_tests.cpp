@@ -261,6 +261,25 @@ End Sub
         const auto unavailable=entries.executeProcedure("NewState",args); assert(unavailable.returnValue=="Integer:0");
         assert(entries.close());
     }
+    {
+        assert(sql.exec("CREATE TABLE zero_records(id INTEGER PRIMARY KEY,label TEXT)"));assert(sql.exec("INSERT INTO zero_records VALUES(10,'existing')"));sql.finish();
+        const QByteArray zeroLayout="Begin Form\nRecordSource =\"zero_records\"\nDataEntry =-1\nBegin Section\nBegin TextBox\nName =\"id\"\nControlSource =\"id\"\nEnd\nBegin TextBox\nName =\"label\"\nControlSource =\"label\"\nTop =500\nEnd\nEnd\nEnd\n";
+        AccessFormPreview zero("zero_form",zeroLayout,"Sub DeleteRow()\nDoCmd.RunCommand acCmdDeleteRecord\nEnd Sub\n",db);zero.show();zero.activateWindow();QApplication::processEvents();
+        auto model=makePreviewFormObject(zero);auto rows=model->member("Recordset",{}).object;
+        auto* key=zero.findChild<QLineEdit*>("access-control-id");auto* label=zero.findChild<QLineEdit*>("access-control-label");assert(key && label);
+        key->setFocus();QTest::keyClicks(key,"0");label->setFocus();QTest::keyClicks(label,"zero inserted");model->assign("Dirty",VbaValue::logical(false));
+        assert(!zero.hasUnsavedChanges() && !model->member("NewRecord",{}).truthy() && model->item("id").asNumber()==0 && rows->member("RecordCount",{}).asNumber()==1);
+        label->setFocus();label->selectAll();QTest::keyClicks(label,"zero updated");model->assign("Dirty",VbaValue::logical(false));
+        assert(sql.exec("SELECT label FROM zero_records WHERE id=0") && sql.next() && sql.value(0).toString()=="zero updated");sql.finish();
+        assert(sql.exec("SELECT label FROM zero_records WHERE id=10") && sql.next() && sql.value(0).toString()=="existing");sql.finish();
+        assert(sql.exec("CREATE TEMP TABLE zero_records(id INTEGER PRIMARY KEY,label TEXT)"));assert(sql.exec("INSERT INTO temp.zero_records VALUES(0,'shadow')"));sql.finish();
+        std::vector<VbaValue> arguments;const auto deletion=zero.executeProcedure("DeleteRow",arguments);assert(deletion.status==linaccess::VbaExecutionStatus::Error && deletion.errorNumber==3251);
+        label->setFocus();label->selectAll();QTest::keyClicks(label,"intended main");bool refused=false;try {model->assign("Dirty",VbaValue::logical(false));}catch(const linaccess::VbaRuntimeError& error) {refused=error.number==2501;}assert(refused && zero.hasUnsavedChanges());
+        assert(sql.exec("SELECT label FROM main.zero_records WHERE id=0") && sql.next() && sql.value(0).toString()=="zero updated");sql.finish();
+        assert(sql.exec("SELECT label FROM temp.zero_records WHERE id=0") && sql.next() && sql.value(0).toString()=="shadow");sql.finish();
+        assert(sql.exec("DROP TABLE temp.zero_records"));sql.finish();model->assign("Dirty",VbaValue::logical(false));assert(!zero.hasUnsavedChanges());
+        assert(sql.exec("SELECT label FROM main.zero_records WHERE id=0") && sql.next() && sql.value(0).toString()=="intended main");sql.finish();assert(zero.close());
+    }
     const QByteArray layout=R"FORM(Begin Form
 RecordSource ="records"
 OnCurrent ="[Event Procedure]"

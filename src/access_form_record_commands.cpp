@@ -44,6 +44,7 @@ void AccessFormPreview::deleteCurrentRecord() {
     callback("OnDelete","Form_Delete",cancel);
     if (cancel.front().kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"Invalid Null delete cancellation");
     if (cancel.front().truthy()) throw VbaRuntimeError(2501,"Delete event cancelled");
+    checkPhysicalRecordSource();
     static unsigned long long sequence=0;
     const auto savepoint="linaccess_delete_"+QString::number(++sequence);
     QSqlQuery sql(db_);
@@ -61,7 +62,7 @@ void AccessFormPreview::deleteCurrentRecord() {
         QSqlQuery undo(db_); (void)undo.exec("ROLLBACK TO "+savepoint); (void)undo.exec("RELEASE "+savepoint);
         if (displayed) restore();
     });
-    if (!sql.prepare("DELETE FROM "+identifier(layout_.recordSource.trimmed())+" WHERE rowid=?"))
+    if (!sql.prepare("DELETE FROM main."+identifier(layout_.recordSource.trimmed())+" WHERE rowid=?"))
         throw VbaRuntimeError(3146,"Delete preparation failed");
     sql.addBindValue(oldId);
     {

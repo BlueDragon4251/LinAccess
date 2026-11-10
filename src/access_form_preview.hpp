@@ -88,6 +88,7 @@ private:
     static bool supportsControlDefault(const linaccess::AccessVisualControl& control);
     void initializeControlDefaults(bool unbound);
     bool saveRecord();
+    void checkPhysicalRecordSource() const;
     void setTimerInterval(int interval);
     void selectCurrentRecordForCommand();
     void deleteCurrentRecord();

@@ -6655,3 +6655,17 @@ Echte SQL-/VBA-/Klon-/Metadaten-/Subset-/Umordnungsbelege. Keine neuen CTest-/
 Katalog-IDs;456/386/70. Vorstufe93a8a9f privat remote/Baum geprüft; letztes geprüftes
 DEB/Original weiterhinc67cbd9e. Alias-/Join-/Provider-/Orakelparität offen.
 Ohne Zwischenabschluss weitere allgemeine Anforderungen implementieren.
+
+
+Formular-Quell-/Insertidentität: FORM_PHYSICAL_INSERT_IDENTITY.md dokumentiert
+tatsächliche main-Qualifikation beim Laden/INSERT/UPDATE/DELETE und TEMP-/Main-
+Quellprüfung nach Benutzerereignissen sowie vor Schreibausführung. INSERT nutzt
+wie UPDATE echte einzelne RETURNING-rowid einschließlich0; DataEntry/Selektion/
+Snapshot/Folgeänderung behalten Identität. Abgewiesene Entwürfe bleiben erhalten.
+App/FormCurrent/Layout/Delete/Currency-Insert/Update gebaut. Fixture-Compilezugriff
+auf private Methoden durch echte öffentliche VBA-Routen ersetzt, davor keine
+Prüfung ausgeführt; einmaliges bestehendes Bündel5/5 in14,42s bestanden.
+Echte Tastatur-/VBA-/SQL-/TEMP-Refusal-/Retry-Belege; keine neuen CTest-/Katalog-IDs;
+456/386/70. Vorstufe65fa8d1 privat remote/Baum geprüft. Abfrageformulare/Provider/
+Quellgenerations-/vollständige Orakelparität offen. Letztes geprüftes DEB/Original
+weiterhinc67cbd9e vor späteren Änderungen. Ohne Zwischenabschluss weiterarbeiten.
