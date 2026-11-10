@@ -1543,6 +1543,8 @@ End Function
         assert(amountField->member("Name",{}).asText()=="amount" && amountField->member("Type",{}).asNumber()==5 && amountField->member("Size",{}).asNumber()==8);
         assert(fields->member("Item",{VbaValue::integer(1)}).object->member("Type",{}).asNumber()==8);
         assert(fields->member("Item",{VbaValue::string("integer_value")}).object->member("Type",{}).asNumber()==4);
+        const auto flagField=fields->member("Item",{VbaValue::string("enabled")}).object;
+        assert(flagField->member("Type",{}).asNumber()==1 && flagField->member("Size",{}).asNumber()==1);
         const auto enumerated=fields->enumerate(); assert(enumerated.size()==4);
         assert(enumerated.back().object->member("Name",{}).asText()=="enabled" && enumerated.back().object->member("OrdinalPosition",{}).asNumber()==3);
         assert(definition->member("Fields",{}).object==fields && fields->member("Item",{VbaValue::integer(0)}).object==amountField);
@@ -1571,6 +1573,14 @@ End Function
         assert(metadataFrame->values.at("calls").asNumber()==beforeMetadata);
     }
     const auto typedRows=database->member("OpenRecordset",{linaccess::VbaValue::string(typedSource.toStdString())}).object;
+    const auto enabled=typedRows->member("Fields",{linaccess::VbaValue::string("enabled")}).object;
+    assert(enabled->member("Type",{}).asNumber()==1 && enabled->member("Size",{}).asNumber()==1);
+    assert(enabled->member("Value",{}).kind==linaccess::VbaValue::Kind::Boolean && enabled->member("Value",{}).boolean);
+    const auto falseRows=database->member("OpenRecordset",{linaccess::VbaValue::string("SELECT NativeFlag(0) AS enabled")}).object;
+    const auto falseField=falseRows->member("Fields",{linaccess::VbaValue::string("enabled")}).object;
+    assert(falseField->member("Type",{}).asNumber()==1 && falseField->member("Value",{}).kind==linaccess::VbaValue::Kind::Boolean && !falseField->member("Value",{}).boolean);
+    falseRows->member("Close",{});
+
     const auto amount=typedRows->member("Fields",{linaccess::VbaValue::string("amount")}).object;
     const auto stamp=typedRows->member("Fields",{linaccess::VbaValue::string("stamp")}).object;
     const auto integer=typedRows->member("Fields",{linaccess::VbaValue::string("integer_value")}).object;

@@ -4418,3 +4418,15 @@ Alle sieben Upload-/Fixturehashes unverändert. Vorstufe49a60c7 privat remote/Ba
 geprüft. Keine neuen Tests/IDs; F068/456/386/70 unverändert. Geprüftes DEBc8bd82b
 liegt vor späteren Ordner-/Kreuztabellenänderungen. Ohne Zwischenabschluss
 weitere allgemeine DAO-/SQL-Metadatenlücken implementieren.
+
+
+Nachgewiesene Boolean-DAO-Ergebnisse: DAO_BOOLEAN_RESULTS.md dokumentiert die
+fehlende Abbildung tatsächlicher BOOL/BOOLEAN-Deklarationen auf dbBoolean1 und
+Size1. Echte QueryDef.Fields ohne Modulausführung sowie Recordset-True/False-
+Varianten, vorhandene Currency/Date/Long- und Identitätsgrenzen im gleichen DAO-
+Ziel geprüft. App gebaut; Test-Compilerfehler (fehlender Namensraum) präzise
+korrigiert, erster tatsächlicher DAO-Lauf1/1 in2,78s. Keine neuen Tests/IDs und
+keine Boolean-Inferenz aus beliebigen Integern. F121/F122/456/386/70 unverändert.
+Vorstufeff933a1 privat remote/Baum geprüft. Letztes Originalinventar100/78/22 und
+sieben Hashes liegen vor diesem kleinen Metadatenumfang; geprüftes DEBc8bd82b
+bleibt älter. Ohne Zwischenabschluss allgemeine native SQL-Funktionen fortsetzen.

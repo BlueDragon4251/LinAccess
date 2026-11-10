@@ -47,7 +47,7 @@ VbaValue integerCount(qlonglong value) {
 }
 int provenDaoFieldType(const QString& declaration) {
     const auto type=declaration.toUpper();
-    return type=="DOUBLE" ? 7 : type=="SINGLE_REAL" ? 6 : type=="INTEGER1" ? 2 : type=="INTEGER2" ? 3 : type=="INTEGER4" ? 4 : (type=="CURRENCY_REAL" || type=="CURRENCY_TICKS") ? 5 : (type=="DATE" || type=="DATETIME") ? 8 : type=="BLOB" ? 11 : 0;
+    return (type=="BOOL" || type=="BOOLEAN") ? 1 : type=="DOUBLE" ? 7 : type=="SINGLE_REAL" ? 6 : type=="INTEGER1" ? 2 : type=="INTEGER2" ? 3 : type=="INTEGER4" ? 4 : (type=="CURRENCY_REAL" || type=="CURRENCY_TICKS") ? 5 : (type=="DATE" || type=="DATETIME") ? 8 : type=="BLOB" ? 11 : 0;
 }
 VbaValue fixedDaoFieldSize(int type) {
     const int size=(type==1 || type==2) ? 1 : type==3 ? 2 : (type==4 || type==6) ? 4
