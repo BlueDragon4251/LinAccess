@@ -691,7 +691,9 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
                 if(type==Type::Long && answer>=-2147483648.0 && answer<=2147483647.0)
                     return finish(VbaValue::longInteger(static_cast<std::int32_t>(answer)));
                 if(binding==Binding::Static) throw error("Declared integral arithmetic overflow",6);
-                if(binding==Binding::Variant && type==Type::Integer && answer>=-2147483648.0 && answer<=2147483647.0)
+                if(binding==Binding::Variant && type==Type::Byte && answer>=-32768 && answer<=32767)
+                    return finish(VbaValue::integer(static_cast<std::int16_t>(answer)));
+                if(binding==Binding::Variant && (type==Type::Byte || type==Type::Integer) && answer>=-2147483648.0 && answer<=2147483647.0)
                     return finish(VbaValue::longInteger(static_cast<std::int32_t>(answer)));
             }
         }

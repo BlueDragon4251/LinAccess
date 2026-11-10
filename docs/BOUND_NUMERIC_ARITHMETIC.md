@@ -56,3 +56,5 @@ hashes, retaining the missing macro-source boundary. That package and original
 proof predate the later decimal-literal and declared-arithmetic changes.
 
 Selected intrinsic result declarations are extended in [NUMERIC_INTRINSIC_BINDINGS.md](NUMERIC_INTRINSIC_BINDINGS.md); the remaining boundaries still apply.
+
+Proven Byte Variant widening is later supplied by [BYTE_VARIANT_WIDENING.md](BYTE_VARIANT_WIDENING.md); other unbound/full-parity limits remain.

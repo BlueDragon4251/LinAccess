@@ -459,6 +459,20 @@ End Function)BOUND";
         R"((CInt(32767) \ CInt(1))+1)"}) {
         int code=0;try {(void)eval(expression);}catch(const VbaRuntimeError& error){code=error.number;}assert(code==6);
     }
+    for(const auto& expression:std::vector<std::string>{
+        R"(TypeName(CVar(CByte(255))+CByte(1))="Integer")",
+        R"(CVar(CByte(255))+CByte(1)=256)",
+        R"(TypeName(CVar(CByte(0))-CByte(1))="Integer")",
+        R"(CVar(CByte(0))-CByte(1)=-1)",
+        R"(TypeName(CVar(CByte(255))*CByte(128))="Integer")",
+        R"(TypeName(CVar(CByte(255))*CByte(129))="Long")",
+        R"(CVar(CByte(255))*CByte(255)=65025)",
+        R"(TypeName(CVar(CByte(255))*CByte(255))="Long")",
+        R"(TypeName(Nz(CByte(255))+CByte(1))="Integer")"})
+        assert(eval(expression).truthy());
+    for(const auto& expression:{"CByte(255)+CByte(1)","CByte(0)-CByte(1)","CByte(255)*CByte(255)"}) {
+        int code=0;try {(void)eval(expression);}catch(const VbaRuntimeError& error){code=error.number;}assert(code==6);
+    }
     assert(eval("Choose(2.5,10,20,30)").asNumber()==20 && eval("Choose(0,10)").kind==VbaValue::Kind::Null);
     assert(eval("Choose(2,10,Null)").kind==VbaValue::Kind::Null);
     assert(eval("Switch(False,10,True,CCur(\"1.25\"),True,30)").kind==VbaValue::Kind::Currency);

@@ -1453,6 +1453,12 @@ End Function
 Public Function NativeFlag(ByVal value As Long) As Boolean
 NativeFlag=value>1
 End Function
+Public Function NativeBytePromotion() As Integer
+Dim value As Variant
+value=CByte(255)
+If VarType(value+CByte(1))<>vbInteger Then Err.Raise 5
+NativeBytePromotion=value+CByte(1)
+End Function
 Public Function NativeByteBits() As Byte
 NativeByteBits=CByte(1) Eqv CByte(2)
 End Function
@@ -1629,6 +1635,12 @@ End Function
     assert(bits->member("Type",{}).asNumber()==2 && bits->member("Size",{}).asNumber()==1);
     const auto byteValue=bits->member("Value",{});assert(byteValue.numericType==linaccess::VbaValue::NumericType::Byte && byteValue.number==252);
     byteRows->member("Close",{});
+    const auto promotedRows=database->member("OpenRecordset",{linaccess::VbaValue::string("SELECT NativeBytePromotion() AS widened")}).object;
+    const auto widened=promotedRows->member("Fields",{linaccess::VbaValue::string("widened")}).object;
+    assert(widened->member("Type",{}).asNumber()==3 && widened->member("Size",{}).asNumber()==2);
+    const auto promotedValue=widened->member("Value",{});assert(promotedValue.numericType==linaccess::VbaValue::NumericType::Integer && promotedValue.number==256);
+    promotedRows->member("Close",{});
+
     const auto quotientRows=database->member("OpenRecordset",{linaccess::VbaValue::string("SELECT NativeByteQuotient() AS remainder")}).object;
     const auto remainder=quotientRows->member("Fields",{linaccess::VbaValue::string("remainder")}).object;
     assert(remainder->member("Type",{}).asNumber()==2 && remainder->member("Size",{}).asNumber()==1);

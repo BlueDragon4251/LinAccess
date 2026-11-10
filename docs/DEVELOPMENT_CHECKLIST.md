@@ -4609,3 +4609,15 @@ in8,64s (5,37/3,27) bestanden; tatsächliche native Funktion liefertCurrency2.00
 unverändert. Vorstufeb80c9521 privat remote/Baum geprüft. Letztes DEB4cd0f848 liegt
 vor späteren Umfängen. Ohne Zwischenabschluss nach öffentlich dokumentierter
 Byte-Variant-Erweiterung weitere Sprach-/Datenbankanforderungen fortsetzen.
+
+
+Byte-Variant-Erweiterung: BYTE_VARIANT_WIDENING.md stützt fehlende Byte→Integer→
+Long-Stufe auf tatsächliche öffentliche Microsoft-Plus-/Minus-/Multiplikations-
+Dokumentation. Nur nachgewiesene Variant-Deklaration plus tatsächlicher Byte-
+Subtyp, feste Byte-Überläufe bleiben6; ungebundene/Access-Eval-/physische SQL-
+Grenzen unverändert. App/Core/DAO gebaut; erstes bestehendes Bündel2/2 in8,68s
+(5,50/3,18) bestanden. Echter nativer Integer-VBA-Rückgabewert überSQL/DAO
+Type3/Size2/Integer256 geprüft. Keine neuen CTest-/Katalog-IDs;456/386/70 unverändert.
+Vorstufe04db5776 privat remote/Baum geprüft. Letztes geprüftes DEB4cd0f848 liegt vor
+späteren Umfängen. Ohne Zwischenabschluss typisierte native Zahlenliterale mit
+Suffices und weitere offene Anforderungen fortlaufend implementieren.
