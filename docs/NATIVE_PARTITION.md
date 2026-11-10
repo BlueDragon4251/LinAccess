@@ -37,3 +37,16 @@ complete VBA/Jet parity.
 Validation: desktop 48/48 (84.06 s); fresh headless core 1/1; Debian package,
 matching binary build ID, pinned SQLite and all four original fixture hashes
 passed. Catalog remains 456 / 384 bounded entries / 72 open requirements.
+
+
+Typisierte native SQL-Funktionsargumente (2026-11-10)
+--------------------------------------------------
+RGB/QBColor und Partition erhalten bei nachgewiesenen einfachen Quellen die
+Date/Boolean/Single/Currency/integralen Argumenttypen über den gemeinsamen
+Scalar-Adapter. Date bedeutet den OLE-Date-Wert; True bleibt -1 trotz physischer
+BOOLEAN1. Reine ISO-TEXT-Werte erhalten keinen geratenen Date-Typ. Projektionen,
+unterstützte Verschachtelungen/Filter/Gruppierungen/Sortierungen bleiben gebunden.
+RGB/QBColor-Projektionen tragen INTEGER4 mit tatsächlichem DAO dbLong; Partition
+bleibt TEXT ohne geratenen Text/Memo-Typ. Vorhandene Rundung, Null-Regeln,
+Palette, Bereichs-/Extrem-/Codepage-/Quellgrenzen bleiben erhalten. Dies erweitert
+keine Windows- oder allgemeine Jet-Kompatibilitätsbehauptung.

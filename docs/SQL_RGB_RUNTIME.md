@@ -41,3 +41,16 @@ counts are unchanged; no full Access SQL claim follows.
 
 Public function contract:
 https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/rgb-function
+
+
+Typisierte native SQL-Funktionsargumente (2026-11-10)
+--------------------------------------------------
+RGB/QBColor und Partition erhalten bei nachgewiesenen einfachen Quellen die
+Date/Boolean/Single/Currency/integralen Argumenttypen über den gemeinsamen
+Scalar-Adapter. Date bedeutet den OLE-Date-Wert; True bleibt -1 trotz physischer
+BOOLEAN1. Reine ISO-TEXT-Werte erhalten keinen geratenen Date-Typ. Projektionen,
+unterstützte Verschachtelungen/Filter/Gruppierungen/Sortierungen bleiben gebunden.
+RGB/QBColor-Projektionen tragen INTEGER4 mit tatsächlichem DAO dbLong; Partition
+bleibt TEXT ohne geratenen Text/Memo-Typ. Vorhandene Rundung, Null-Regeln,
+Palette, Bereichs-/Extrem-/Codepage-/Quellgrenzen bleiben erhalten. Dies erweitert
+keine Windows- oder allgemeine Jet-Kompatibilitätsbehauptung.

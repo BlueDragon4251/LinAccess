@@ -318,6 +318,9 @@ void boundScalarSqlFunction(sqlite3_context* context,int count,sqlite3_value** a
     } catch(const VbaRuntimeError& failure) { functionError(context,failure); }
       catch(...) { native.error(context,"SQL bound scalar evaluation failed",-1); }
 }
+void bound_rgb(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"RGB",3,3,true);}
+void bound_qbcolor(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"QBColor",1,1,true);}
+void bound_partition(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Partition",4,4,true);}
 void stringCStr(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"CStr",1,1,false);}
 void stringCStrTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"CStr",1,1,true);}
 void stringStr(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Str",1,1,false);}
@@ -885,6 +888,10 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_next_counter",2,&nextAccessCounter,nullptr,nullptr);
     ensure("linaccess_jet_iif",3,&iif,nullptr,nullptr);
     ensure("linaccess_jet_rgb",-1,&rgbColor,nullptr,nullptr);
+    ensure("linaccess_jet_rgb_typed",-1,&bound_rgb,nullptr,nullptr);
+    ensure("linaccess_jet_qbcolor_typed",-1,&bound_qbcolor,nullptr,nullptr);
+    ensure("linaccess_jet_partition_typed",-1,&bound_partition,nullptr,nullptr);
+
     ensure("linaccess_jet_qbcolor",-1,&qbColor,nullptr,nullptr);
     ensure("linaccess_jet_partition",-1,&partitionRange,nullptr,nullptr);
     ensure("linaccess_jet_fv",-1,&financialFv,nullptr,nullptr);

@@ -2215,6 +2215,28 @@ FROM calendar_inputs WHERE marker=1)SQL");
             int actual=0;try{(void)database->member("OpenRecordset",{linaccess::VbaValue::string(failure.first)});}catch(const linaccess::VbaRuntimeError& error){actual=error.number;}
             if(actual!=failure.second) std::cerr<<"Typed financial error actual="<<actual<<" expected="<<failure.second<<"\n";assert(actual==failure.second);
         }
+        calendarPhase="typed color and Partition family";
+        const auto colorPartition=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT RGB(offset_date,amount,marker) AS color,QBColor(offset_date) AS palette,Partition(offset_date,0,99,offset_date) AS bucket,Partition(enabled,0,99,amount) AS below FROM calendar_inputs WHERE marker=1"),{});
+        assert(colorPartition.rows.size()==1 && colorPartition.columnTypes==QVector<QString>({"INTEGER4","INTEGER4","TEXT","TEXT"}));
+        assert(colorPartition.rows[0][0].toInt()==66050 && colorPartition.rows[0][1].toInt()==32768 && colorPartition.rows[0][2].toString()=="  2:  3" && colorPartition.rows[0][3].toString()=="   : -1");
+        const auto colorFields=database->member("OpenRecordset",{linaccess::VbaValue::string("SELECT RGB(offset_date,0,0) AS color,QBColor(offset_date) AS palette FROM calendar_inputs WHERE marker=1")}).object;
+        assert(colorFields->member("Fields",{linaccess::VbaValue::string("color")}).object->member("Type",{}).asNumber()==4 && colorFields->item("palette").numericType==linaccess::VbaValue::NumericType::Long);colorFields->member("Close",{});
+        const auto colorFilter=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT marker FROM calendar_inputs WHERE marker=1 AND RGB(offset_date,0,0)=2"),{});
+        assert(colorFilter.rows.size()==1 && colorFilter.rows[0][0].toInt()==1);
+        const auto partitionGroups=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT Partition(offset_date,0,99,offset_date) AS bucket,Count(*) AS tally FROM calendar_inputs GROUP BY Partition(offset_date,0,99,offset_date) ORDER BY Partition(offset_date,0,99,offset_date)"),{});
+        assert(partitionGroups.rows.size()==1 && partitionGroups.rows[0][0].toString()=="  2:  3" && partitionGroups.rows[0][1].toInt()==2);
+        const auto partitionNull=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT Partition(enabled,0,99,offset_date) FROM calendar_inputs WHERE marker=2"),{});
+        assert(partitionNull.rows.size()==1 && partitionNull.rows[0][0].isNull());
+        for(const auto& failure:std::vector<std::pair<std::string,int>>{
+            {"SELECT RGB(enabled,0,0) FROM calendar_inputs WHERE marker=1",5},
+            {"SELECT QBColor(enabled) FROM calendar_inputs WHERE marker=1",5},
+            {"SELECT RGB(enabled,0,0) FROM calendar_inputs WHERE marker=2",94},
+            {"SELECT QBColor(enabled) FROM calendar_inputs WHERE marker=2",94},
+            {"SELECT RGB(offset_text,0,0) FROM calendar_inputs WHERE marker=1",13},
+            {"SELECT Partition(offset_date,0,99,enabled) FROM calendar_inputs WHERE marker=1",5}}) {
+            int actual=0;try{(void)database->member("OpenRecordset",{linaccess::VbaValue::string(failure.first)});}catch(const linaccess::VbaRuntimeError& error){actual=error.number;}
+            if(actual!=failure.second) std::cerr<<"Typed color/Partition error actual="<<actual<<" expected="<<failure.second<<"\n";assert(actual==failure.second);
+        }
         calendarPhase="DAO fields";
         const auto calendarFields=database->member("OpenRecordset",{linaccess::VbaValue::string(calendarSource.toStdString())}).object;
         assert(calendarFields->member("Fields",{linaccess::VbaValue::string("shifted")}).object->member("Type",{}).asNumber()==8);

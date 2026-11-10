@@ -4399,3 +4399,16 @@ Keine neuen IDs,456/386/70 unverändert; kein neuer Access-Oracle.
 Vorstandf8bb8a6b1016b5224ff19b86652c89f8b9e27885/Baum01cc89b8c8d4424e7778caba70eeb6a4b9685aa0
 privat veröffentlicht/exakt verifiziert. Letzter Paketbeleg2d7fa91 (164,85s,
 7Hashes gleich) liegt vor Zeichen-/Längen-/Finanzbindung.
+
+
+Typisierte SQL-Farb-/Partition-Familie (2026-11-10): SQL_RGB_RUNTIME.md,
+QBCOLOR_RUNTIME.md, NATIVE_PARTITION.md. RGB/QBColor/Partition binden reale
+Date/Boolean/Single/Currency/integrale Quelltypen; Farbprojektionen INTEGER4,
+tatsächliches DAO dbLong4/Long-Variant. Partition-Padding/Buckets, Date-Kanäle,
+Boolean-Negativ-/Null-/Textfehler sowie Filter/Gruppierung/Sortierung geprüft.
+Native Palette/Rundung/Null-/Extrem-/Quellgrenzen bleiben, keine Windows-Oracle-
+Behauptung. App/DAO/Query-Modell gebaut; bestehendes Bündel2/2 in4,21s
+(3,91/0,30) bestanden. Keine neuen IDs;456/386/70 unverändert.
+Vorstande9051bce801df5dd03097e54512f435e80d2ac8e/Baum4475bc5f5bf527cb138642b11a99b65c5711c31d
+privat veröffentlicht/exakt verifiziert. Letzter Paketbeleg2d7fa91 (164,85s,
+7Hashes gleich) liegt vor Zeichen-/Längen-/Finanz-/Farb-/Partition-Bindung.
