@@ -232,6 +232,22 @@ void testTypedNot() {
     assert(eval("Not Empty").number==-1 && eval("Not Null").kind==VbaValue::Kind::Null);
     assert(eval("Not False").kind==VbaValue::Kind::Boolean && eval("Not False").boolean && !eval("Not True").boolean);
     assert(!eval("Not CByte(3)=CByte(3)").boolean && eval("Not 2^3").number==-9);
+    for(const auto& expression:std::vector<std::string>{
+        "VarType(CByte(129) And CByte(3))=vbByte And (CByte(129) And CByte(3))=1",
+        "VarType(CByte(1) Or CByte(128))=vbByte And (CByte(1) Or CByte(128))=129",
+        "VarType(CByte(255) Xor CByte(128))=vbByte And (CByte(255) Xor CByte(128))=127",
+        "VarType(CByte(1) Eqv CByte(2))=vbByte And (CByte(1) Eqv CByte(2))=252",
+        "VarType(CByte(128) Imp CByte(0))=vbByte And (CByte(128) Imp CByte(0))=127",
+        "VarType(CByte(128) And True)=vbInteger",
+        "VarType(CInt(1) Or CByte(2))=vbInteger",
+        "VarType(Empty Or CByte(2))=vbInteger",
+        "VarType(CLng(1) Or CByte(2))=vbLong",
+        "TypeName(-(Not CVar(CInt(32767))))=CStr(\"Long\")",
+        "TypeName(CLng(2147483647)+(CVar(CLng(1)) Or CLng(0)))=CStr(\"Double\")"})
+        assert(eval(expression).truthy());
+    int logicalOverflow=0;
+    try {(void)eval("CLng(2147483647)+(CLng(1) Or CLng(0))");}catch(const VbaRuntimeError& error){logicalOverflow=error.number;}
+    assert(logicalOverflow==6);
     const auto probe=std::make_shared<ScalarProbe>(); probe->value=VbaValue::byte(10);
     const auto value=evaluateVbaExpression("Not probe",host,{{"probe",VbaValue::reference(probe)}});
     assert(value.numericType==VbaValue::NumericType::Byte && value.number==245 && probe->reads==1);

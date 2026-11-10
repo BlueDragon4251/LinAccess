@@ -2390,6 +2390,13 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         for(const auto& alias:aliases) if(alias.name==name) return alias.type;
         return {};
     };
+    const auto variableArithmeticBinding=[&](const std::string& name) {
+        using Binding=VbaValue::ArithmeticBinding;
+        const auto category=[](const std::string& type) {return type.empty() || type=="variant" ? Binding::Variant : Binding::Static;};
+        if(const auto found=localTypes.find(name);found!=localTypes.end()) return category(found->second);
+        for(const auto& alias:aliases) if(alias.name==name) return category(alias.type);
+        return Binding::Variant;
+    };
     for(const auto& instruction:instructions) {
         if(instruction.type==Statement::Type::IndexedAssign && !instruction.argument.empty()) {
             const auto indices=splitArguments(instruction.endExpression);
@@ -2545,8 +2552,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         VbaExecutionResult outcome{VbaExecutionStatus::Completed, {}, line, exited};
         if (isFunction) {
             auto value = locals[returnBinding];
-            const auto type=variableType(returnBinding);
-            value.arithmeticBinding=type.empty() || type=="variant" ? VbaValue::ArithmeticBinding::Variant : VbaValue::ArithmeticBinding::Static;
+            value.arithmeticBinding=variableArithmeticBinding(returnBinding);
             outcome.typedReturnValue = std::make_shared<VbaValue>(value);
             if (value.kind != VbaValue::Kind::Object && value.kind!=VbaValue::Kind::Error && value.kind!=VbaValue::Kind::Missing && !isVbaArray(value)) outcome.returnValue = value.asField();
         }
@@ -2741,8 +2747,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
     };
     resolver.variableValue=[&](std::string_view name,const VbaValue& value) {
         const auto key=lower(std::string(name));auto actual=automaticObjects.contains(key) ? readVariable(key) : value;
-        const auto type=variableType(key);
-        actual.arithmeticBinding=type.empty() || type=="variant" ? VbaValue::ArithmeticBinding::Variant : VbaValue::ArithmeticBinding::Static;
+        actual.arithmeticBinding=variableArithmeticBinding(key);
         return actual;
     };
     resolver.undeclaredIdentifier=[&](std::string_view name) -> std::optional<VbaValue> {

@@ -3370,3 +3370,22 @@ keine Voll-Varianten-/AST-/Windows-Parität. Vorstufef38f6970 privat remote/Baum
 geprüft. Letztes geprüftes DEB5df3cba2 liegt vor Literal-/Deklarationsumfängen.
 Ohne Zwischenabschluss aktuellen Paket-/Originalnachweis für diese Umfänge
 bündeln und danach weitere tatsächliche Anforderungen implementieren.
+
+
+Native typisierte Logik: NATIVE_TYPED_LOGIC.md dokumentiert Nicht-Null-And/Or/
+Xor/Eqv/Imp mit Byte-/Integer-/Boolean-/Long-Ergebnissen und tatsächlicher8Bit-
+Eqv/Imp-Maske. Not/Binäroperationen tragen nachgewiesene feste/Variant-Bindungen
+in Folgearithmetik; vorhandene Nullpfade und Access-Eval-Sonderpfad unverändert.
+MS-VBAL-Allgemeintabelle Or/Null ist kein vollständiges Access-Orakel: tatsächliche
+Referenz Null Or False ergibtNull. Unbelegte numerische Imp/Null-Fälle bleiben
+bewusst offen. Metadatenlesepfad vermeidet Typstringkopie ohne Auswahländerung.
+App/Core/DAO/GUI gebaut; erstes bestehendes Bündel3/3 in27,29s (5,34/18,72/3,22)
+bestanden. Tatsächliche native Byte-VBA-Funktion über SQL/DAO liefertEqv252 mit
+Type2/Size1/Byte-Value. Keine neuen CTest-/Katalog-IDs;456/386/70 unverändert.
+Vorstufe4cd0f848 privat remote/Baum geprüft und aktuellstes geprüftes DEB unter
+/workspace/work/numeric-intrinsic-bindings/package/linaccess-0.7.0-Linux.deb:
+Build-ID/SQLite3.54.1/MDBTools1.0.1/Inhalt/Rechte/Desktop/keine-Fixtures bestanden,
+danachGUI19,97/Inventar46,77/Original118,66,3/3 in185,40s;100/78/22 und7Hashes
+unverändert. Makroquellengrenze bleibt. Paket liegt vor Logikumfang. Ohne
+Zwischenabschluss native Ganzzahldivision/Modulo und weitere Anforderungen
+fortlaufend implementieren, kein Abschlussanruf vor tatsächlichem Gesamtabschluss.

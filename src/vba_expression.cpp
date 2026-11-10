@@ -503,6 +503,20 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
         left.arithmeticBinding==Binding::Variant || right.arithmeticBinding==Binding::Variant ? Binding::Variant :
         left.arithmeticBinding==Binding::Static && right.arithmeticBinding==Binding::Static ? Binding::Static : Binding::Unbound;
     const auto finish=[&](VbaValue value) {return bindArithmeticValue(std::move(value),binding);};
+    const auto logicalResult=[&](std::int32_t answer) {
+        using Type=VbaValue::NumericType;
+        if(nativeNumericTypes && left.kind==VbaValue::Kind::Number && right.kind==VbaValue::Kind::Number &&
+            left.numericType==Type::Byte && right.numericType==Type::Byte)
+            return finish(VbaValue::byte(static_cast<unsigned char>(static_cast<std::uint32_t>(answer)&255U)));
+        const auto smallIntegral=[](const VbaValue& value) {
+            return value.kind==VbaValue::Kind::Boolean || value.kind==VbaValue::Kind::Empty ||
+                (value.kind==VbaValue::Kind::Number && (value.numericType==Type::Byte || value.numericType==Type::Integer));
+        };
+        const bool narrow=nativeNumericTypes ? smallIntegral(left) && smallIntegral(right) :
+            left.kind==VbaValue::Kind::Number && right.kind==VbaValue::Kind::Number &&
+            left.numericType==Type::Integer && right.numericType==Type::Integer;
+        return finish(narrow ? VbaValue::integer(static_cast<std::int16_t>(answer)) : VbaValue::longInteger(answer));
+    };
     if(op=="like") {
         if(left.kind==VbaValue::Kind::Null || right.kind==VbaValue::Kind::Null) return {};
         return VbaValue::logical(likeMatch(utf16String(left.asText()),utf16String(right.asText()),*host,mode));
@@ -524,13 +538,11 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
             return {};
         }
         if (left.kind == VbaValue::Kind::Boolean && right.kind == VbaValue::Kind::Boolean)
-            return VbaValue::logical(op == "and" ? left.boolean && right.boolean : left.boolean || right.boolean);
+            return finish(VbaValue::logical(op == "and" ? left.boolean && right.boolean : left.boolean || right.boolean));
         const auto a=static_cast<std::int32_t>(coerceVbaModuleValue(left,"long").number);
         const auto b=static_cast<std::int32_t>(coerceVbaModuleValue(right,"long").number);
         const auto answer=op=="and" ? a&b : a|b;
-        const bool narrow=left.kind==VbaValue::Kind::Number && right.kind==VbaValue::Kind::Number
-            && left.numericType==VbaValue::NumericType::Integer && right.numericType==VbaValue::NumericType::Integer;
-        return narrow ? VbaValue::integer(static_cast<std::int16_t>(answer)) : VbaValue::longInteger(answer);
+        return logicalResult(answer);
     }
     if (op=="xor" || op=="eqv" || op=="imp") {
         const bool leftNull=left.kind==VbaValue::Kind::Null,rightNull=right.kind==VbaValue::Kind::Null;
@@ -542,13 +554,11 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
             return {};
         }
         if (left.kind==VbaValue::Kind::Boolean && right.kind==VbaValue::Kind::Boolean)
-            return VbaValue::logical(op=="xor" ? left.boolean!=right.boolean : op=="eqv" ? left.boolean==right.boolean : !left.boolean || right.boolean);
+            return finish(VbaValue::logical(op=="xor" ? left.boolean!=right.boolean : op=="eqv" ? left.boolean==right.boolean : !left.boolean || right.boolean));
         const auto a=static_cast<std::int32_t>(coerceVbaModuleValue(left,"long").number);
         const auto b=static_cast<std::int32_t>(coerceVbaModuleValue(right,"long").number);
         const auto answer=op=="xor" ? a^b : op=="eqv" ? ~(a^b) : (~a)|b;
-        const bool narrow=left.kind==VbaValue::Kind::Number && right.kind==VbaValue::Kind::Number
-            && left.numericType==VbaValue::NumericType::Integer && right.numericType==VbaValue::NumericType::Integer;
-        return narrow ? VbaValue::integer(static_cast<std::int16_t>(answer)) : VbaValue::longInteger(answer);
+        return logicalResult(answer);
     }
     if (op=="mod" || op=="\\") {
         if (left.kind==VbaValue::Kind::Null || right.kind==VbaValue::Kind::Null) return {};
@@ -1045,16 +1055,18 @@ private:
         if (take("not")) {
             const auto arg = expression(std::max(6,minPrecedence)); // comparisons bind before Not in VBA
             if (!host_) return {};
-            const auto value=scalarObjectValue(arg);
+            auto value=scalarObjectValue(arg);
+            if(arg.kind==VbaValue::Kind::Object || jetEval_) value.arithmeticBinding=VbaValue::ArithmeticBinding::Unbound;
+            const auto finish=[&](VbaValue result) {return bindArithmeticValue(std::move(result),value.arithmeticBinding);};
             if (value.kind==VbaValue::Kind::Null) return {};
-            if (value.kind==VbaValue::Kind::Boolean) return VbaValue::logical(!value.boolean);
-            if (value.kind==VbaValue::Kind::Empty) return VbaValue::integer(-1);
+            if (value.kind==VbaValue::Kind::Boolean) return finish(VbaValue::logical(!value.boolean));
+            if (value.kind==VbaValue::Kind::Empty) return finish(VbaValue::integer(-1));
             const auto number=static_cast<std::int32_t>(coerceVbaModuleValue(value,"long").number);
             if(value.kind==VbaValue::Kind::Number && value.numericType==VbaValue::NumericType::Byte)
-                return VbaValue::byte(static_cast<unsigned char>(255-number));
+                return finish(VbaValue::byte(static_cast<unsigned char>(255-number)));
             if(value.kind==VbaValue::Kind::Number && value.numericType==VbaValue::NumericType::Integer)
-                return VbaValue::integer(static_cast<std::int16_t>(~number));
-            return VbaValue::longInteger(~number);
+                return finish(VbaValue::integer(static_cast<std::int16_t>(~number)));
+            return finish(VbaValue::longInteger(~number));
         }
         if (take("typeof")) {
             if(accessExpression_) throw error("TypeOf is unavailable in calculated expressions",3251);

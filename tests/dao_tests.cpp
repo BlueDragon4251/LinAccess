@@ -1453,6 +1453,9 @@ End Function
 Public Function NativeFlag(ByVal value As Long) As Boolean
 NativeFlag=value>1
 End Function
+Public Function NativeByteBits() As Byte
+NativeByteBits=CByte(1) Eqv CByte(2)
+End Function
 Public Function NativeNeedsUI() As String
 MsgBox "must not display"
 NativeNeedsUI="unreachable"
@@ -1611,6 +1614,12 @@ End Function
     const auto falseField=falseRows->member("Fields",{linaccess::VbaValue::string("enabled")}).object;
     assert(falseField->member("Type",{}).asNumber()==1 && falseField->member("Value",{}).kind==linaccess::VbaValue::Kind::Boolean && !falseField->member("Value",{}).boolean);
     falseRows->member("Close",{});
+    const auto byteRows=database->member("OpenRecordset",{linaccess::VbaValue::string("SELECT NativeByteBits() AS bits")}).object;
+    const auto bits=byteRows->member("Fields",{linaccess::VbaValue::string("bits")}).object;
+    assert(bits->member("Type",{}).asNumber()==2 && bits->member("Size",{}).asNumber()==1);
+    const auto byteValue=bits->member("Value",{});assert(byteValue.numericType==linaccess::VbaValue::NumericType::Byte && byteValue.number==252);
+    byteRows->member("Close",{});
+
 
     const auto amount=typedRows->member("Fields",{linaccess::VbaValue::string("amount")}).object;
     const auto stamp=typedRows->member("Fields",{linaccess::VbaValue::string("stamp")}).object;
