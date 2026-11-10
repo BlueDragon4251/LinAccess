@@ -6,6 +6,7 @@
 #include <QString>
 #include <QVariant>
 #include <QVector>
+#include <QPair>
 
 namespace linaccess {
 // Strict native-token comparison for guarded schema reconstruction; no SQL execution.
@@ -51,11 +52,12 @@ struct AccessQueryResult {
     QVector<QVariantList> rows;
     QMap<QString,QString> types; // Only proven, unambiguous output-column types.
     QVector<QString> columnTypes; // Per-position proven UI types; preserves the DAO type contract.
+    QVector<QPair<QString,QString>> fieldOrigins; // Proven main-schema physical table/field; absent entries are unknown.
 };
 AccessQueryResult executeAccessQueryPlan(QSqlDatabase db, const AccessQueryPlan& plan,
                                        const QMap<QString,QVariant>& bindings);
 // Schema only: prepare without stepping records or evaluating user expressions.
-QStringList accessQueryColumns(QSqlDatabase db,const AccessQueryPlan& plan,QVector<QString>* columnTypes=nullptr);
+QStringList accessQueryColumns(QSqlDatabase db,const AccessQueryPlan& plan,QVector<QString>* columnTypes=nullptr,QVector<QPair<QString,QString>>* fieldOrigins=nullptr);
 class AccessQueryModel final : public QAbstractTableModel {
 public:
     explicit AccessQueryModel(QObject* parent = nullptr) : QAbstractTableModel(parent) {}

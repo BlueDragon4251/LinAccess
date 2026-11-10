@@ -3524,3 +3524,21 @@ Modulfunktionen geprüft. Keine neuen CTest-/Katalog-IDs;456/386/70. Vorstufe
 d339d4b2 privat remote/Baum geprüft. Letztes geprüftes DEB weiterhinad42eada vor
 den späteren Umfängen; anschließend gebündelt Paket/Originalbelege erneuern und
 weitere offene Anforderungen ohne Zwischenabschluss umsetzen.
+
+
+DAO SourceField/SourceTable: DAO_FIELD_ORIGINS.md dokumentiert echte physische
+main-Schema-Herkunft aus vorbereiteten Statements für Recordset/QueryDef/TableDef,
+Aliasse/Views/Joins/Snapshots, schemareine QueryDef-Metadaten ohne Parameterausführung
+und erweiterte Herkunftsidentität. Keine erfundene Label-/UNION-/TEMP-/berechnete
+Herkunft. Tabellen-Recordset.SourceTable ist ausdrücklich unbelegt3251, Index- und
+Relationskontexte bleiben geschützt. App/DAO/Query/Currency gebaut; einmaliges
+bestehendes Bündel5/5 in3,90s (0,09/0,06/0,16/3,41/0,18) bestanden. Kein neuer
+CTest-/Katalogpunkt;456/386/70 unverändert. Vorstufe4ebc3f6c privat remote/Baum
+geprüft; neues DEB/Paketprüfung und Originalbündel2/2 in167,38s (47,31/120,07),
+sieben geschützte Hashes unverändert. Inventar100/78/22, fehlende Makros weiterhin
+Grenze. Kein erneuter bereits bestandener GUI-Lauf; DEB liegt vor Feldherkunft.
+Nächster belegter DAO-Fehler: AddNew/Update soll einen zuvor gültigen aktuellen
+Datensatz erhalten; neuer Datensatz über LastModified. Bisher springt update()
+pauschal zur neuen Identität. Erhaltenen aktuellen Datensatz und LastModified
+getrennt behandeln; leere/BOF/EOF-/entfernte Vorposition nicht ungeprüft als
+Windows-konform behaupten. Danach weitere offene Anforderungen ohne Abschluss.

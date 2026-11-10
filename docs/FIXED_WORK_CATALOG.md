@@ -133,7 +133,7 @@ keine Tests oder Teilpunkte allein zur Erhöhung einer Fortschrittszahl anlegen.
 - [ ] **F053** — CurrentDb/DBEngine/Workspace/Database, DAO transactions and ADO adapter.
 - [ ] **F055** — Edit/AddNew/Update/Delete, QueryDefs/Parameters/TableDefs and Requery. Bounded actual Recordset.CopyQueryDef: [scope](DAO_COPYQUERYDEF.md).
 - [x] **F108** — Native QueryDef.Parameters Count/Item/For Each, stable object identity, generation/close invalidation and original six-query collection regression.
-- [ ] **F121** — Complete DAO catalog Fields/Indexes/Relations, Refresh/Append/Delete, linked-table metadata and immutable generation identity across drop/recreate.
+- [ ] **F121** — Complete DAO catalog Fields/Indexes/Relations, Refresh/Append/Delete, linked-table metadata and immutable generation identity across drop/recreate. Bounded actual field origins: [scope](DAO_FIELD_ORIGINS.md).
 - [ ] **F122** — Full declared result/local/argument type enforcement and Access DAO oracle.
 - [x] **F123** — Bounded nested With, once-only object evaluation, relative DAO writes, Resume recovery and Exit For scope restoration; native CodeContextObject.
 - [x] **F158** — DAO clone cursor isolation, typed byte-array bookmarks, bounded Find methods/ NoMatch, shared writes, deletion/rowid-reuse and stale/foreign token checks. Includes bounded Recordset.Move with Long Rows and optional native Start bookmark.

@@ -1049,6 +1049,37 @@ void testRecordsetCopyQueryDef() {
     error([&] {bound->member("CopyQueryDef",{});},3251);
     cursor->member("Close",{}); error([&] {cursor->member("CopyQueryDef",{});},3420);
     assert(independent->member("OpenRecordset",{}).object->item("value").asNumber()==10);
+    assert(sql.exec("CREATE VIEW copy_origin_view AS SELECT id,value AS aliased FROM copy_rows"));
+    auto originQuery=database->member("CreateQueryDef",{VbaValue::string(""),VbaValue::string("PARAMETERS p LONG; SELECT aliased AS renamed FROM copy_origin_view WHERE id=p")}).object;
+    auto queryOrigin=originQuery->member("Fields",{VbaValue::string("renamed")}).object;
+    assert(queryOrigin->member("SourceField",{}).asText()=="value" && queryOrigin->member("SourceTable",{}).asText()=="copy_rows");
+    error([&] {queryOrigin->assign("SourceTable",VbaValue::string("other"));},383);
+    originQuery->assign("SQL",VbaValue::string("SELECT value FROM copy_other"));
+    error([&] {queryOrigin->member("SourceField",{});},3420);
+    auto catalogOrigin=database->member("TableDefs",{VbaValue::string("copy_rows")}).object->member("Fields",{VbaValue::string("value")}).object;
+    assert(catalogOrigin->member("SourceField",{}).asText()=="value" && catalogOrigin->member("SourceTable",{}).asText()=="copy_rows");
+    auto lineage=database->member("OpenRecordset",{VbaValue::string("SELECT aliased AS renamed FROM copy_origin_view")}).object;
+    auto originField=lineage->member("Fields",{VbaValue::string("renamed")}).object;
+    assert(originField->member("SourceField",{}).asText()=="value" && originField->member("SourceTable",{}).asText()=="copy_rows");
+    lineage->member("MoveLast",{});lineage->member("MoveNext",{});
+    assert(originField->member("SourceField",{}).asText()=="value");
+    error([&] {originField->assign("SourceField",VbaValue::string("other"));},383);
+    error([&] {originField->member("SourceTable",{VbaValue::integer(1)});},450);
+    assert(sql.exec("CREATE TABLE copy_other(id INTEGER,value INTEGER)"));assert(sql.exec("INSERT INTO copy_other VALUES(1,40),(2,50)"));
+    auto joined=database->member("OpenRecordset",{VbaValue::string("SELECT a.value AS left_value,b.value AS right_value FROM copy_rows AS a INNER JOIN copy_other AS b ON a.id=b.id")}).object;
+    assert(joined->member("Fields",{VbaValue::string("left_value")}).object->member("SourceTable",{}).asText()=="copy_rows");
+    assert(joined->member("Fields",{VbaValue::string("right_value")}).object->member("SourceTable",{}).asText()=="copy_other");
+    for(const auto* queryText:{"SELECT value+1 AS calculated FROM copy_rows","SELECT value AS calculated FROM copy_rows UNION ALL SELECT value FROM copy_other"}) {
+        auto unproven=database->member("OpenRecordset",{VbaValue::string(queryText)}).object;
+        error([&] {unproven->member("Fields",{VbaValue::string("calculated")}).object->member("SourceField",{});},3251);
+    }
+    assert(sql.exec("CREATE TEMP TABLE copy_rows(id INTEGER,value INTEGER)"));assert(sql.exec("INSERT INTO temp.copy_rows VALUES(9,90)"));
+    auto shadowOrigin=database->member("OpenRecordset",{VbaValue::string("SELECT value FROM copy_rows")}).object;
+    error([&] {shadowOrigin->member("Fields",{VbaValue::string("value")}).object->member("SourceTable",{});},3251);
+    shadowOrigin->member("Close",{});assert(sql.exec("DROP TABLE temp.copy_rows"));
+    assert(table->member("Fields",{VbaValue::string("value")}).object->member("SourceField",{}).asText()=="value");
+    error([&] {table->member("Fields",{VbaValue::string("value")}).object->member("SourceTable",{});},3251);
+    lineage->member("Close",{});error([&] {originField->member("SourceField",{});},3420);
     auto ordered=database->member("CreateQueryDef",{VbaValue::string(""),VbaValue::string("SELECT id,value FROM copy_rows ORDER BY id DESC")}).object->member("OpenRecordset",{}).object;
     assert(ordered->member("Filter",{}).asText().empty() && ordered->member("Sort",{}).asText().empty());
     ordered->assign("Filter",VbaValue::string("value>=10")); ordered->assign("Sort",VbaValue::string("id ASC"));
@@ -1061,6 +1092,7 @@ void testRecordsetCopyQueryDef() {
     auto ascending=ordered->member("OpenRecordset",{VbaValue::integer(4)}).object;
     assert(ascending->member("Type",{}).asNumber()==4 && !ascending->member("Updatable",{}).truthy());
     assert(ascending->item("id").asNumber()==1 && ordered->item("id").asNumber()==2);
+    assert(ascending->member("Fields",{VbaValue::string("id")}).object->member("SourceTable",{}).asText()=="copy_rows");
     ascending->member("MoveNext",{}); assert(ascending->item("id").asNumber()==2);
     ordered->assign("Filter",VbaValue::string("value>10"));
     auto clipped=ordered->member("OpenRecordset",{VbaValue::integer(4)}).object;
@@ -1101,6 +1133,7 @@ r.Filter="value>10"
 r.Sort="value DESC"
 Set r=r.OpenRecordset(Type:=dbOpenSnapshot)
 If r!value<>20 Or r.RecordCount<>1 Then Err.Raise 5
+If r.Fields("value").SourceField<>"value" Or r.Fields("value").SourceTable<>"copy_rows" Then Err.Raise 5
 End Sub)VBA","CopyDefinition",host);
     if(result.status!=VbaExecutionStatus::Completed) std::cerr<<"CopyQueryDef VBA: "<<result.errorNumber<<" line "<<result.line<<" "<<result.explanation<<'\n';
     assert(result.status==VbaExecutionStatus::Completed);

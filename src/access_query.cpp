@@ -2182,7 +2182,7 @@ QMap<QString,QVariant> bindAccessQueryParameters(const AccessQueryPlan& plan, co
         throw VbaRuntimeError(3146,"SQL operation failed");
 }
 namespace {
-struct PreparedAccessQuery { QSqlQuery query; bool hiddenRank; QVector<QString> types; QVector<QString> columnTypes; };
+struct PreparedAccessQuery { QSqlQuery query; bool hiddenRank; QVector<QString> types; QVector<QString> columnTypes; QVector<QPair<QString,QString>> fieldOrigins; };
 PreparedAccessQuery prepareAccessQuery(QSqlDatabase db,const AccessQueryPlan& untyped) {
     const auto plan=resolveCurrencyQuery(db,untyped);
     if (!plan.sql.trimmed().startsWith("SELECT",Qt::CaseInsensitive))
@@ -2194,6 +2194,7 @@ PreparedAccessQuery prepareAccessQuery(QSqlDatabase db,const AccessQueryPlan& un
     if (!query.prepare(resolveQueryOrigins(db,source))) failAccessQuery(query);
     auto types=plan.resultTypes;
     QVector<QString> columnTypes;
+    QVector<QPair<QString,QString>> fieldOrigins;
     // Infer supported direct-column types from physical lineage, never cell text.
     const auto handle=query.result()->handle();
     if(handle.isValid() && QByteArray(handle.typeName())=="sqlite3_stmt*") {
@@ -2208,15 +2209,16 @@ PreparedAccessQuery prepareAccessQuery(QSqlDatabase db,const AccessQueryPlan& un
         if(statement && tableName && columnName && databaseName && !compound) {
             const auto count=sqlite3_column_count(statement)-(plan.hiddenRank && !topOne ? 1 : 0);
             if(types.size()!=count) types=QVector<QString>(count);
-            columnTypes.resize(count);
+            columnTypes.resize(count); fieldOrigins.resize(count);
             QMap<QString,QMap<QString,QString>> tables;
             QMap<QString,QMap<QString,QString>> numericTypes;
             QMap<QString,QSet<QString>> counter32;
             for(int index=0;index<count;++index) {
-                if(!types[index].isEmpty()) continue;
                 const auto* database=databaseName(statement,index); const auto* table=tableName(statement,index); const auto* column=columnName(statement,index);
                 if(!database || QByteArray(database)!="main" || !table || !column) continue;
                 const auto physicalName=QString::fromUtf8(table);
+                fieldOrigins[index]={physicalName,QString::fromUtf8(column)};
+                if(!types[index].isEmpty()) continue;
                 if(!numericTypes.contains(physicalName)) numericTypes.insert(physicalName,numericSourceFields(db,physicalName,sqliteColumnTypes(db,physicalName)));
                 const auto declared=numericTypes.value(physicalName).value(QString::fromUtf8(column).toCaseFolded());
                 if(!declared.isEmpty()) {types[index]=declared;continue;}
@@ -2233,10 +2235,10 @@ PreparedAccessQuery prepareAccessQuery(QSqlDatabase db,const AccessQueryPlan& un
             }
         }
     }
-    return {std::move(query),plan.hiddenRank && !topOne,types,columnTypes};
+    return {std::move(query),plan.hiddenRank && !topOne,types,columnTypes,fieldOrigins};
 }
 }
-QStringList accessQueryColumns(QSqlDatabase db,const AccessQueryPlan& plan,QVector<QString>* columnTypes) {
+QStringList accessQueryColumns(QSqlDatabase db,const AccessQueryPlan& plan,QVector<QString>* columnTypes,QVector<QPair<QString,QString>>* fieldOrigins) {
     SqliteExecutionBudget budget(db);
     const auto databaseHandle=db.driver()->handle();
     if (!databaseHandle.isValid() || QByteArray(databaseHandle.typeName())!="sqlite3*")
@@ -2253,6 +2255,7 @@ QStringList accessQueryColumns(QSqlDatabase db,const AccessQueryPlan& plan,QVect
         throw VbaRuntimeError(3251,"SQLite statement metadata unavailable");
     auto* statement=*static_cast<sqlite3_stmt* const*>(handle.constData());
     if (!statement) throw VbaRuntimeError(3251,"SQLite statement unavailable");
+    if(fieldOrigins) *fieldOrigins=prepared.fieldOrigins;
     QStringList columns;
     const int count=sqlite3_column_count(statement)-(prepared.hiddenRank ? 1 : 0);
     for (int i=0;i<count;++i) columns.append(QString::fromUtf8(sqlite3_column_name(statement,i)));
@@ -2283,6 +2286,7 @@ static AccessQueryResult executeAccessQueryPlanObserved(QSqlDatabase db, const A
     AccessQueryResult result;
     const int count = query.record().count() - (prepared.hiddenRank ? 1 : 0);
     for (int i = 0; i < count; ++i) result.columns.append(query.record().fieldName(i));
+    result.fieldOrigins=std::move(prepared.fieldOrigins); result.fieldOrigins.resize(count);
     result.columnTypes=prepared.columnTypes; result.columnTypes.resize(count);
     for(int i=0;i<count && i<prepared.types.size();++i) if(!prepared.types[i].isEmpty()) result.columnTypes[i]=prepared.types[i];
     if(prepared.types.size()==count) {
