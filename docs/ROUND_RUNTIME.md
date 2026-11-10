@@ -34,3 +34,31 @@ runtime or new app dependency is introduced.
 
 Reference:
 https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/round-function
+
+
+Typisierte native SQL-Normalisierung (2026-11-10)
+----------------------------------------------
+Abs/Int/Fix, Sgn, Round und CCur erhalten nachgewiesene Date/Boolean/Single/
+Currency/integrale Argumente über den gemeinsamen Scalar-Adapter. Int/Fix/Sgn
+sind zusätzliche native SQL-Einstiegspunkte. Die polymorphen Ergebnisprojektionen
+von Abs/Int/Fix/Round folgen dem nachgewiesenen ersten Argument: Byte/Integer/
+Long/Single und begrenzte Currency bleiben erhalten, Boolean verwendet den
+bestehenden Integer-Pfad, Date den bestehenden Double-Pfad. Sgn liefert Integer,
+CCur begrenzte Currency; tatsächliche DAO-Subtypen bleiben aus der Feldbindung.
+
+Die vorhandenen nativen Berechnungs-/Overflow-/Null-Regeln bleiben unverändert.
+Round über nicht-NULL Single bleibt ausdrücklich3251; unbelegte Genauigkeit wird
+nicht ergänzt. Round/Currency arbeiten mit den vorhandenen Integer-Ticks, bevor
+die beschränkte REAL-Ausgabe geprüft wird. Unproven ABS behält den bisherigen
+SQLite-int64-Pfad; dies ist Bestandserhalt, keine Access-Int64-Literal-Parität.
+Andere unproven Eingaben behalten ihre dokumentierten Transportgrenzen.
+Unterstützte einfache Verschachtelungen/Klauseln bleiben typisiert; die übrigen
+Date/Currency-Operator-/Quellgrenzen werden nicht entfernt. Kein neuer Windows-
+Oracle oder vollständiger Variant-/Promotion-/Rundungsnachweis wird behauptet.
+
+Die Familienprüfung deckte zusätzlich die fehlende native Date-zu-Currency-
+Konvertierung auf (13). Sie ist anhand MS-VBAL5.5.1.2.3 und6.1.2.3.1.3 ergänzt:
+Der standardmäßige Double-Serienwert wird durch den vorhandenen geprüften
+Currency-Konverter geführt. Positive und negative exakte Bruchteile werden
+nativ und über die tatsächliche SQL-Date-Bindung geprüft. Andere fehlende
+Coercion-/Locale-/Variant-Grenzen werden dadurch nicht geschlossen.

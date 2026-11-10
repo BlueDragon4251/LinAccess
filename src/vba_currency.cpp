@@ -71,7 +71,8 @@ VbaValue convertCurrency(const VbaValue& value) {
     if (value.kind==VbaValue::Kind::Text || value.kind==VbaValue::Kind::Decimal) return decimalCurrency(value.text);
     if (value.kind==VbaValue::Kind::Empty) return VbaValue::currency(0);
     if (value.kind==VbaValue::Kind::Boolean) return VbaValue::currency(value.boolean ? -10000 : 0);
-    if (value.kind!=VbaValue::Kind::Number) throw VbaRuntimeError(13,"Currency type mismatch");
+    // MS-VBAL 5.5.1.2.3: Date to numeric uses its standard Double representation.
+    if (value.kind!=VbaValue::Kind::Number && value.kind!=VbaValue::Kind::Date) throw VbaRuntimeError(13,"Currency type mismatch");
     return binaryCurrency(value.number);
 }
 VbaValue currencyFromRealStorage(double value) {

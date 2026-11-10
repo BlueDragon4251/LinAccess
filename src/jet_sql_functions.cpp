@@ -311,6 +311,7 @@ void boundScalarSqlFunction(sqlite3_context* context,int count,sqlite3_value** a
             if(!std::isfinite(result.number)) throw VbaRuntimeError(6,"Nonfinite bound scalar SQL result");
             native.numberResult(context,result.number);
         }
+        else if(result.kind==VbaValue::Kind::Currency) native.numberResult(context,currencyToRealStorage(result));
         else if(result.kind==VbaValue::Kind::Date) returnText(context,sqlFieldValue(result,"DATETIME").toString());
         else if(result.kind==VbaValue::Kind::Text) returnText(context,QString::fromUtf8(result.text.data(),static_cast<qsizetype>(result.text.size())));
         else if(result.kind==VbaValue::Kind::Number && (result.numericType==VbaValue::NumericType::Integer || result.numericType==VbaValue::NumericType::Long || result.numericType==VbaValue::NumericType::Byte)) native.integerResult(context,static_cast<qlonglong>(result.number));
@@ -321,6 +322,16 @@ void boundScalarSqlFunction(sqlite3_context* context,int count,sqlite3_value** a
 void bound_rgb(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"RGB",3,3,true);}
 void bound_qbcolor(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"QBColor",1,1,true);}
 void bound_partition(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Partition",4,4,true);}
+void normalized_abs_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Abs",1,1,true);}
+void normalized_abs(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Abs",1,1,false);}
+void normalized_int_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Int",1,1,true);}
+void normalized_int(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Int",1,1,false);}
+void normalized_fix_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Fix",1,1,true);}
+void normalized_fix(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Fix",1,1,false);}
+void normalized_sgn_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Sgn",1,1,true);}
+void normalized_sgn(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Sgn",1,1,false);}
+void normalized_round_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Round",1,2,true);}
+void normalized_ccur_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"CCur",1,1,true);}
 void stringCStr(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"CStr",1,1,false);}
 void stringCStrTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"CStr",1,1,true);}
 void stringStr(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Str",1,1,false);}
@@ -915,6 +926,17 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_ppmt",-1,&financialPpmt,nullptr,nullptr);
     ensure("linaccess_jet_ppmt_typed",-1,&financialPpmtTyped,nullptr,nullptr);
     ensure("linaccess_jet_round",-1,&roundNumber,nullptr,nullptr);
+    ensure("linaccess_jet_abs_typed",-1,&normalized_abs_typed,nullptr,nullptr);
+    ensure("linaccess_jet_abs",-1,&normalized_abs,nullptr,nullptr);
+    ensure("linaccess_jet_int_typed",-1,&normalized_int_typed,nullptr,nullptr);
+    ensure("linaccess_jet_int",-1,&normalized_int,nullptr,nullptr);
+    ensure("linaccess_jet_fix_typed",-1,&normalized_fix_typed,nullptr,nullptr);
+    ensure("linaccess_jet_fix",-1,&normalized_fix,nullptr,nullptr);
+    ensure("linaccess_jet_sgn_typed",-1,&normalized_sgn_typed,nullptr,nullptr);
+    ensure("linaccess_jet_sgn",-1,&normalized_sgn,nullptr,nullptr);
+    ensure("linaccess_jet_round_typed",-1,&normalized_round_typed,nullptr,nullptr);
+    ensure("linaccess_jet_ccur_typed",-1,&normalized_ccur_typed,nullptr,nullptr);
+
     ensure("linaccess_jet_asc",-1,&stringAsc,nullptr,nullptr);
     ensure("linaccess_jet_asc_typed",-1,&stringAscTyped,nullptr,nullptr);
     ensure("linaccess_jet_ascw",-1,&stringAscW,nullptr,nullptr);

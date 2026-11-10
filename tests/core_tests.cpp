@@ -1105,6 +1105,8 @@ void testCalendarFunctions() {
     assert(eval("CStr(CDate(0))").asText()=="00:00:00");
     assert(!eval("IsNumeric(CDate(2.5))").truthy() && eval("Len(CDate(2.5))").asNumber()==8);
     assert(eval("CDbl(CDate(2.5))").asNumber()==2.5);
+    assert(eval("CCur(CDate(2.5))").currencyUnits==25000 && eval("CCur(CDate(-1.25))").currencyUnits==-12500);
+    assert(eval("VarType(CCur(CDate(2.5)))=vbCurrency").truthy());
     assert(eval(R"(CDbl(CDate("1899-12-29 06:00:00")))").asNumber()==-1.25);
     assert(eval(R"(CStr(CDate(-1.25)))").asText()=="1899-12-29 06:00:00");
     assert(eval(R"(Year(CDate("2024-02-29")))").asNumber()==2024);

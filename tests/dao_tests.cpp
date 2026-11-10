@@ -2237,6 +2237,34 @@ FROM calendar_inputs WHERE marker=1)SQL");
             int actual=0;try{(void)database->member("OpenRecordset",{linaccess::VbaValue::string(failure.first)});}catch(const linaccess::VbaRuntimeError& error){actual=error.number;}
             if(actual!=failure.second) std::cerr<<"Typed color/Partition error actual="<<actual<<" expected="<<failure.second<<"\n";assert(actual==failure.second);
         }
+        calendarPhase="typed numeric normalization";
+        const auto normalizationSource=QStringLiteral("SELECT CCur(enabled) AS logical_money,CCur(offset_date) AS date_money,CCur(elapsed) AS single_money,Round(amount,0) AS money_round,Round(marker) AS integer_round,Round(enabled) AS logical_round,Round(offset_date) AS date_round,Abs(enabled) AS positive,Int(enabled) AS logical_floor,Fix(enabled) AS logical_fix,Sgn(enabled) AS sign,Abs(amount) AS positive_money,Int(amount) AS money_floor,Fix(amount) AS money_fix,Abs(elapsed) AS single_abs,Int(offset_date) AS date_floor,Fix(offset_date) AS date_fix,Round(amount,offset_date) AS decimal_round FROM calendar_inputs WHERE marker=1");
+        const auto normalizationValues=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery(normalizationSource),{});
+        assert(normalizationValues.rows.size()==1 && normalizationValues.columnTypes==QVector<QString>({"CURRENCY_REAL","CURRENCY_REAL","CURRENCY_REAL","CURRENCY_REAL","INTEGER2","INTEGER2","DOUBLE","INTEGER2","INTEGER2","INTEGER2","INTEGER2","CURRENCY_REAL","CURRENCY_REAL","CURRENCY_REAL","SINGLE_REAL","DOUBLE","DOUBLE","CURRENCY_REAL"}));
+        const double normalizationExpected[]{-1,2,16777216,2,1,-1,2,1,-1,-1,-1,1.5,1,1,16777216,2,2,1.5};
+        for(int index=0;index<18;++index) assert(normalizationValues.rows[0][index].toDouble()==normalizationExpected[index]);
+        const auto normalizationFields=database->member("OpenRecordset",{linaccess::VbaValue::string(normalizationSource.toStdString())}).object;
+        assert(normalizationFields->member("Fields",{linaccess::VbaValue::string("money_round")}).object->member("Type",{}).asNumber()==5 && normalizationFields->item("money_round").kind==linaccess::VbaValue::Kind::Currency);
+        assert(normalizationFields->member("Fields",{linaccess::VbaValue::string("single_abs")}).object->member("Type",{}).asNumber()==6 && normalizationFields->item("single_abs").numericType==linaccess::VbaValue::NumericType::Single);normalizationFields->member("Close",{});
+        const auto normalizationFilter=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT marker FROM calendar_inputs WHERE marker=1 AND Int(enabled)=-1 AND Abs(enabled)=1"),{});
+        assert(normalizationFilter.rows.size()==1 && normalizationFilter.rows[0][0].toInt()==1);
+        const auto normalizationGroups=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT Fix(offset_date) AS value,Count(*) AS tally FROM calendar_inputs GROUP BY Fix(offset_date) ORDER BY Fix(offset_date) DESC"),{});
+        assert(normalizationGroups.rows.size()==1 && normalizationGroups.rows[0][0].toDouble()==2 && normalizationGroups.rows[0][1].toInt()==2);
+        const auto normalizationNulls=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT Abs(enabled),Int(enabled),Fix(enabled),Round(amount) FROM calendar_inputs WHERE marker=2"),{});
+        assert(normalizationNulls.rows.size()==1);for(const auto& value:normalizationNulls.rows[0]) assert(value.isNull());
+        const auto rawAbs=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT Abs(-9007199254740993) AS exact"),{});
+        assert(rawAbs.rows.size()==1 && rawAbs.rows[0][0].toLongLong()==9007199254740993LL);
+        for(const auto& failure:std::vector<std::pair<std::string,int>>{
+            {"SELECT Abs(CInt(-32768))",6},
+            {"SELECT Abs(CLng(-2147483648))",6},
+            {"SELECT Round(elapsed) FROM calendar_inputs WHERE marker=1",3251},
+            {"SELECT Round(amount,enabled) FROM calendar_inputs WHERE marker=1",5},
+            {"SELECT CCur(enabled) FROM calendar_inputs WHERE marker=2",94},
+            {"SELECT Sgn(enabled) FROM calendar_inputs WHERE marker=2",94},
+            {"SELECT CCur(offset_text) FROM calendar_inputs WHERE marker=1",13}}) {
+            int actual=0;try{(void)database->member("OpenRecordset",{linaccess::VbaValue::string(failure.first)});}catch(const linaccess::VbaRuntimeError& error){actual=error.number;}
+            if(actual!=failure.second) std::cerr<<"Typed normalization error actual="<<actual<<" expected="<<failure.second<<"\n";assert(actual==failure.second);
+        }
         calendarPhase="DAO fields";
         const auto calendarFields=database->member("OpenRecordset",{linaccess::VbaValue::string(calendarSource.toStdString())}).object;
         assert(calendarFields->member("Fields",{linaccess::VbaValue::string("shifted")}).object->member("Type",{}).asNumber()==8);

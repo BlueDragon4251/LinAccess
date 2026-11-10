@@ -6692,3 +6692,20 @@ Behauptung. App/DAO/Query-Modell gebaut; bestehendes Bündel2/2 in4,21s
 Vorstande9051bce801df5dd03097e54512f435e80d2ac8e/Baum4475bc5f5bf527cb138642b11a99b65c5711c31d
 privat veröffentlicht/exakt verifiziert. Letzter Paketbeleg2d7fa91 (164,85s,
 7Hashes gleich) liegt vor Zeichen-/Längen-/Finanz-/Farb-/Partition-Bindung.
+
+
+Typisierte SQL-Rundung/Normalisierung (2026-11-10): NUMERIC_FUNCTIONS_RUNTIME.md,
+ROUND_RUNTIME.md und SQL_NUMERIC_CONVERSIONS.md. Abs/Int/Fix/Sgn/Round/CCur
+binden nachgewiesene Quelltypen und geprüfte polymorphe Resultate; Int/Fix/Sgn
+als native SQL-Callbacks ergänzt. Integer/Long-Abs-Overflow6, Currency-/Single-
+Resultate mit tatsächlichen DAO-Typen, Null-/Präzisionsgrenzen und rohe exakte
+SQLite-Abs-int64-Berechnung erhalten. Round(Single) bleibt3251. Unterstützte
+Projektionen/Klauseln geprüft; sonstige Date/Currency-Operatorgrenzen bleiben.
+Tatsächlichen Fehler13 bei CCur(Date) behoben: MS-VBAL5.5.1.2.3/6.1.2.3.1.3
+fordert den Date-Double-Serienwert durch den vorhandenen Currency-Konverter.
+Positive/negative Bruchteile im Kern und Date-Feld in SQL geprüft. App/Kern/DAO/
+Query-Modell/Currency-Ziel gebaut; Modell0,31s und Currency-Ergebnisse0,07s
+bestanden. Nach Date-Fix betroffenes Kern-/DAO-Bündel2/2 in4,47s (0,40/4,07)
+bestanden. Keine neuen IDs,456/386/70 unverändert, kein Access-Oracle behauptet.
+Vorstand3d2ff1f12bc33fa3b103cc8633f79bef7b5d27d6/Baum7da7aa9200277987742a3a1a6d06b5d7bc819051
+privat veröffentlicht/exakt verifiziert; letzter Paketbeleg2d7fa91 liegt davor.
