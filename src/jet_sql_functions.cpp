@@ -201,6 +201,7 @@ class ScalarStringHost final : public VbaHost {
 public:
     bool isNumericText(std::string_view text) override {return isAccessNumericText(text);}
     VbaValue formatValue(const VbaValue& value,std::string_view mask,bool stringResult) override {return formatAccessValue(value,mask,stringResult);}
+    VbaValue calendarName(bool month,int number,bool abbreviated,int firstDay) override {return accessCalendarName(month,number,abbreviated,firstDay);}
     VbaValue formatNumericValue(const VbaValue& value,bool currency,const VbaNumericFormatOptions& options) override {return formatAccessNumericValue(value,currency,options);}
     std::optional<std::string> field(std::string_view) override { throw VbaRuntimeError(3251,"SQL scalar has no form context"); }
     void setField(std::string_view,std::optional<std::string>) override { throw VbaRuntimeError(3251,"SQL scalar cannot assign fields"); }
@@ -342,6 +343,8 @@ void calendarDay(sqlite3_context* c,int n,sqlite3_value** a) noexcept { calendar
 void calendarHour(sqlite3_context* c,int n,sqlite3_value** a) noexcept { calendarFunction(c,n,a,"hour"); }
 void calendarMinute(sqlite3_context* c,int n,sqlite3_value** a) noexcept { calendarFunction(c,n,a,"minute"); }
 void calendarSecond(sqlite3_context* c,int n,sqlite3_value** a) noexcept { calendarFunction(c,n,a,"second"); }
+void monthName(sqlite3_context* c,int n,sqlite3_value** a) noexcept {scalarBuiltinFunction(c,n,a,"MonthName",1,2);}
+void weekdayName(sqlite3_context* c,int n,sqlite3_value** a) noexcept {scalarBuiltinFunction(c,n,a,"WeekdayName",1,3);}
 void calendarWeekday(sqlite3_context* c,int n,sqlite3_value** a) noexcept { calendarFunction(c,n,a,"weekday"); }
 
 void currencyNumber(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
@@ -782,6 +785,8 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_minute",-1,&calendarMinute,nullptr,nullptr);
     ensure("linaccess_jet_second",-1,&calendarSecond,nullptr,nullptr);
     ensure("linaccess_jet_weekday",-1,&calendarWeekday,nullptr,nullptr);
+    ensure("linaccess_jet_monthname",-1,&monthName,nullptr,nullptr,SQLITE_UTF8|SQLITE_INNOCUOUS);
+    ensure("linaccess_jet_weekdayname",-1,&weekdayName,nullptr,nullptr,SQLITE_UTF8|SQLITE_INNOCUOUS);
     ensure("linaccess_jet_ccur",-1,&currencyNumber,nullptr,nullptr);
     ensure("linaccess_jet_currency_store",1,&currencyStore,nullptr,nullptr);
     ensure("linaccess_jet_field_store",2,&fieldStore,nullptr,nullptr);

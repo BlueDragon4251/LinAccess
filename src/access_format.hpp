@@ -6,5 +6,6 @@ namespace linaccess {
 // ISO date/timestamp text and numeric OLE Automation days are accepted.
 VbaValue formatAccessValue(const VbaValue& value,std::string_view mask,bool stringResult);
 VbaValue formatAccessNumericValue(const VbaValue& value,bool currency,const VbaNumericFormatOptions& options={});
+VbaValue accessCalendarName(bool month,int number,bool abbreviated,int firstDay);
 bool isAccessNumericText(std::string_view text);
 }

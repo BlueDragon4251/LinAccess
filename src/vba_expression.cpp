@@ -824,7 +824,7 @@ bool vbaIntrinsicName(const std::string& name) {
                 "ucase","ucase$","lcase","lcase$","instr","strcomp","instrrev","strreverse","replace","split","join","filter",
                 "hex","hex$","oct","oct$","space","space$","string","string$","val","abs","int","fix","sgn",
                 "sqr","exp","log","sin","cos","tan","atn","date","time","now","timer","dateadd","datediff","datepart",
-                "year","month","day","hour","minute","second","weekday","dateserial","timeserial","datevalue","timevalue",
+                "monthname","weekdayname","year","month","day","hour","minute","second","weekday","dateserial","timeserial","datevalue","timevalue",
                 "filelen","filedatetime","curdir","curdir$","choose","switch","iif","isnumeric","isnull","isempty","rgb","qbcolor","partition","fv","pmt","ipmt","ppmt","pv","nper","rate","npv","irr","mirr","sln","syd","ddb"};
     return intrinsics.contains(name);
 }
@@ -1500,7 +1500,7 @@ private:
                         argumentName=lower(consume().value); consume();
                     }
                     const auto start = index_;
-                    const bool builtinDefaults=!localProcedure && (word=="msgbox" || word=="inputbox" || word=="inputbox$" || word=="instr" || word=="instrrev" || word=="strcomp" || word=="round" || word=="replace" || word=="split" || word=="join" || word=="filter" || word=="datediff" || word=="datepart" || word=="weekday");
+                    const bool builtinDefaults=!localProcedure && (word=="monthname" || word=="weekdayname" || word=="msgbox" || word=="inputbox" || word=="inputbox$" || word=="instr" || word=="instrrev" || word=="strcomp" || word=="round" || word=="replace" || word=="split" || word=="join" || word=="filter" || word=="datediff" || word=="datepart" || word=="weekday");
                     const bool missing=nextSymbol(",") || nextSymbol(")") || (accessExpression_ && nextSymbol(";"));
                     auto argument=missing ? VbaEvaluatedArgument{builtinDefaults ? VbaValue::empty() : VbaValue::missing(),{}}
                         : argumentExpression((!localProcedure && word=="isobject") || (signature && signature->objectArgument(args.size(),argumentName)));
@@ -1585,6 +1585,8 @@ private:
                     {"formatcurrency",{{"Expression","NumDigitsAfterDecimal","IncludeLeadingDigit","UseParensForNegativeNumbers","GroupDigits"},1}},
                     {"formatpercent",{{"Expression","NumDigitsAfterDecimal","IncludeLeadingDigit","UseParensForNegativeNumbers","GroupDigits"},1}},
                     {"formatdatetime",{{"Date","NamedFormat"},1}},
+                    {"monthname",{{"Month","Abbreviate"},1}},
+                    {"weekdayname",{{"Weekday","Abbreviate","FirstDayOfWeek"},1}},
                     {"datevalue",{{"Date"},1}}, {"timevalue",{{"Time"},1}},
                     {"dateadd",{{"Interval","Number","Date"},3}},
                     {"dateserial",{{"Year","Month","Day"},3}},
@@ -1650,6 +1652,17 @@ private:
                 if(!host_) return {};
                 if(args.size()!=1 || omitted[0]) throw error("CDate requires one argument",450);
                 return bindArithmeticValue(vbaDateValue(args[0]),jetEval_ ? VbaValue::ArithmeticBinding::Unbound : VbaValue::ArithmeticBinding::Static);
+            }
+            if(word=="monthname" || word=="weekdayname") {
+                if(!host_) return {};
+                const bool month=word=="monthname";
+                if(args.empty() || args.size()>(month ? 2u : 3u) || omitted[0]) throw error("Calendar name requires a number and optional name settings",450);
+                const auto number=coerceVbaModuleValue(scalarObjectValue(args[0]),"long").number;
+                if(number<1 || number>(month ? 12 : 7)) throw error("Invalid calendar name number",5);
+                const bool abbreviated=args.size()>1 && !omitted[1] ? coerceVbaModuleValue(scalarObjectValue(args[1]),"boolean").boolean : false;
+                const auto first=args.size()>2 && !omitted[2] ? coerceVbaModuleValue(scalarObjectValue(args[2]),"long").number : 0;
+                if(first<0 || first>7) throw error("Invalid first weekday",5);
+                return host_->calendarName(month,static_cast<int>(number),abbreviated,static_cast<int>(first));
             }
             if(word=="datevalue" || word=="timevalue" || word=="dateadd" || word=="dateserial" || word=="timeserial" || word=="datepart" || word=="datediff" || word=="year" || word=="month" || word=="day" || word=="hour" || word=="minute" || word=="second" || word=="weekday") {
                 if(!host_) return {};
@@ -2631,6 +2644,7 @@ VbaNumericFormatOptions parseVbaNumericFormatOptions(const std::vector<VbaValue>
     for(std::size_t i=1;i<arguments.size();++i) {if(arguments[i].kind==VbaValue::Kind::Missing) continue;const auto value=scalarVbaValue(arguments[i]);const auto number=coerceVbaModuleValue(value,"long").asNumber();if(i==1) {if(number==-1) continue;if(number<0 || number>28) throw VbaRuntimeError(5,"Numeric format decimal places outside0..28");result.digits=static_cast<int>(number);}else {if(number==-2) continue;if(number!=-1 && number!=0) throw VbaRuntimeError(5,"Numeric format requires a TriState flag");if(i==2) result.leading=number==-1;else if(i==3) result.parens=number==-1;else result.group=number==-1;}}
     return result;
 }
+VbaValue VbaHost::calendarName(bool,int,bool,int) {throw VbaRuntimeError(3251,"Calendar names require a locale-aware native host");}
 VbaValue VbaHost::formatNumericValue(const VbaValue&,bool,const VbaNumericFormatOptions&) {throw VbaRuntimeError(3251,"Numeric formatting requires a locale-aware native host");}
 bool VbaHost::isNumericText(std::string_view text) {try {(void)VbaValue::string(std::string(text)).asNumber();return true;}catch(...) {return false;}}
 VbaValue VbaHost::formatValue(const VbaValue&,std::string_view,bool) {

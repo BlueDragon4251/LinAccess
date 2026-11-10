@@ -84,6 +84,13 @@ int main(int argc,char** argv) {
 
     auto db=QSqlDatabase::addDatabase("QSQLITE"); db.setDatabaseName(":memory:"); assert(db.open());
     AccessQueryModel model;
+    model.execute(db,"SELECT MonthName(3),WeekdayName(1),WeekdayName(1,False,1),WeekdayName(7,False,2)");
+    assert(model.data(model.index(0,0)).toString()=="März" && model.data(model.index(0,1)).toString()=="Montag" && model.data(model.index(0,2)).toString()=="Sonntag" && model.data(model.index(0,3)).toString()=="Sonntag");
+    assert(accessCalendarName(true,3,true,0).asText()==QLocale().standaloneMonthName(3,QLocale::ShortFormat).toUtf8().toStdString());
+    for(const auto& input:std::vector<std::pair<const char*,int>>{{"SELECT MonthName(0)",5},{"SELECT WeekdayName(8)",5},{"SELECT MonthName(Null)",94},{"SELECT WeekdayName(1,False,8)",5}}) {
+        int number=0;try {model.execute(db,input.first);}catch(const VbaRuntimeError& error) {number=error.number;}assert(number==input.second);
+    }
+
     model.execute(db,"SELECT Format$(#12/31/2003#,\"yyyy\"),Format$(#12/31/2003#,\"mm\"),Format(#12/31/2003#,\"dd\")");
     assert(model.data(model.index(0,0)).toString()=="2003" && model.data(model.index(0,1)).toString()=="12" && model.data(model.index(0,2)).toString()=="31");
     assert(model.data(model.index(0,1)).metaType().id()==QMetaType::QString);
@@ -116,6 +123,8 @@ int main(int argc,char** argv) {
     try { model.execute(db,"SELECT Format$(Null,\"yyyy\")"); } catch(const VbaRuntimeError& error) { nullRejected=error.number==94; }
     assert(nullRejected && model.rowCount()==0);
     QLocale::setDefault(QLocale(QLocale::English,QLocale::UnitedStates));
+    model.execute(db,"SELECT MonthName(3),WeekdayName(1),WeekdayName(1,True,2)");
+    assert(model.data(model.index(0,0)).toString()=="March" && model.data(model.index(0,1)).toString()=="Sunday" && model.data(model.index(0,2)).toString()=="Mon");
     model.execute(db,"SELECT FormatDateTime('2003-12-31 18:05:06',3),FormatDateTime(0.75),FormatDateTime('2003-12-31 18:05:06',4)");
     assert(model.data(model.index(0,0)).toString()=="6:05:06 PM" && model.data(model.index(0,1)).toString()=="6:00:00 PM" && model.data(model.index(0,2)).toString()=="18:05");
 

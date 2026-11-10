@@ -80,6 +80,7 @@ public:
     virtual std::optional<std::string> field(std::string_view name) = 0;
     virtual void setField(std::string_view name, std::optional<std::string> value) = 0;
     virtual int compareStrings(std::string_view left,std::string_view right,VbaCompareMode mode);
+    virtual VbaValue calendarName(bool month,int number,bool abbreviated,int firstDay);
     virtual VbaValue formatValue(const VbaValue& value,std::string_view mask,bool stringResult);
     virtual VbaValue formatNumericValue(const VbaValue& value,bool currency,const VbaNumericFormatOptions& options);
     virtual bool isNumericText(std::string_view text);

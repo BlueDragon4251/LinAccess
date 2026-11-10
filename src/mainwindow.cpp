@@ -1972,6 +1972,7 @@ void MainWindow::showAccessArtifact(int id) {
                 void saveRecord() override {
                     throw std::runtime_error("DoCmd benötigt einen geöffneten Formularkontext");
                 }
+                linaccess::VbaValue calendarName(bool month,int number,bool abbreviated,int firstDay) override {return linaccess::accessCalendarName(month,number,abbreviated,firstDay);}
                 linaccess::VbaValue formatValue(const linaccess::VbaValue& value,std::string_view mask,bool stringResult) override {
                     return linaccess::formatAccessValue(value,mask,stringResult);
                 }

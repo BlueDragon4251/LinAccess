@@ -1,3 +1,4 @@
+#include "access_format.hpp"
 #include "vba_project_types.hpp"
 #include "vba_conditional.hpp"
 #pragma once
@@ -102,6 +103,7 @@ inline void refresh(QSqlDatabase db,sqlite3* native,Registry& registry) {
 class Host final : public VbaHost {
 public:
     Host(QSqlDatabase db,Registry& registry):db_(std::move(db)),registry_(registry) {}
+    VbaValue calendarName(bool month,int number,bool abbreviated,int firstDay) override {return accessCalendarName(month,number,abbreviated,firstDay);}
     std::shared_ptr<VbaObject> errorObject() override {return projectVbaErrorObject(db_);}
     void executionObserved(std::string_view source,std::string_view procedure,const VbaExecutionResult& result,bool stopped) override {recordVbaObservation(db_,source,procedure,result,stopped,"sql_function");}
     std::optional<std::string> field(std::string_view) override { unavailable(); }

@@ -530,7 +530,7 @@ keine Tests oder Teilpunkte allein zur Erhöhung einer Fortschrittszahl anlegen.
 - [x] **F137** — Application.DoCmd command paths, GoToRecord omission/constants and scalar argument validation; actual RunSQL CREATE/INSERT/UPDATE/DELETE/DROP, no extra LinAccess consent dialogs (ACTIVE_DOCUMENT_COMMANDS.md).
 - [ ] **F171** — Preserve stored source seeds, random/replication modes, full counter property semantics and exact Jet allocation/overflow behavior.
 - [ ] **F181** — Access BeforeInsert/Change/Text/Value timing oracle and PasteAppend events.
-- [ ] **F188** — Access modal/timer scheduling and original clock display-locale oracle.
+- [ ] **F188** — Access modal/timer scheduling and original clock display-locale oracle. Native MonthName/WeekdayName scope: [calendar names](CALENDAR_FUNCTIONS_RUNTIME.md).
 - [x] **F189** — Single LEFT/RIGHT joined UPDATE to the preserved direct table, including unmatched NULL sources, Is Null filtering, affected counts and atomic rollback.
 - [x] **F245** — Native VarType scalar-default capability for controls/DAO/Err, recursive/ single-read/error propagation and actual Qt/SQL type-code/EOF/closed-object regression; full COM/class/default/type/lifetime/Windows identities remain open.
 - [x] **F271** — Native app Boolean table checkboxes with Space, pending edits and checked -1/0 persistence; full Yes/No defaults/Null/visual identity remain open.

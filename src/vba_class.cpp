@@ -97,6 +97,7 @@ public:
     bool canConstructClass(std::string_view name) override {return services_->canConstructClass(name);}
     std::shared_ptr<VbaObject> constructClass(std::string_view name) override {return services_->constructClass(name);}
     int compareStrings(std::string_view a,std::string_view b,VbaCompareMode mode) override {return services_->compareStrings(a,b,mode);}
+    VbaValue calendarName(bool month,int number,bool abbreviated,int firstDay) override {return services_->calendarName(month,number,abbreviated,firstDay);}
     VbaValue formatValue(const VbaValue& value,std::string_view mask,bool string) override {return services_->formatValue(value,mask,string);}
     VbaValue formatNumericValue(const VbaValue& value,bool currency,const VbaNumericFormatOptions& options) override {return services_->formatNumericValue(value,currency,options);}
     bool isNumericText(std::string_view text) override {return services_->isNumericText(text);}

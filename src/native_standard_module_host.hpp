@@ -26,6 +26,7 @@ public:
     void maximizeForm() override;
     int compareStrings(std::string_view,std::string_view,VbaCompareMode) override;
     bool isNumericText(std::string_view) override;
+    VbaValue calendarName(bool,int,bool,int) override;
     VbaValue formatValue(const VbaValue&,std::string_view,bool) override;
     VbaValue formatNumericValue(const VbaValue&,bool,const VbaNumericFormatOptions&) override;
     void message(std::string_view) override;

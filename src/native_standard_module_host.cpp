@@ -61,6 +61,7 @@ int NativeStandardModuleHost::compareStrings(std::string_view a,std::string_view
         return QString::compare(QString::fromUtf8(a.data(),a.size()),QString::fromUtf8(b.data(),b.size()),Qt::CaseInsensitive);
     }
 bool NativeStandardModuleHost::isNumericText(std::string_view text){return isAccessNumericText(text);}
+VbaValue NativeStandardModuleHost::calendarName(bool month,int number,bool abbreviated,int firstDay){check();return accessCalendarName(month,number,abbreviated,firstDay);}
 VbaValue NativeStandardModuleHost::formatValue(const VbaValue& value,std::string_view mask,bool stringResult){return formatAccessValue(value,mask,stringResult);}
 VbaValue NativeStandardModuleHost::formatNumericValue(const VbaValue& value,bool currency,const VbaNumericFormatOptions& options){return formatAccessNumericValue(value,currency,options);}
 void NativeStandardModuleHost::message(std::string_view value){(void)messageBox(value,0,std::nullopt);}

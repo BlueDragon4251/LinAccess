@@ -5788,3 +5788,19 @@ Vorstufef4e44eb2 privat remote/Baum geprüft; DEB weiterhinad42eada vor spätere
 Umfängen. Projektweite Enum-Bindung benötigt sichtbarkeitsabhängiges Typumfeld
 und dessen Cache-/Modulzustandsidentität; keine Klassenheuristik einbauen.
 Ohne Zwischenabschluss weitere echte offene Anforderungen fortsetzen.
+
+
+Native MonthName/WeekdayName: CALENDAR_FUNCTIONS_RUNTIME.md dokumentiert echte
+lokalisierte String-Namen über aktuellen QLocale-/Standalone-Kalenderadapter,
+WeekdayName-Systemstart0 bzw. explizite VBA-Sonntag1..Samstag7, Abkürzungen,
+benannte/ausgelassene/qualifizierte Aufrufe und kontrollierte Range-/Null-Grenzen.
+Formular-, Klassen-, Standard-/Importeditor-, direkter SQL- und quellbasierter
+SQL-Modulhost integriert; kein zusätzlicher SQL-UI-/DAO-Zugriff. SQL-Funktionen
+wegen Sprachabhängigkeit nicht als deterministisch registriert. WindowsNLS/
+Hijri-/vollständige Metadaten-/Oracle-Parität bleibt offen. App/Core/GUI/Format
+gebaut; einmaliges bestehendes Bündel3/3 in24,21s (5,44/18,72/0,05),20s-Watchdog
+unverändert. Reale deutsche/englische SQL-Namen und echte Formular-/Modul-/SQL-
+Modulfunktionen geprüft. Keine neuen CTest-/Katalog-IDs;456/386/70. Vorstufe
+d339d4b2 privat remote/Baum geprüft. Letztes geprüftes DEB weiterhinad42eada vor
+den späteren Umfängen; anschließend gebündelt Paket/Originalbelege erneuern und
+weitere offene Anforderungen ohne Zwischenabschluss umsetzen.

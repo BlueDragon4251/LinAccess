@@ -296,4 +296,18 @@ VbaValue formatAccessValue(const VbaValue& input,std::string_view mask,bool stri
     if(const auto numeric=customNumericText(value,pattern,locale)) return VbaValue::string(numeric->toUtf8().toStdString());
     return VbaValue::string(dateText(value,pattern,locale).toUtf8().toStdString());
 }
+VbaValue accessCalendarName(bool month,int number,bool abbreviated,int firstDay) {
+    if(number<1 || number>(month ? 12 : 7) || firstDay<0 || firstDay>7) throw VbaRuntimeError(5,"Invalid calendar name settings");
+    const QLocale locale;const auto style=abbreviated ? QLocale::ShortFormat : QLocale::LongFormat;
+    QString name;
+    if(month) name=locale.standaloneMonthName(number,style);
+    else {
+        const int first=firstDay==0 ? static_cast<int>(locale.firstDayOfWeek())%7 : firstDay-1;
+        const int sundayBased=(first+number-1)%7;
+        name=locale.standaloneDayName((sundayBased+6)%7+1,style);
+    }
+    if(name.isEmpty()) throw VbaRuntimeError(3251,"Native calendar name is unavailable");
+    return VbaValue::string(name.toUtf8().toStdString());
+}
+
 }
