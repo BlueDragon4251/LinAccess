@@ -280,6 +280,20 @@ void testNativeMathFunctions() {
     using namespace linaccess;
     FakeForm host;
     const auto eval=[&](const std::string& expression) { return evaluateVbaExpression(expression,host,{}); };
+    for(const auto& expression:std::vector<std::string>{
+        "VarType(-CByte(255))=vbInteger And -CByte(255)=-255",
+        "VarType(-CInt(123))=vbInteger And -CInt(123)=-123",
+        "VarType(-CLng(123))=vbLong And -CLng(123)=-123",
+        "VarType(-CSng(1.25))=vbSingle And -CSng(1.25)=-1.25",
+        "VarType(-CDbl(1.25))=vbDouble And -CDbl(1.25)=-1.25",
+        "VarType(-True)=vbInteger And -True=1",
+        "VarType(-False)=vbInteger And -False=0",
+        "VarType(-Empty)=vbInteger And -Empty=0",
+        "VarType(-DateSerial(2000,1,1))=vbDate",
+        "-DateSerial(2000,1,1)=-CDbl(DateSerial(2000,1,1))",
+        "IsNull(-Null)", "VarType(-CCur(1.25))=vbCurrency",
+        "VarType(-CDec(1.25))=vbDecimal", "VarType(-CStr(1.25))=vbDouble"})
+        assert(eval(expression).truthy());
     assert(eval("Choose(2.5,10,20,30)").asNumber()==20 && eval("Choose(0,10)").kind==VbaValue::Kind::Null);
     assert(eval("Choose(2,10,Null)").kind==VbaValue::Kind::Null);
     assert(eval("Switch(False,10,True,CCur(\"1.25\"),True,30)").kind==VbaValue::Kind::Currency);

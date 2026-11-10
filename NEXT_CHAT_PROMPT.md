@@ -3249,3 +3249,19 @@ neuen Tests/IDs; F041/F067/F068/F071/F121/F122/456/386/70 unverändert. Vorstufe
 privat remote/Baum geprüft. Geprüftes DEBcc19000 liegt vor späteren Umfängen.
 Danach ohne Zwischenabschluss aktuellen Paket-/Original-/Inventarlauf ausführen
 und weitere native Zahlentyp-/Operatorschritte fortsetzen. Kein Abschlussanruf.
+
+
+Nativer unärer Minusoperator: UNARY_MINUS_TYPES.md dokumentiert korrekte
+In-range-Untertypen für Byte/Boolean/Empty/Integer/Long/Single/Date neben
+bestehendem Double/String/Currency/Decimal/Null. Access-Eval-Sonderpfad unverändert.
+Statisch/Variant-abhängige Überlaufpromotion an Integer-/Long-Minima und Date-
+Grenzen bleibt ausdrücklich offen, ebenso unäres Plus. App/Core gebaut, ein
+gebündelter bestehender Core-Lauf bestanden in5,29s. Keine neuen Test-/Katalog-IDs;
+456/386/70 unverändert. Vorstufe8fd1d50 privat remote/Baum geprüft, deren DEB unter
+/workspace/work/sql-typed-arithmetic/package/linaccess-0.7.0-Linux.deb besteht
+Build-ID/SQLite3.54.1/MDBTools1.0.1/Inhalt/Rechte/Desktop/keine-Fixtures; Original-
+Inventar48,34s/Originalpfad121,86s,2/2 in170,19s. Inventar100/78/22, bekannte
+Makroquellengrenze und fehlender vollständiger Windows-Orakelvergleich bleiben.
+Alle sieben Original-/Fixturehashes unverändert. Dieses Paket liegt vor dem
+Minusumfang. Ohne Zwischenabschluss weitere native Sprach-/Datenbankumfänge
+implementieren; kein Abschlussanruf vor tatsächlichem Gesamtabschluss.

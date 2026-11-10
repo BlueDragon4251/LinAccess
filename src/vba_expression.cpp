@@ -960,6 +960,21 @@ private:
             const auto value=scalarObjectValue(arg);
             if(value.kind==VbaValue::Kind::Null) return {};
             if(value.kind==VbaValue::Kind::Decimal) return decimalUnary("-",value);
+            if(!jetEval_) {
+                if(value.kind==VbaValue::Kind::Empty) return VbaValue::integer(0);
+                if(value.kind==VbaValue::Kind::Boolean) return VbaValue::integer(value.boolean ? 1 : 0);
+                if(value.kind==VbaValue::Kind::Number) {
+                    if(value.numericType==VbaValue::NumericType::Byte ||
+                       (value.numericType==VbaValue::NumericType::Integer && value.number!=-32768.0))
+                        return VbaValue::integer(static_cast<std::int16_t>(-value.number));
+                    if(value.numericType==VbaValue::NumericType::Long && value.number!=-2147483648.0)
+                        return VbaValue::longInteger(static_cast<std::int32_t>(-value.number));
+                    if(value.numericType==VbaValue::NumericType::Single)
+                        return VbaValue::single(static_cast<float>(-value.number));
+                }
+                if(value.kind==VbaValue::Kind::Date && -value.number>-657435.0 && -value.number<2958466.0)
+                    return VbaValue::dateSerial(-value.number);
+            }
             if(jetEval_ && value.kind==VbaValue::Kind::Number && value.numericType==VbaValue::NumericType::Long && value.number!=-2147483648.0) return VbaValue::longInteger(static_cast<std::int32_t>(-value.number));
             return value.kind==VbaValue::Kind::Currency ? negateCurrency(value) : VbaValue::numeric(-value.asNumber());
         }
