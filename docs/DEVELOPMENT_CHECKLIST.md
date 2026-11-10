@@ -4352,3 +4352,18 @@ Quellfelder; nur GUI erneut18,41s. Keine neuen CTests/Vollsuiten-/Windowsbehaupt
 456/386/70 unverändert. Sieben Hashes unverändert; Vorstufe c119f5e privat remote
 und Baum geprüft. Anschließend aktuelles Debianpaket bauen/gegen echte Binärdatei
 prüfen und unabhängige Implementierung fortsetzen; kein Zwischenabschluss.
+
+
+Native Folder.Name-Zuweisung in NATIVE_FILE_SYSTEM_OBJECT.md: tatsächlicher
+Ordner wird mit vorhandenem atomarem No-Replace-Helfer im bisherigen Elternpfad
+umbenannt; gehaltene Objektidentität/Alias und Pfad erst nach Erfolg aktualisiert.
+Unicode, Dateiinhalt, zweimaliges Umbenennen und unveränderte Pfade bei Ziel58,
+Traversal3251 und Null94 geprüft. App gebaut; bestehender Kern im ersten Lauf1/1
+in5,20s; keine weiteren Tests/IDs. F091 und456/386/70 bleiben offen/unverändert.
+Vorstufe c8bd82b privat remote/Baum geprüft. Dessen aktualisiertes DEB liegt in
+/workspace/work/population-statistics/package/linaccess-0.7.0-Linux.deb: tatsächliche
+Build-ID, MDBTools1.0.1, SQLite3.54.1/nestedJOIN/NULL/counter, Rechte/Desktop/keine
+Fixtures geprüft; danach DAO2,81s+Original120,75s,2/2 in123,57s. Bekannte Makrogrenze
+bleibt. Sieben Hashes vor Paketlauf unverändert. Paket liegt vor Folder.Name.
+Ohne Zwischenabschluss weitere allgemeine native Objekt-/Entwurfsanforderungen
+implementieren; keinen Abschlussanruf für diese Etappe auslösen.

@@ -3303,6 +3303,43 @@ End Sub)VBA","ProbeFs",host);
         assert(host.fields["FsoFileObject"]=="File:8" && host.fields["FsoFileTyped"]=="True" && host.fields["FsoFileDefault"]==file.string());
         assert(host.fields["FsoFileMetadata"]==file.string()+"|"+file.filename().string()+"|3:3");
         assert(host.fields["FsoWrongKinds"]=="False:False" && host.fields["FsoMissing"]=="False" && host.fields["FsoAbsolute"]==fs::current_path().string());
+        const auto renameRoot=directory/"folder-rename-probe";assert(fs::create_directory(renameRoot));
+        host.fields["FolderRenameRoot"]=renameRoot.string();
+        const auto renameFolder=executeVbaProcedure(R"VBA(Sub RenameFolder()
+Dim fs As Scripting.FileSystemObject, folder As Scripting.Folder, aliasFolder As Scripting.Folder, collision As Scripting.Folder
+Dim stream As Scripting.TextStream
+Set fs=New Scripting.FileSystemObject
+Set folder=fs.CreateFolder(Me!FolderRenameRoot & "/before-ä")
+Set aliasFolder=folder
+Set stream=folder.CreateTextFile("keep.txt",False)
+stream.Write "payload"
+stream.Close
+Set stream=Nothing
+folder.Name="after-ä"
+Me!FolderRenamed=folder.Name & ":" & CStr(aliasFolder Is folder) & ":" & CStr(fs.FolderExists(Me!FolderRenameRoot & "/before-ä")) & ":" & CStr(folder.Files.Count)
+Me!FolderRenamedPath=CStr(aliasFolder)
+Set collision=fs.CreateFolder(Me!FolderRenameRoot & "/collision")
+On Error Resume Next
+folder.Name="collision"
+Me!FolderCollision=CStr(Err.Number) & ":" & folder.Name
+Err.Clear
+folder.Name="../escape"
+Me!FolderInvalid=CStr(Err.Number) & ":" & folder.Name
+Err.Clear
+folder.Name=Null
+Me!FolderNull=CStr(Err.Number) & ":" & folder.Name
+On Error GoTo 0
+folder.Name="final"
+Me!FolderFinal=aliasFolder.Path & ":" & CStr(fs.FileExists(aliasFolder.Path & "/keep.txt"))
+End Sub)VBA","RenameFolder",host);
+        assert(renameFolder.status==VbaExecutionStatus::Completed);
+        assert(host.fields["FolderRenamed"]=="after-ä:True:False:1" && host.fields["FolderRenamedPath"]==(renameRoot/"after-ä").string());
+        assert(host.fields["FolderCollision"]=="58:after-ä" && host.fields["FolderInvalid"]=="3251:after-ä" && host.fields["FolderNull"]=="94:after-ä");
+        assert(host.fields["FolderFinal"]==(renameRoot/"final").string()+":True");
+        assert(!fs::exists(renameRoot/"before-ä") && !fs::exists(renameRoot/"after-ä") && fs::is_directory(renameRoot/"collision"));
+        std::ifstream renamedInput(renameRoot/"final"/"keep.txt",std::ios::binary);
+        const std::string renamedContents((std::istreambuf_iterator<char>(renamedInput)),{});assert(renamedContents=="payload");renamedInput.close();
+        assert(fs::remove_all(renameRoot)==4);
         const auto textFile=directory/"read-lines.txt";
         { std::ofstream output(textFile,std::ios::binary); output<<"one\r\ntwo\nend"; }
         host.fields["FsoTextFile"]=textFile.string();

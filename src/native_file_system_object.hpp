@@ -225,7 +225,18 @@ public:
         }
         throw VbaRuntimeError(3251,"Native Folder member is not implemented");
     }
-    void assign(std::string_view,const VbaValue&) override { throw VbaRuntimeError(3251,"Native Folder mutation is not implemented"); }
+    void assign(std::string_view name,const VbaValue& value) override {
+        std::string method(name);
+        std::transform(method.begin(),method.end(),method.begin(),[](unsigned char ch) {return std::tolower(ch);});
+        if(method!="name") throw VbaRuntimeError(3251,"Native Folder mutation is not implemented");
+        const auto newName=coerceVbaModuleValue(scalarVbaValue(value),"string").asText();
+        if(newName.empty() || newName=="." || newName==".." || newName.find_first_of("/\\:")!=std::string::npos)
+            throw VbaRuntimeError(3251,"Folder.Name requires a plain native filename");
+        const auto destination=path_.parent_path()/nativeFilePath(VbaValue::string(newName));
+        (void)nativeFolderReference(path_); // Validate the actual held directory before mutation.
+        nativeFileRename(VbaValue::string(path_.string()),VbaValue::string(destination.string()));
+        path_=destination;
+    }
 };
 inline VbaValue nativeFolderReference(std::filesystem::path path) {
     std::error_code error;

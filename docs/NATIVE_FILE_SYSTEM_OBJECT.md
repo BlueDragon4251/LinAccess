@@ -226,3 +226,25 @@ in the handoff/progress entry. No additional CTest or catalog IDs are introduced
 Reference: [Files collection](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/files-collection),
 [Folders collection](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/folders-collection),
 [public scrrun interface definitions](https://github.com/wine-mirror/wine/blob/master/dlls/scrrun/scrrun.idl).
+
+## Native Folder.Name assignment
+
+Folder.Name now renames the actual held directory within its existing parent.
+The adapter validates a plain native filename and the real directory, then uses
+the existing atomic no-replace Name helper. Existing destinations fail with58;
+invalid traversal/path-component requests retain3251 and Null retains94. The
+held object's Path/Name/scalar default changes only after successful rename;
+aliases of that same object observe the new path. Other independently obtained
+File/Folder objects retain their original pathname references.
+
+The existing helper's terminal-symlink, active working-directory ancestor,
+filesystem/error and platform boundaries remain. No folder tree copy/deletion,
+Windows attribute/drive/collation or inode-pinning equivalence is added. Other
+Folder properties remain guarded; F091 stays open.
+
+The existing core filesystem scope creates an isolated real directory and file,
+renames a Unicode folder twice through early-bound VBA, checks retained object
+identity and live child lookup, refuses collision/traversal/Null without changing
+the held path, and independently reads the original payload after relocation.
+All temporary objects are confined to the fixture directory and cleaned there.
+No additional CTest target or catalog ID is introduced.
