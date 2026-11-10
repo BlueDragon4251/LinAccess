@@ -2997,6 +2997,36 @@ End Function
     currencyCheck("CCur(\"-1.23445\")","-1.2344");
     currencyCheck("CCur(\"0.00005001\")","0.0001");
     currencyCheck("CCur(\"4.5e-5\")","0");
+    for(const auto& [expression,expected]:std::vector<std::pair<std::string,std::string>>{
+        {R"(CCur("0.0001")+CByte(2))","2.0001"},
+        {R"(CByte(2)+CCur("0.0001"))","2.0001"},
+        {R"(CCur("0.0001")-CInt(1))","-0.9999"},
+        {R"(CInt(1)-CCur("0.0001"))","0.9999"},
+        {R"(CCur("0.0001")*CLng(3))","0.0003"},
+        {R"(CLng(3)*CCur("0.0001"))","0.0003"},
+        {R"(CCur("0.0001")*CLng(-2147483648))","-214748.3648"},
+        {R"(CCur("0.0001")*CLng(2147483647))","214748.3647"},
+        {R"(CCur("922337203685477.5807")-1)","922337203685476.5807"},
+        {R"(CCur("-922337203685477.5808")+1)","-922337203685476.5808"},
+        {R"(CCur("922337203685477.5807")+True)","922337203685476.5807"},
+        {R"(Empty*CCur("922337203685477.5807"))","0"},
+        {R"(CCur("0.0001")+Empty)","0.0001"}})
+        currencyCheck(expression,expected);
+    for(const auto& expression:{R"(CCur("922337203685477.5807")+1)",R"(CCur("-922337203685477.5808")-1)",R"(CCur("-922337203685477.5808")*True)"}) {
+        int code=0;try {(void)evaluate(expression);}catch(const VbaRuntimeError& error){code=error.number;}assert(code==6);
+    }
+    {
+        auto probe=std::make_shared<ScalarProbe>();probe->value=VbaValue::currency(1);
+        const auto result=evaluateVbaExpression("probe*2",host,{{"probe",VbaValue::reference(probe)}});
+        assert(result.kind==VbaValue::Kind::Currency && result.currencyUnits==2 && probe->reads==1);
+    }
+    currencyCheck(R"(CCur("0.0001")+CDbl(2))","2.0001");
+    currencyCheck(R"(CDbl(2)-CCur("0.0001"))","1.9999");
+    currencyCheck(R"(CCur("1.2345")+CSng(0.5))","1.7345");
+    assert(evaluate(R"(CCur("922337203685477.5807")*CDbl(2))").kind==VbaValue::Kind::Number);
+    for(const auto& expression:{R"(CCur("922337203685477.5807")+CDbl(1))",R"(CCur(0)+CDbl(1e100))"}) {
+        int code=0;try {(void)evaluate(expression);}catch(const VbaRuntimeError& error){code=error.number;}assert(code==6);
+    }
     currencyCheck("CCur(True)","-1");
     currencyCheck("CCur(Empty)","0");
     currencyCheck("CCur(1.25)","1.25");

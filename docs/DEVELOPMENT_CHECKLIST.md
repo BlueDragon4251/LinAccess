@@ -4593,3 +4593,19 @@ Keine neuen CTest-/Katalog-IDs;456/386/70 unverändert. Vorstufe9226c05e privat 
 Baum geprüft. Letztes geprüftes DEB4cd0f848 liegt vor Logik-/Divisionsumfang.
 Ohne Zwischenabschluss genaue gemischte Currency-/Integral-Arithmetik und danach
 weitere offene Anforderungen fortlaufend umsetzen. Kein Abschlussanruf.
+
+
+Gemischte native Currency-/Zahlenarithmetik: CURRENCY_NUMERIC_ARITHMETIC.md
+beschreibt +,- mit ganzzahligen/Single/Double/Boolean/Empty-Operanden und * mit
+Integral/Boolean/Empty in beiden Reihenfolgen über vorhandene exakte64Bit-
+Skalierung/int128-Kernel. Keine Double-Näherung für vollständige Currencywerte;
+Range6 und ScalarDefault-einmal belegt. Microsoft-Plus-/Minus-Dokumentation
+bestätigt PräzisionsrangCurrency überDouble/Single für+,-. Double-Produkte bleiben
+Double; vollständige Single-Produktpromotion/Strings/Locale bleiben unbewiesen.
+Decimal-/Date-/Null-/Access-Eval-Grenzen bleiben; keine erweiterte physische
+MONEY-/rawSQL-/MDB-Parität. App/Core/DAO gebaut, finales bestehendes Bündel2/2
+in8,64s (5,37/3,27) bestanden; tatsächliche native Funktion liefertCurrency2.0003
+überSQL/DAO Type5/Size8/20003Einheiten. Keine neuen CTest-/Katalog-IDs;456/386/70
+unverändert. Vorstufeb80c9521 privat remote/Baum geprüft. Letztes DEB4cd0f848 liegt
+vor späteren Umfängen. Ohne Zwischenabschluss nach öffentlich dokumentierter
+Byte-Variant-Erweiterung weitere Sprach-/Datenbankanforderungen fortsetzen.

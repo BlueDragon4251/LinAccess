@@ -1468,6 +1468,12 @@ Public Function NativeMoney() As Currency
 calls=calls+1
 NativeMoney=CCur("0.1")
 End Function
+Public Function NativeMixedMoney(ByVal count As Long) As Currency
+Dim result As Variant
+result=CCur("0.0001")*count
+If VarType(result)<>vbCurrency Then Err.Raise 5
+NativeMixedMoney=result+CLng(2)
+End Function
 Public Function NativeDate() As Date
 NativeDate=DateSerial(2024,2,29)+TimeSerial(12,34,56)
 End Function
@@ -1628,6 +1634,12 @@ End Function
     assert(remainder->member("Type",{}).asNumber()==2 && remainder->member("Size",{}).asNumber()==1);
     const auto remainderValue=remainder->member("Value",{});assert(remainderValue.numericType==linaccess::VbaValue::NumericType::Byte && remainderValue.number==1);
     quotientRows->member("Close",{});
+    const auto mixedMoneyRows=database->member("OpenRecordset",{linaccess::VbaValue::string("SELECT NativeMixedMoney(3) AS amount")}).object;
+    const auto mixedAmount=mixedMoneyRows->member("Fields",{linaccess::VbaValue::string("amount")}).object;
+    assert(mixedAmount->member("Type",{}).asNumber()==5 && mixedAmount->member("Size",{}).asNumber()==8);
+    const auto mixedValue=mixedAmount->member("Value",{});assert(mixedValue.kind==linaccess::VbaValue::Kind::Currency && mixedValue.currencyUnits==20003);
+    mixedMoneyRows->member("Close",{});
+
 
 
 

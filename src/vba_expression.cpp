@@ -626,6 +626,16 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
     if(left.kind==VbaValue::Kind::Decimal || right.kind==VbaValue::Kind::Decimal) return finish(decimalBinary(op,left,right));
     if (left.kind==VbaValue::Kind::Currency && right.kind==VbaValue::Kind::Currency && (op=="+" || op=="-" || op=="*"))
         return finish(currencyBinary(op,left,right));
+    if(nativeNumericTypes && (op=="+" || op=="-" || op=="*") &&
+        (left.kind==VbaValue::Kind::Currency || right.kind==VbaValue::Kind::Currency)) {
+        const auto& other=left.kind==VbaValue::Kind::Currency ? right : left;
+        const bool integral=other.kind==VbaValue::Kind::Boolean || other.kind==VbaValue::Kind::Empty ||
+            (other.kind==VbaValue::Kind::Number && (other.numericType==VbaValue::NumericType::Byte ||
+                other.numericType==VbaValue::NumericType::Integer || other.numericType==VbaValue::NumericType::Long));
+        const bool floating=other.kind==VbaValue::Kind::Number &&
+            (other.numericType==VbaValue::NumericType::Single || other.numericType==VbaValue::NumericType::Double);
+        if(integral || (floating && op!="*")) return finish(currencyBinary(op,convertCurrency(left),convertCurrency(right)));
+    }
     if((left.kind==VbaValue::Kind::Date || right.kind==VbaValue::Kind::Date) && (op=="+" || op=="-")) {
         if(left.kind==VbaValue::Kind::Text || right.kind==VbaValue::Kind::Text) throw error("Text/Date arithmetic coercion is not implemented",3251);
         const auto a=left.asNumber(),b=right.asNumber();
