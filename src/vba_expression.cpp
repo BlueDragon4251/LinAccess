@@ -1,3 +1,4 @@
+#include "vba_expression_call.hpp"
 #include "vba_identifier_type.hpp"
 #include "vba_error_text.hpp"
 #include "vba_random.hpp"
@@ -2760,26 +2761,37 @@ VbaValue VbaHost::eval(std::string_view source) {
     static thread_local int depth=0;
     if (depth>=16) throw VbaRuntimeError(28,"Eval nesting limit exceeded");
     struct Guard { int& depth; explicit Guard(int& value):depth(value) { ++depth; } ~Guard() { --depth; } } guard(depth);
-    const VbaFunctionResolver functions=[&](std::string_view name,std::vector<VbaValue>& arguments,const std::vector<std::string>&) {
-        const auto module=moduleForProcedure(name);
-        if (!module) throw VbaRuntimeError(2425,"Eval function unavailable");
-        const auto analysis=analyzeVba(preprocessVbaConditional(*module));
-        bool publicFunction=false;
-        for (const auto& procedure:analysis.procedures) {
-            if (lower(procedure.name)!=lower(std::string(name)) || lower(procedure.kind)!="function") continue;
-            std::istringstream lines(*module); std::string declaration;
-            for (int line=0;line<procedure.line && std::getline(lines,declaration);++line) {}
+    const auto publicFunction=[&](std::string_view name) -> std::optional<std::pair<std::string,VbaArgumentSignature>> {
+        const auto canonical=vbaIdentifierName(name);
+        const auto module=moduleForProcedure(canonical);if(!module) return {};
+        const auto analysis=analyzeVba(preprocessVbaConditional(*module));bool visible=false;
+        for(const auto& procedure:analysis.procedures) {
+            if(lower(procedure.name)!=lower(canonical) || lower(procedure.kind)!="function") continue;
+            std::istringstream lines(*module);std::string declaration;
+            for(int line=0;line<procedure.line && std::getline(lines,declaration);++line) {}
             const auto start=declaration.find_first_not_of(" \t\r");
             const auto header=start==std::string::npos ? std::string{} : lower(declaration.substr(start));
-            publicFunction=!header.starts_with("private ") && !header.starts_with("private\t");
+            visible=!header.starts_with("private ") && !header.starts_with("private\t");
         }
-        if (!publicFunction) throw VbaRuntimeError(2425,"Eval requires a public function");
+        if(!visible) return {};
+        auto signature=nativeVbaProcedureSignature(*module,canonical);
+        if(!signature || !signature->function) throw VbaRuntimeError(3251,"Eval public function signature is unsupported");
+        if(const auto suffix=vbaIdentifierType(name); !suffix.empty() && signature->resultType!=suffix) throw VbaRuntimeError(13,"Eval function type character does not match its declaration");
+        return std::pair{*module,std::move(*signature)};
+    };
+    VbaFunctionResolver functions=[&](std::string_view name,std::vector<VbaValue>& arguments,const std::vector<std::string>& references) {
+        const auto binding=publicFunction(name);
+        if(!binding) throw VbaRuntimeError(2425,"Eval requires an available public function");
+        auto actuals=orderVbaExpressionActuals(binding->second,arguments,references);
         const auto epoch=vbaExecutionEpoch();
-        const auto result=executeVbaProcedureWithArguments(*module,name,*this,arguments);
+        const auto result=executeVbaProcedureWithArguments(binding->first,name,*this,actuals);
         if(vbaExecutionStopRequested() || epoch!=vbaExecutionEpoch()) throw VbaExecutionStopped{};
-        if (result.status!=VbaExecutionStatus::Completed || !result.typedReturnValue)
+        if(result.status!=VbaExecutionStatus::Completed || !result.typedReturnValue)
             throw VbaRuntimeError(result.errorNumber ? result.errorNumber : 2425,result.explanation.empty() ? "Eval function execution failed" : result.explanation,result.errorSource,result.errorHelpFile,result.errorHelpContext);
         return *result.typedReturnValue;
+    };
+    functions.argumentSignature=[&](std::string_view name) -> std::optional<VbaArgumentSignature> {
+        const auto binding=publicFunction(name);return binding ? std::optional{binding->second} : std::nullopt;
     };
     const VbaVariables variables;
     auto value=scalarVbaValue(ExpressionParser(source,this,variables,functions,false,true,nullptr,false,VbaCompareMode::Database,0,true).parse());

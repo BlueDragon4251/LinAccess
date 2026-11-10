@@ -5673,6 +5673,41 @@ counter%=ConstSideEffect()
 End Sub
 )VBA","TypedConstantWrite",host);
     assert(typedConstantWrite.status==VbaExecutionStatus::Unsupported && typedConstantWrite.errorNumber==3251 && !host.fields.contains("TypedConstantSideEffect"));
+    const auto savedTypedEvalSource=host.evalModule;
+    const std::string typedExpressionSource=R"VBA(
+Public Function ExpressionText$()
+ExpressionText$="bound"
+End Function
+Public Function ExpressionLong&()
+ExpressionLong&=17
+End Function
+Public Function ExpressionNamed%(Optional first%=1, Optional second%=2)
+ExpressionNamed%=first%*10+second%
+End Function
+Private Function ExpressionHidden$()
+Me!HiddenTypedExpression=1
+ExpressionHidden$="private"
+End Function
+)VBA";
+    host.evalModule=typedExpressionSource;
+    assert(host.eval("ExpressionText$()").asText()=="bound" && host.eval("ExpressionLong()").asNumber()==17);
+    try {(void)host.eval("ExpressionHidden$()");assert(false);}catch(const VbaRuntimeError& failure) {assert(failure.number==2425);}
+    assert(!host.fields.contains("HiddenTypedExpression"));
+    const auto typedEvent=executeVbaEventExpression(typedExpressionSource,"=ExpressionLong&()",host);
+    assert(typedEvent.status==VbaExecutionStatus::Completed && typedEvent.returnValue=="17");
+    const auto namedEvent=executeVbaEventExpression(typedExpressionSource,"=ExpressionNamed%(second:=5,first:=2)",host);
+    assert(namedEvent.status==VbaExecutionStatus::Completed && namedEvent.returnValue=="25");
+    const auto externalTypedEvent=executeVbaEventExpression("Sub LocalEventScope()\nEnd Sub","=ExpressionLong&()",host);
+    assert(externalTypedEvent.status==VbaExecutionStatus::Completed && externalTypedEvent.returnValue=="17");
+    const auto wrongTypedEvent=executeVbaEventExpression(typedExpressionSource,"=ExpressionLong%()",host);
+    assert(wrongTypedEvent.status==VbaExecutionStatus::Error && wrongTypedEvent.errorNumber==13);
+    const auto defaultNamedEvent=executeVbaEventExpression(typedExpressionSource,"=ExpressionNamed%(second:=5)",host);
+    assert(defaultNamedEvent.status==VbaExecutionStatus::Completed && defaultNamedEvent.returnValue=="15");
+    const auto libraryEvent=executeVbaEventExpression("Sub LocalEventScope()\nEnd Sub","=CStr(3)",host);
+    assert(libraryEvent.status==VbaExecutionStatus::Completed && libraryEvent.returnValue=="3");
+    const auto hiddenExternalEvent=executeVbaEventExpression("Sub LocalEventScope()\nEnd Sub","=ExpressionHidden$()",host);
+    assert(hiddenExternalEvent.status==VbaExecutionStatus::Error && !host.fields.contains("HiddenTypedExpression"));
+    host.evalModule=savedTypedEvalSource;
     testVbaDebugger();
     testVbaDebugOutput();
     testVbaProperties();

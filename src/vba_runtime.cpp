@@ -1,3 +1,5 @@
+#include "vba_analyzer.hpp"
+#include "vba_expression_call.hpp"
 #include "vba_identifier_type.hpp"
 #include "vba_error_text.hpp"
 #include "vba_random.hpp"
@@ -3775,25 +3777,39 @@ VbaExecutionResult executeVbaEventExpression(std::string_view module,std::string
     if (!validVbaExpression(source)) return {VbaExecutionStatus::Unsupported,"Event expression syntax unsupported",0};
     int line=0;
     try {
-        VbaFunctionResolver resolver=[&](std::string_view name,std::vector<VbaValue>& args,const std::vector<std::string>&) {
-            const auto epoch=vbaExecutionEpoch();
-            auto outcome=executeVbaProcedureWithArguments(module,name,host,args);
-            if (outcome.status==VbaExecutionStatus::ProcedureMissing) {
-                if (const auto external=host.moduleForProcedure(name)) outcome=executeVbaProcedureWithArguments(*external,name,host,args);
+        const auto declared=moduleProcedureNames(module);
+        const auto binding=[&](std::string_view name) -> std::optional<std::pair<std::string,VbaArgumentSignature>> {
+            const auto key=lower(vbaIdentifierName(name));std::string selected(module);
+            if(!declared.contains(key)) {
+                const auto external=host.moduleForProcedure(key);if(!external) return {};selected=*external;
+                bool visible=false;
+                for(const auto& procedure:analyzeVba(preprocessVbaConditional(selected)).procedures) {
+                    if(lower(procedure.name)!=key || lower(procedure.kind)!="function") continue;
+                    std::istringstream lines(selected);std::string header;
+                    for(int line=0;line<procedure.line && std::getline(lines,header);++line) {}
+                    header=lower(trim(header));visible=!header.starts_with("private ") && !header.starts_with("private\t");
+                }
+                if(!visible) return {};
             }
+            auto signature=localProcedureSignature(selected,key);
+            if(!signature || !signature->function) throw VbaRuntimeError(3251,"Event function signature is unsupported");
+            if(const auto suffix=vbaIdentifierType(name); !suffix.empty() && signature->resultType!=suffix) throw VbaRuntimeError(13,"Event function type character does not match its declaration");
+            return std::pair{std::move(selected),std::move(*signature)};
+        };
+        VbaFunctionResolver resolver=[&](std::string_view name,std::vector<VbaValue>& args,const std::vector<std::string>& references) {
+            const auto target=binding(name);if(!target) throw VbaRuntimeError(5,"Event function is unavailable");
+            auto actuals=orderVbaExpressionActuals(target->second,args,references);
+            const auto epoch=vbaExecutionEpoch();
+            auto outcome=executeVbaProcedureWithArguments(target->first,name,host,actuals);
             if(vbaExecutionStopRequested() || epoch!=vbaExecutionEpoch()) throw VbaExecutionStopped{};
             line=outcome.line;
-            if (outcome.status!=VbaExecutionStatus::Completed || !outcome.typedReturnValue)
+            if(outcome.status!=VbaExecutionStatus::Completed || !outcome.typedReturnValue)
                 throw VbaRuntimeError(outcome.errorNumber ? outcome.errorNumber : 5,outcome.explanation.empty() ? "Event function execution failed" : outcome.explanation,
                     outcome.errorSource,outcome.errorHelpFile,outcome.errorHelpContext);
             return *outcome.typedReturnValue;
         };
-        const auto declared=moduleProcedureNames(module);
         resolver.argumentSignature=[&](std::string_view name) -> std::optional<VbaArgumentSignature> {
-            if(!declared.contains(lower(std::string(name)))) return {};
-            auto signature=localProcedureSignature(module,name);
-            if(!signature) throw VbaRuntimeError(3251,"Declared event function binding is unsupported");
-            return signature;
+            const auto target=binding(name);return target ? std::optional{target->second} : std::nullopt;
         };
         const auto value=evaluateVbaExpression(source,host,{},resolver);
         VbaExecutionResult result{VbaExecutionStatus::Completed,{},line};

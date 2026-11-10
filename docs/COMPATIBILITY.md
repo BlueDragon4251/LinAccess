@@ -7211,3 +7211,16 @@ Bündel2/2 in3,42s (0,42/3,00), echte getrennte SQL-Module/Integer2/ByRef/Call u
 Verweigerung vor Zustandsänderung belegt.456/386/70, keine neuen IDs.
 Vorstand89088dd8402cc62741d30fc1ae7a367f97015eac/Baum24a0fe404fa6fde6c1a7cae13ff38986bcb02b4e
 privat verifiziert. Paketbeleg bleibt53e91932. Weiter mit Eval-/Event-Referenzen.
+
+
+Typisierte Eval-/Event-Funktionsbindung (2026-11-10): VBA_IDENTIFIER_TYPES.md.
+Eval: tatsächliche öffentliche Signatur/kanonischer Name, Dollarform; Access-/Jet-
+Lexikmodus unverändert. Ereignisse: lokale/öffentliche fremde Signaturen und
+Typzeichen, benannte Argumente geordnet, Optional-Missing erhalten, keine
+fingierten Adressalias-Bindungen. Private fremde Funktionen/Bibliotheksrückfall
+abgegrenzt. App/Kern/DAO2/2 in3,50s (0,41/3,09); nach Sichtbarkeitsabschluss
+betroffenes core_tests1/1 in0,42s. Analyzer-Include beim Bau korrigiert.
+Fester Katalog456/386/70 unverändert, keine neuen IDs. Weiter offenF040:
+Single-!-Namen vor Wortoperatoren/Bang-Feldmehrdeutigkeit, vollständige Bindung.
+Vorstand89824952415203a67e181c48fa6935cc96c3442c/Baumece81dd9b9b89507f8be5ad14334501906dddd3d
+privat verifiziert. Paketbeleg bleibt53e91932, frischer Paket-/Originallauf folgt.

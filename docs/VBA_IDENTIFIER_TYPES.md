@@ -143,3 +143,33 @@ bestanden. Der echte native SQL-/VBA-Pfad verwendet getrennte Standardmodule,
 belegt Integer-Metadaten/ByRef/Call und verweigert ein falsches Integer-Typzeichen
 an einer Long-Funktion vor deren Zustandsänderung. Vorhandene Quellenänderungs- und
 Mehrdeutigkeitsprüfungen bleiben im DAO-Bündel. Keine neuen CTest-/Katalog-IDs.
+
+
+## Eval und Ereignisausdrücke
+
+Eval bindet verfügbare öffentliche Funktionen über den kanonischen Inventarnamen
+und die tatsächliche Signatur; private Funktionen bleiben vor Ausführung
+verweigert. Der vorhandene Access-/Jet-Lexikmodus bleibt bestehen: es werden
+keine allgemeinen numerischen VBA-Suffixe in Access-Eval-Ausdrücke eingeschaltet.
+Die bereits lexierbare Dollar-Funktionsform wird deklarationsbasiert gebunden.
+Skalare Rückgabe-, Array-/Missing- und detaillierte Fehlergrenzen bleiben erhalten.
+
+Native Ereignisausdrücke binden lokale bzw. tatsächlich öffentliche fremde
+Funktionen und deren Typzeichen. Benannte Argumente werden gegen tatsächliche
+Parameternamen geordnet; ausgelassene optionale Werte bleiben Missing für den
+vorhandenen Standardwertpfad. Diese Callback-Actuals sind temporäre Werte, keine
+erfundenen adressierbaren ByRef-Bindungen. Vollständige ParamArray-/Projekt-/
+Library-/Access-Eval-Grammatik bleibt offen. Fremde Quellen ohne passenden
+öffentlichen Funktionsnamen verdrängen keine Bibliotheksfunktionen.
+
+Anwendung/Kern/DAO gebaut, bestehendes Bündel2/2 in3,50s bestanden (0,41/3,09s).
+Nach Ergänzung der externen Sichtbarkeits-/Bibliotheksabgrenzung bestand die
+betroffene Kernprüfung erneut1/1 in0,42s. Ein fehlender Analyzer-Include wurde
+beim Bau korrigiert. Typisierte/parameterlose lokale und fremde Ereignisaufrufe,
+benannte/optionale Werte, falsche Typzeichen, Bibliotheksrückfall und unterbliebene
+Ausführung privater Funktionen werden im vorhandenen Kernbündel geprüft.
+Keine neuen CTest-/Katalog-IDs; kein Windows-/Gesamtparitätsnachweis.
+
+Weiter offen innerhalb F040: kontextabhängige Single-`!`-Namen vor Wortoperatoren
+wie And/Mod können mit Bang-Feldern zusammenfallen; diese Fälle sind durch die
+bisherigen einfachen Suffixproben nicht als vollständig belegt anzusehen.
