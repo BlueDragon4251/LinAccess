@@ -334,7 +334,13 @@ public:
                 if(index.row()!=currentIndex().row()) return refuse(3251,"Zum Löschen mehrerer Datensätze vollständige Zeilen auswählen.");
             if(!finishEditing() || !self || !typed || model()!=typed || !currentIndex().isValid()) return false;
             const auto row=currentIndex().row(),column=currentIndex().column();
-            if(!typed->removeRow(row) || !self || !typed) return false;
+            bool useHistory=!typed->isDirty() && typed->editStrategy()==QSqlTableModel::OnManualSubmit && !typed->primaryKey().isEmpty();
+            if(useHistory) {
+                const auto values=typed->record(row);const auto key=typed->primaryKey();
+                for(int field=0;field<key.count();++field) if(values.value(key.fieldName(field)).isNull()) useHistory=false;
+            }
+            const bool removed=useHistory ? typed->stageRecordDeletions({row}) : typed->removeRow(row);
+            if(!removed || !self || !typed) return false;
             if(typed->rowCount()) setCurrentIndex(typed->index(qMin(row,typed->rowCount()-1),column));
             return true;
         }

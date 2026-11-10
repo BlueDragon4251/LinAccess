@@ -600,6 +600,19 @@ void exerciseTableMultiDelete(MainWindow& window,QSqlDatabase db) {
     view->selectionModel()->select(cells,QItemSelectionModel::ClearAndSelect);
     view->selectionModel()->setCurrentIndex(model->index(0,1),QItemSelectionModel::NoUpdate);
     QTest::keyClick(view,Qt::Key_Minus,Qt::ControlModifier); assert(!model->isDirty());
+    assert(!model->stageRecordDeletions({0,0}) && !model->isDirty());
+    assert(!model->stageRecordDeletions({0,3}) && !model->isDirty());
+    assert(model->setReadOnly(true) && !model->stageRecordDeletions({1}) && !model->isDirty() && model->setReadOnly(false));
+    view->clearSelection();view->setCurrentIndex(model->index(1,1));
+    QTest::keyClick(view,Qt::Key_Minus,Qt::ControlModifier);
+    assert(model->canUndoBlock() && model->hasPendingRecord(1) && !model->hasPendingRecord(0) && !model->hasPendingRecord(2));
+    QTest::keyClick(view,Qt::Key_Z,Qt::ControlModifier);
+    assert(!model->isDirty() && model->canRedoBlock() && model->index(1,1).data().toString()=="two");
+    QTest::keyClick(view,Qt::Key_Y,Qt::ControlModifier);
+    assert(model->hasPendingRecord(1) && model->undoBlock() && !model->isDirty());
+    assert(model->setData(model->index(1,1),"changed") && !model->canRedoBlock() && !model->canUndoBlock());
+    assert(model->undoPendingRecord(1) && !model->isDirty() && model->index(1,1).data().toString()=="two");
+    assert(!model->canRedoBlock());
     const auto selectRecords=[&] {
         QItemSelection rows; rows.select(model->index(0,0),model->index(0,1)); rows.select(model->index(2,0),model->index(2,1));
         view->selectionModel()->select(rows,QItemSelectionModel::ClearAndSelect|QItemSelectionModel::Rows);

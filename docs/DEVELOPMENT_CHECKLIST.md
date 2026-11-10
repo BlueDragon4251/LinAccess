@@ -4329,3 +4329,13 @@ Undo.456/386/70 unverändert. Vorstufe ba256ac privat remote/Baum geprüft.
 Letztes Original118,41s/DAO2,75s/7Hashes liegt vor diesem Modellumfang; geprüftes
 DEB9affc5a bleibt älter. Ohne Zwischenabschluss mit sauberer gespeicherter
 Einzeldatensatzlöschung und Invalidierung der Aktionshistorie weiterarbeiten.
+
+
+Saubere gespeicherte Einzeldatensatzlöschungen nutzen ebenfalls die geprüfte
+Cache-Aktionshistorie aus TABLE_DELETE_HISTORY.md. Zelländerungen invalidieren
+alte Wiederholungen; doppelte/ungültige Zeilen und schreibgeschützte Quellen
+bleiben unverändert. Dirty-/schlüssellose Einzelpfade behalten bestehendes
+Verhalten. App gebaut; bestehendes GUI-/Währungsfeld-Bündel2/2 in19,88s
+(19,39/0,49), keine neuen CTests;456/386/70 unverändert. Vorstufe22a29fa privat
+remote/Baum verifiziert. Weiter ohne Zwischenabschluss: native VarP/StDevP
+in Berichts-/SQL-Aggregaten und DVarP/DStDevP in echten Domainaufrufen ergänzen.

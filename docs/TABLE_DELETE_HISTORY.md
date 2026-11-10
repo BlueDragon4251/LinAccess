@@ -1,6 +1,6 @@
 # Pending multi-record deletion history
 
-The clean keyed table multi-selection path stages all selected stored rows as
+The clean keyed table single-record and multi-selection paths stage selected stored rows as
 one model history action. Ctrl+Z restores exactly those pending deletions in the
 existing cache; Ctrl+Y stages the same rows again. Neither action executes SQL,
 reselects the source, evaluates insert defaults or manufactures replacement rows.
@@ -15,7 +15,7 @@ through the existing refresh. Ordinary subsequent edits, row changes, explicit
 record cancellation and source reload invalidate history as for range paste.
 This is the existing single-action history, not an unlimited undo stack.
 
-This scope does not undo committed SQL deletion, add single-record dirty-cache
+This scope does not undo committed SQL deletion, add dirty-cache single-record
 history, restore the original selection/focus/event sequence, or implement all
 Access confirmation and deletion events. F168, F148 and F340 remain open; the
 456 catalog IDs and 386/70 partial/full counts are unchanged.
@@ -25,3 +25,8 @@ Ctrl+Minus, Ctrl+Z and Ctrl+Y; verifies saved rows remain untouched; verifies th
 exact pending rows after Redo; then forces a late foreign-key Save failure and
 checks Undo/Redo before the existing successful transactional deletion. Existing
 currency_field_documents covers the shared paste history. No new CTest target.
+
+Clean saved single-record deletion uses the same history action. Dirty-cache and
+keyless single-row paths retain their existing behavior. Existing GUI coverage
+checks singleton Undo/Redo, invalidation by subsequent cell edits, duplicate and
+out-of-range requests and read-only refusal without modifying saved data.
