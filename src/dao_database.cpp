@@ -465,6 +465,7 @@ QMap<QString,QVariant> literalDefaultValues(QSqlDatabase db,const QVector<TableS
 struct NativeRecordsetIndex {QString name;QStringList fields,types;QVector<bool> descending;bool operator==(const NativeRecordsetIndex&) const=default;};
 NativeRecordsetIndex checkedRecordsetIndex(QSqlDatabase db,const QString& table,const QString& requested);
 class Recordset;
+VbaValue copyRecordsetQueryDefinition(QSqlDatabase db,const QString& source);
 struct RecordsetData {
     std::shared_ptr<WorkspaceState> workspace;
     quint64 rollbackRevision{},fieldRevision{};
@@ -543,6 +544,7 @@ public:
         for (qsizetype i=0;i<data_->rows.size();++i) data_->bookmarks.append(data_->nextBookmark++);
         data_->cursors.insert(this);
     }
+    void retainQueryDefinition(const QString& source) { queryDefinitionSource_=source; }
     ~Recordset() override { if (cloneCounted_) --data_->workspace->clones; data_->cursors.remove(this); }
     void checkTableGeneration() const {
         data_->workspace->check();
@@ -668,6 +670,12 @@ public:
             position_=static_cast<qsizetype>(std::clamp<qlonglong>(destination,-1,data_->rows.size()));
             noMatch_=false;
             return {};
+        }
+        if (key=="copyquerydef") {
+            if(!args.empty()) throw VbaRuntimeError(450,"DAO: CopyQueryDef takes no arguments");
+            if(queryDefinitionSource_.isNull()) throw VbaRuntimeError(3251,"DAO: CopyQueryDef requires a cursor opened by a QueryDef");
+            if(!queryPlan_.parameters.isEmpty()) throw VbaRuntimeError(3251,"DAO: CopyQueryDef parameter copying is not yet validated");
+            return copyRecordsetQueryDefinition(db_,queryDefinitionSource_);
         }
         if (key=="clone") {
             if (!data_->workspace->savepoints.isEmpty()) throw VbaRuntimeError(3251,"DAO: Clone inside transaction unsupported");
@@ -948,7 +956,7 @@ private:
     struct CloneTag {};
     Recordset(const Recordset& source,CloneTag)
         : data_(source.data_),db_(source.db_),source_(source.source_),bindings_(source.bindings_),
-          table_(source.table_),readOnly_(source.readOnly_),frozen_(source.frozen_),recordsetType_(source.recordsetType_),tableGeneration_(source.tableGeneration_),indexName_(source.indexName_),position_(-1),queryPlan_(source.queryPlan_) {
+          table_(source.table_),readOnly_(source.readOnly_),frozen_(source.frozen_),recordsetType_(source.recordsetType_),tableGeneration_(source.tableGeneration_),indexName_(source.indexName_),position_(-1),queryPlan_(source.queryPlan_),queryDefinitionSource_(source.queryDefinitionSource_) {
         cloneCounted_=true; ++data_->workspace->clones;
         data_->cursors.insert(this);
     }
@@ -1150,6 +1158,7 @@ private:
     qsizetype position_{};
     Mode mode_{Mode::Browse};
     AccessQueryPlan queryPlan_;
+    QString queryDefinitionSource_;
     std::weak_ptr<VbaObject> fields_;
     QMap<QString,std::weak_ptr<Field>> fieldObjects_;
 };
@@ -1321,7 +1330,9 @@ public:
             const int mode=nativeRecordsetMode(args,0);
             require(plan_.sql.trimmed().startsWith("SELECT ",Qt::CaseInsensitive),"DAO: SELECT QueryDef required");
             if(mode==1) throw VbaRuntimeError(3251,"DAO: QueryDef cannot open a table-type Recordset");
-            return VbaValue::reference(std::make_shared<Recordset>(db_,plan_.sql,true,bindAccessQueryParameters(plan_,values_),plan_,mode));
+            auto cursor=std::make_shared<Recordset>(db_,plan_.sql,true,bindAccessQueryParameters(plan_,values_),plan_,mode);
+            cursor->retainQueryDefinition(source_);
+            return VbaValue::reference(std::move(cursor));
         }
         if (key == "execute") {
             if(plan_.sql.isEmpty()) throw VbaRuntimeError(3251,"DAO: QueryDef SQL is not set");
@@ -1489,6 +1500,9 @@ private:
     quint64 namedGeneration_{};
     std::shared_ptr<WorkspaceState> workspace_;
 };
+VbaValue copyRecordsetQueryDefinition(QSqlDatabase db,const QString& source) {
+    return VbaValue::reference(std::make_shared<QueryDefinition>(std::move(db),source));
+}
 class QueryParameters final : public VbaObject {
 public:
     std::string_view className() const override { return "Parameters"; }

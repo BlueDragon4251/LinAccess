@@ -4635,3 +4635,13 @@ OptionalLong=2& und liefertüberSQL/DAO Type5/Size8/exakt20002Currencyeinheiten.
 Keine neuen CTest-/Katalog-IDs;456/386/70 unverändert. Vorstufe56f0e012 privat
 remote/Baum geprüft. Letztes geprüftes DEB4cd0f848 liegt vor späteren Umfängen.
 Ohne Zwischenabschluss weitere tatsächliche DAO-/Datenbankfunktionen fortsetzen.
+
+
+DAO Recordset.CopyQueryDef: DAO_COPYQUERYDEF.md beschreibt echte unabhängige,
+unbenannte QueryDef-Kopien aus parameterfreien QueryDef-Cursorn mit beim Öffnen
+bewahrtem Access-SQL. Spätere Quelländerung/Close und Cursor-Clone sind belegt;
+parameterisierte Quellen sowie Cursor ohne belegte QueryDef-Herkunft bleiben3251.
+App/DAO gebaut, einmaliges bestehendes dao_execution-Bündel1/1 in3,23s bestanden,
+einschließlich tatsächlichem typisiertem VBA-Aufruf und unabhängigen SQL-Zeilen.
+Keine neuen Test-/Katalog-IDs,456/386/70; F054/F055 bleiben offen. Vorstufe
+df22cf9b privat remote/Baum geprüft. Kein Gesamtabschluss/Abschlussanruf.

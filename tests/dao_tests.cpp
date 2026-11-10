@@ -1019,7 +1019,53 @@ End Sub
     assert(sql.exec("SELECT value FROM text_lists") && sql.next() && sql.value(0).toString()=="alpha|alt|alps!");
     sql.finish(); db.close();
 }
+void testRecordsetCopyQueryDef() {
+    using namespace linaccess;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","dao-copy-querydef"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db); assert(sql.exec("CREATE TABLE copy_rows(id INTEGER PRIMARY KEY,value INTEGER)"));
+    assert(sql.exec("INSERT INTO copy_rows VALUES(1,10),(2,20)"));
+    auto database=makeDaoDatabase(db);
+    const std::string source="SELECT id,value FROM copy_rows ORDER BY id";
+    auto query=database->member("CreateQueryDef",{VbaValue::string(""),VbaValue::string(source)}).object;
+    auto cursor=query->member("OpenRecordset",{}).object;
+    query->assign("SQL",VbaValue::string("SELECT 99 AS value"));
+    query->member("Close",{});
+    auto copy=cursor->member("CopyQueryDef",{}).object;
+    assert(copy->member("SQL",{}).asText()==source && copy->member("Name",{}).asText().empty());
+    auto independent=cursor->member("CopyQueryDef",{}).object;
+    copy->assign("SQL",VbaValue::string(source+" DESC"));
+    auto reverse=copy->member("OpenRecordset",{}).object;
+    assert(reverse->item("id").asNumber()==2 && cursor->item("id").asNumber()==1);
+    assert(independent->member("SQL",{}).asText()==source);
+    auto clone=cursor->member("Clone",{}).object;
+    assert(clone->member("CopyQueryDef",{}).object->member("SQL",{}).asText()==source);
+    const auto error=[](auto operation,int expected) { int number=0;try {operation();}catch(const VbaRuntimeError& failure) {number=failure.number;}assert(number==expected); };
+    error([&] {cursor->member("CopyQueryDef",{VbaValue::integer(1)});},450);
+    auto table=database->member("OpenRecordset",{VbaValue::string("copy_rows")}).object;
+    error([&] {table->member("CopyQueryDef",{});},3251);
+    auto parameterized=database->member("CreateQueryDef",{VbaValue::string(""),VbaValue::string("PARAMETERS p LONG; SELECT id FROM copy_rows WHERE id=p")}).object;
+    parameterized->member("Parameters",{VbaValue::string("p")}).object->assign("Value",VbaValue::longInteger(1));
+    auto bound=parameterized->member("OpenRecordset",{}).object;
+    error([&] {bound->member("CopyQueryDef",{});},3251);
+    cursor->member("Close",{}); error([&] {cursor->member("CopyQueryDef",{});},3420);
+    assert(independent->member("OpenRecordset",{}).object->item("value").asNumber()==10);
+    Host host(db); const auto result=executeVbaProcedure(R"VBA(Sub CopyDefinition()
+Dim q As DAO.QueryDef, r As DAO.Recordset, copied As DAO.QueryDef
+Set q=CurrentDb.CreateQueryDef("","SELECT value FROM copy_rows ORDER BY id")
+Set r=q.OpenRecordset
+Set copied=r.CopyQueryDef
+q.Close
+r.Close
+If Not TypeOf copied Is DAO.QueryDef Then Err.Raise 5
+Set r=copied.OpenRecordset
+If r!value<>10 Then Err.Raise 5
+End Sub)VBA","CopyDefinition",host);
+    if(result.status!=VbaExecutionStatus::Completed) std::cerr<<"CopyQueryDef VBA: "<<result.errorNumber<<" line "<<result.line<<" "<<result.explanation<<'\n';
+    assert(result.status==VbaExecutionStatus::Completed);
+}
+
 void testOwnedQueryDefs() {
+    testRecordsetCopyQueryDef();
     auto db=QSqlDatabase::addDatabase("QSQLITE","owned-querydef-sql"); db.setDatabaseName(":memory:"); assert(db.open());
     QSqlQuery sql(db);
     assert(sql.exec("CREATE TABLE records(value INTEGER)"));
