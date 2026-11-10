@@ -438,6 +438,27 @@ End Function)BOUND";
     for(const auto& expression:{"CDate(2958465)+Sqr(1)","CDate(2958465)+Cos(0)","CDate(2958465)+Exp(0)"}) {
         int code=0;try {(void)eval(expression);}catch(const VbaRuntimeError& error){code=error.number;}assert(code==6);
     }
+    for(const auto& expression:std::vector<std::string>{
+        R"(VarType(CByte(255) \ CByte(2))=vbByte And (CByte(255) \ CByte(2))=127)",
+        R"(VarType(CByte(255) Mod CByte(2))=vbByte And (CByte(255) Mod CByte(2))=1)",
+        R"(VarType(CByte(255) \ CInt(2))=vbInteger)",
+        R"(VarType(True \ CByte(1))=vbInteger And (True \ CByte(1))=-1)",
+        R"(VarType(Empty \ CByte(2))=vbInteger)",
+        R"(VarType(CLng(255) Mod CByte(2))=vbLong)",
+        R"(TypeName(CVar(CInt(-32768)) \ CInt(-1))="Long")",
+        R"((CVar(CInt(-32768)) \ CInt(-1))=32768)",
+        R"(TypeName(CVar(CLng(-2147483648)) \ CLng(-1))="Double")",
+        R"((CVar(CLng(-2147483648)) \ CLng(-1))=2147483648)",
+        R"(TypeName((CVar(CInt(32767)) \ CInt(1))+1)="Long")",
+        R"(TypeName((CVar(CLng(2147483647)) Mod CLng(-2147483648))+1)="Double")",
+        R"(IsNull(Null \ 0) And IsNull(Null Mod 0))",
+        R"((CInt(-7) Mod CInt(3))=-1 And (CInt(7) Mod CInt(-3))=1)"})
+        assert(eval(expression).truthy());
+    for(const auto& expression:std::vector<std::string>{
+        R"(CInt(-32768) \ CInt(-1))",R"(CLng(-2147483648) \ CLng(-1))",
+        R"((CInt(32767) \ CInt(1))+1)"}) {
+        int code=0;try {(void)eval(expression);}catch(const VbaRuntimeError& error){code=error.number;}assert(code==6);
+    }
     assert(eval("Choose(2.5,10,20,30)").asNumber()==20 && eval("Choose(0,10)").kind==VbaValue::Kind::Null);
     assert(eval("Choose(2,10,Null)").kind==VbaValue::Kind::Null);
     assert(eval("Switch(False,10,True,CCur(\"1.25\"),True,30)").kind==VbaValue::Kind::Currency);

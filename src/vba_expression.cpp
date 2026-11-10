@@ -566,12 +566,23 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
         const auto b=static_cast<std::int64_t>(coerceVbaModuleValue(right,"long").number);
         if (b==0) throw error("Integer division by zero",11);
         const auto answer=op=="mod" ? a%b : a/b;
-        const bool narrow=left.kind==VbaValue::Kind::Number && right.kind==VbaValue::Kind::Number
-            && left.numericType==VbaValue::NumericType::Integer && right.numericType==VbaValue::NumericType::Integer;
-        if (answer<(narrow ? std::numeric_limits<std::int16_t>::min() : std::numeric_limits<std::int32_t>::min())
-            || answer>(narrow ? std::numeric_limits<std::int16_t>::max() : std::numeric_limits<std::int32_t>::max()))
-            throw error("Integer arithmetic overflow",6);
-        return narrow ? VbaValue::integer(static_cast<std::int16_t>(answer)) : VbaValue::longInteger(static_cast<std::int32_t>(answer));
+        using Type=VbaValue::NumericType;
+        Type type=Type::Long;
+        const auto smallIntegral=[](const VbaValue& value) {
+            return value.kind==VbaValue::Kind::Boolean || value.kind==VbaValue::Kind::Empty ||
+                (value.kind==VbaValue::Kind::Number && (value.numericType==Type::Byte || value.numericType==Type::Integer));
+        };
+        if(nativeNumericTypes && left.kind==VbaValue::Kind::Number && right.kind==VbaValue::Kind::Number &&
+            left.numericType==Type::Byte && right.numericType==Type::Byte) type=Type::Byte;
+        else if(nativeNumericTypes ? smallIntegral(left) && smallIntegral(right) :
+            left.kind==VbaValue::Kind::Number && right.kind==VbaValue::Kind::Number &&
+            left.numericType==Type::Integer && right.numericType==Type::Integer) type=Type::Integer;
+        if(type==Type::Byte) return finish(VbaValue::byte(static_cast<unsigned char>(answer)));
+        if(type==Type::Integer && answer>=-32768 && answer<=32767) return finish(VbaValue::integer(static_cast<std::int16_t>(answer)));
+        if((type==Type::Long || binding==Binding::Variant) && answer>=-2147483648LL && answer<=2147483647LL)
+            return finish(VbaValue::longInteger(static_cast<std::int32_t>(answer)));
+        if(binding==Binding::Variant) return finish(VbaValue::numeric(static_cast<double>(answer)));
+        throw error("Integer arithmetic overflow",6);
     }
     if (op=="^") {
         if (left.kind==VbaValue::Kind::Null || right.kind==VbaValue::Kind::Null) return {};

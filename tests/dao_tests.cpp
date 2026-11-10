@@ -1456,6 +1456,10 @@ End Function
 Public Function NativeByteBits() As Byte
 NativeByteBits=CByte(1) Eqv CByte(2)
 End Function
+Public Function NativeByteQuotient() As Byte
+If VarType(CByte(255) \ CByte(2))<>vbByte Then Err.Raise 5
+NativeByteQuotient=CByte(255) Mod CByte(2)
+End Function
 Public Function NativeNeedsUI() As String
 MsgBox "must not display"
 NativeNeedsUI="unreachable"
@@ -1619,6 +1623,12 @@ End Function
     assert(bits->member("Type",{}).asNumber()==2 && bits->member("Size",{}).asNumber()==1);
     const auto byteValue=bits->member("Value",{});assert(byteValue.numericType==linaccess::VbaValue::NumericType::Byte && byteValue.number==252);
     byteRows->member("Close",{});
+    const auto quotientRows=database->member("OpenRecordset",{linaccess::VbaValue::string("SELECT NativeByteQuotient() AS remainder")}).object;
+    const auto remainder=quotientRows->member("Fields",{linaccess::VbaValue::string("remainder")}).object;
+    assert(remainder->member("Type",{}).asNumber()==2 && remainder->member("Size",{}).asNumber()==1);
+    const auto remainderValue=remainder->member("Value",{});assert(remainderValue.numericType==linaccess::VbaValue::NumericType::Byte && remainderValue.number==1);
+    quotientRows->member("Close",{});
+
 
 
     const auto amount=typedRows->member("Fields",{linaccess::VbaValue::string("amount")}).object;

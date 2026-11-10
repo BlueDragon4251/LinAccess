@@ -3389,3 +3389,18 @@ danachGUI19,97/Inventar46,77/Original118,66,3/3 in185,40s;100/78/22 und7Hashes
 unverändert. Makroquellengrenze bleibt. Paket liegt vor Logikumfang. Ohne
 Zwischenabschluss native Ganzzahldivision/Modulo und weitere Anforderungen
 fortlaufend implementieren, kein Abschlussanruf vor tatsächlichem Gesamtabschluss.
+
+
+Native Ganzzahldivision/Modulo: INTEGRAL_DIVISION_TYPES.md dokumentiert tatsächliche
+Byte-/Integer-/Long-Ergebnisse für unterstützte integrale Operandentypen und
+Deklarations-/Variant-Provenienz für Folgearithmetik. Feste signed-Minima bleiben
+Überlauf6, Variant-Integer/Long erweitern Long/Double. Bisherige geprüfte Long-
+Eingabekonvertierung, int64-Zwischenrechnung für32Bit-Werte, Abschneiden Richtung0,
+vorzeichenbehaftetesMod, Null und Nullteiler11 bleiben. Gemischte weitere Typen,
+Suffixe/64Bit/Windows nicht pauschal behauptet. App/Core/DAO gebaut; erstes
+bestehendes Bündel2/2 in8,72s (5,55/3,17) bestanden. Tatsächliche native Byte-
+Funktion prüft Quotienten-VarType und liefertMod1 über SQL/DAO Type2/Size1/Byte.
+Keine neuen CTest-/Katalog-IDs;456/386/70 unverändert. Vorstufe9226c05e privat remote/
+Baum geprüft. Letztes geprüftes DEB4cd0f848 liegt vor Logik-/Divisionsumfang.
+Ohne Zwischenabschluss genaue gemischte Currency-/Integral-Arithmetik und danach
+weitere offene Anforderungen fortlaufend umsetzen. Kein Abschlussanruf.
