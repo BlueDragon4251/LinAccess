@@ -2,9 +2,21 @@
 #include <utility>
 
 namespace linaccess {
+namespace {
+bool primitiveType(std::string_view type) {
+    switch(type.size()) {
+    case 4:return type=="byte" || type=="date" || type=="long";
+    case 6:return type=="string" || type=="single" || type=="double";
+    case 7:return type=="boolean" || type=="integer" || type=="variant" || type=="decimal";
+    case 8:return type=="currency";
+    default:return false;
+    }
+}
+}
 // Closed native class vocabulary. Project classes, reference ordering and COM
 // interfaces require a real binder, not a guessed match against TypeName.
 std::string_view nativeAccessObjectType(std::string_view type) {
+    if(primitiveType(type)) return {};
     static constexpr std::pair<std::string_view,std::string_view> types[]{
         {"form","access.form"},{"report","access.report"},{"grouplevel","access.grouplevel"},{"control","access.control"},{"section","access.section"},
         {"application","access.application"},{"forms","access.forms"},{"reports","access.reports"},{"controls","access.controls"},
@@ -20,6 +32,7 @@ std::string_view nativeAccessObjectType(std::string_view type) {
 }
 
 std::string_view nativeScriptingObjectType(std::string_view type) {
+    if(!type.starts_with("scripting.")) return {};
     if(type=="scripting.dictionary") return "scripting.dictionary";
     if(type=="scripting.textstream") return "scripting.textstream";
     if(type=="scripting.folders") return "scripting.folders";
@@ -31,6 +44,7 @@ std::string_view nativeScriptingObjectType(std::string_view type) {
 }
 
 std::string_view nativeObjectType(std::string_view type) {
+    if(primitiveType(type)) return {};
     if(const auto access=nativeAccessObjectType(type);!access.empty()) return access;
     if(const auto scripting=nativeScriptingObjectType(type);!scripting.empty()) return scripting;
     if(type=="collection" || type=="vba.collection") return "vba.collection";

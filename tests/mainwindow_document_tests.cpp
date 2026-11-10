@@ -85,6 +85,7 @@
 #undef NDEBUG
 #endif
 #include <cassert>
+#include <chrono>
 #include <cstdlib>
 #include <iostream>
 
@@ -3233,6 +3234,8 @@ int main(int argc,char** argv) {
     QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
     QApplication app(argc,argv); app.setQuitOnLastWindowClosed(false); app.setApplicationName("LinAccessSyntheticGuiTest"); app.setOrganizationName("LinAccessSyntheticTests");
     QStandardPaths::setTestModeEnabled(true);
+    const auto profileStart=std::chrono::steady_clock::now();
+    const auto phase=[&](const char* name) {if(qEnvironmentVariableIsSet("LINACCESS_GUI_PROFILE")) std::cerr<<"GUI phase "<<name<<" ms="<<std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-profileStart).count()<<'\n';};
     QTimer watchdog; watchdog.setSingleShot(true); watchdog.setTimerType(Qt::PreciseTimer);
     QObject::connect(&watchdog,&QTimer::timeout,[] {
         auto* modal=QApplication::activeModalWidget();
@@ -3649,7 +3652,7 @@ int main(int argc,char** argv) {
     exerciseScalarRelationDesigner(window,6);
     exerciseScalarRelationDesigner(window,8);
     exerciseStoredForm(window,db);
-    exerciseStoredReport(window,db);
+    exerciseStoredReport(window,db);phase("before-table-wizard");
     {
         QTimer::singleShot(0,&window,[&] {
             auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog && dialog->objectName()=="native-table-designer");
@@ -3666,16 +3669,21 @@ int main(int argc,char** argv) {
             dialog->findChild<QPushButton*>("native-table-add-field")->click();
             grid->item(2,0)->setText("enabled"); qobject_cast<QComboBox*>(grid->cellWidget(2,1))->setCurrentText("BOOLEAN"); grid->item(2,3)->setText("True");
             dialog->findChild<QPushButton*>("native-table-add-field")->click();grid->item(3,0)->setText("sample");qobject_cast<QComboBox*>(grid->cellWidget(3,1))->setCurrentText("SINGLE");grid->item(3,3)->setText("0.1");dialog->findChild<QPushButton*>("native-table-add-field")->click();grid->item(4,0)->setText("moment");qobject_cast<QComboBox*>(grid->cellWidget(4,1))->setCurrentText("DATE");grid->item(4,3)->setText("=#2026-11-08#");
+            dialog->findChild<QPushButton*>("native-table-add-field")->click();grid->item(5,0)->setText("wizard_currency");auto* currencyType=qobject_cast<QComboBox*>(grid->cellWidget(5,1));currencyType->setCurrentText("CURRENCY");assert(currencyType->currentText()=="CURRENCY");grid->item(5,3)->setText("1.23455");
             grid->item(1,4)->setText("0");
             QTimer::singleShot(0,dialog,[] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(box);box->accept();});
             buttons->button(QDialogButtonBox::Save)->click();
             assert(dialog->isVisible() && !db.tables().contains("authored_defaults") && grid->item(1,3)->text()=="\"ui value\"");
-            grid->item(1,4)->setText("12");qobject_cast<QCheckBox*>(grid->cellWidget(1,5))->setChecked(false);buttons->button(QDialogButtonBox::Save)->click();
+            grid->item(1,4)->setText("12");qobject_cast<QCheckBox*>(grid->cellWidget(1,5))->setChecked(false);
+            QTimer::singleShot(0,dialog,[] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(box);box->accept();});buttons->button(QDialogButtonBox::Save)->click();assert(dialog->isVisible() && !db.tables().contains("authored_defaults") && grid->item(5,3)->text()=="1.23455");
+            grid->item(5,3)->setText("1.2345");buttons->button(QDialogButtonBox::Save)->click();
         });
-        action(window,"+ Tabelle")->trigger();
+        action(window,"+ Tabelle")->trigger();phase("after-table-wizard");
         QSqlQuery authored(db); assert(authored.exec("INSERT INTO authored_defaults DEFAULT VALUES"));
         assert(authored.exec("SELECT qty,label,enabled FROM authored_defaults") && authored.next());
         assert(authored.value(0).toInt()==7 && authored.value(1).toString()=="ui value" && authored.value(2).toInt()==-1); authored.finish();
+        auto wizardTable=linaccess::makeDaoDatabase(db)->member("TableDefs",{linaccess::VbaValue::string("authored_defaults")}).object;auto wizardMoney=wizardTable->member("Fields",{linaccess::VbaValue::string("wizard_currency")}).object;assert(wizardMoney->member("Type",{}).asNumber()==5 && wizardMoney->member("Size",{}).asNumber()==8);
+        assert(authored.exec("SELECT wizard_currency FROM authored_defaults") && authored.next() && linaccess::qtFieldValue(authored.value(0),"CURRENCY_REAL").currencyUnits==12345);authored.finish();wizardTable->member("Fields",{}).object->member("Delete",{linaccess::VbaValue::string("wizard_currency")});
         assert(linaccess::jetLongAccessColumns(db,"authored_defaults").contains("id"));
         assert(authored.exec("SELECT sample FROM authored_defaults") && authored.next() && authored.value(0).toDouble()==static_cast<double>(0.1f));authored.finish();assert(authored.exec("SELECT moment FROM authored_defaults") && authored.next() && authored.value(0).toString()=="2026-11-08 00:00:00");authored.finish();
         {linaccess::AccessTableModel model(nullptr,db);model.setTable("authored_defaults");model.setEditStrategy(QSqlTableModel::OnManualSubmit);assert(model.select());const auto cell=model.index(0,model.fieldIndex("sample"));assert(model.setData(cell,"0.2") && !model.setData(cell,"1e40"));assert(model.submitTransactionally());}
@@ -3746,7 +3754,7 @@ int main(int argc,char** argv) {
             dialog->findChild<QLineEdit*>("native-field-property-default")->setText("2.0001");dialog->findChild<QPushButton*>("native-field-property-save")->click();assert(dialog->findChild<QLineEdit*>("native-field-property-default")->text()=="2.0001");assert(values.exec("SELECT COUNT(*) FROM authored_defaults WHERE ui_currency=1.25") && values.next() && values.value(0).toInt()==2);values.finish();
             QTimer::singleShot(0,dialog,[] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(box);box->button(QMessageBox::Yes)->click();});dialog->findChild<QPushButton*>("native-field-delete")->click();assert(list->rowCount()==6);dialog->reject();
         });
-        auto* editFields=window.findChild<QAction*>("native-table-fields-edit");assert(editFields);editFields->trigger();
+        auto* editFields=window.findChild<QAction*>("native-table-fields-edit");assert(editFields);editFields->trigger();phase("after-field-editor");
         assert(authored.exec("SELECT COUNT(*) FROM authored_defaults WHERE qty=7 AND label='ui value'") && authored.next() && authored.value(0).toInt()==2);authored.finish();
         {linaccess::AccessTableModel model(nullptr,db);model.setTable("authored_defaults");assert(model.select());const int column=model.fieldIndex("qty");assert(column==0 && model.headerData(column,Qt::Horizontal).toString()=="Anzahl Ä" && model.headerData(column,Qt::Horizontal,Qt::ToolTipRole).toString().contains("Technischer Hinweis") && model.record().fieldName(column)=="qty");}
         {
@@ -3970,30 +3978,30 @@ End Sub
         const auto closing=std::make_shared<ScalarFormatValue>();closing->callback=[&form] {assert(form.close());};expect([&] {writable->assign("Value",VbaValue::reference(closing));},2450);assert(closing->reads==1);
     }
     testEditableControlFormats(window,db);
-    testNativeMacros(window,db);
-    testNativeMacroDesigner(window,db);
-    testNativeModuleEditor(window,db);
-    testStandaloneMacroExecution(window,db);
-    testMacroRepeatExpressions(window,db);
-    testNativeMacroGroups(window,db);
-    testNativeMacroStorage(window,db);
-    testMacroProjectCommands(window,db);
-    testMacroSelectObject(window,db);
-    testStopAllMacros(window,db);
-    testMacroMessageArguments(window,db);
-    testModuleRecordNavigation(window,db);
-    testModuleFindRecord(window,db);
-    testModuleUiCommands(window,db);
-    testStandaloneProjectCatalog(window,db);
-    testStandaloneDocuments(window,db);
-    testProjectDocumentLifetime(window,db);
-    testStandaloneFileDialog(window,db);
-    testStandaloneApplicationServices(window,db);
-    testStandaloneDocumentOpening(window,db);
-    testMacroArgumentPresence(window,db);
-    testNativeMacroSetValue(window,db);
-    testNativeProjectGuiExtensions(window,db);
-    testNativeAutoExec(window,db);
-    assert(window.close()); dispose(); watchdog.stop();
+    testNativeMacros(window,db);phase("testNativeMacros");
+    testNativeMacroDesigner(window,db);phase("testNativeMacroDesigner");
+    testNativeModuleEditor(window,db);phase("testNativeModuleEditor");
+    testStandaloneMacroExecution(window,db);phase("testStandaloneMacroExecution");
+    testMacroRepeatExpressions(window,db);phase("testMacroRepeatExpressions");
+    testNativeMacroGroups(window,db);phase("testNativeMacroGroups");
+    testNativeMacroStorage(window,db);phase("testNativeMacroStorage");
+    testMacroProjectCommands(window,db);phase("testMacroProjectCommands");
+    testMacroSelectObject(window,db);phase("testMacroSelectObject");
+    testStopAllMacros(window,db);phase("testStopAllMacros");
+    testMacroMessageArguments(window,db);phase("testMacroMessageArguments");
+    testModuleRecordNavigation(window,db);phase("testModuleRecordNavigation");
+    testModuleFindRecord(window,db);phase("testModuleFindRecord");
+    testModuleUiCommands(window,db);phase("testModuleUiCommands");
+    testStandaloneProjectCatalog(window,db);phase("testStandaloneProjectCatalog");
+    testStandaloneDocuments(window,db);phase("testStandaloneDocuments");
+    testProjectDocumentLifetime(window,db);phase("testProjectDocumentLifetime");
+    testStandaloneFileDialog(window,db);phase("testStandaloneFileDialog");
+    testStandaloneApplicationServices(window,db);phase("testStandaloneApplicationServices");
+    testStandaloneDocumentOpening(window,db);phase("testStandaloneDocumentOpening");
+    testMacroArgumentPresence(window,db);phase("testMacroArgumentPresence");
+    testNativeMacroSetValue(window,db);phase("testNativeMacroSetValue");
+    testNativeProjectGuiExtensions(window,db);phase("testNativeProjectGuiExtensions");
+    testNativeAutoExec(window,db);phase("testNativeAutoExec");
+    assert(window.close()); dispose();phase("finished"); watchdog.stop();
     std::cout<<"Main window: native project/explorer opening, independent nonmodal form/report lifetime, deduplication, modal metadata, cancellation, SQL save and retained close/MsgBox passed\n";
 }

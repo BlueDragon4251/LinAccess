@@ -6099,3 +6099,31 @@ privat remote/Baum geprüft; letzter Paket-/Originalbelega23c7009 vor Folgeände
 Nach Sicherung gesammelten Stand paketieren/Original/Inventar gebündelt prüfen;
 keine vollständige Jet-/Currency-/Windows-/Distributions-Parität behaupten.
 Ohne Zwischenabschluss weitere allgemeine Anforderungen umsetzen.
+
+
+Currency im anfänglichen Tabellenassistenten: CURRENCY_TABLE_WIZARD.md dokumentiert
+Auswahl/Typ5-Mapping und numerische Vorprüfung, anschließend exakte bereits
+implementierte DAO-Default-Prüfung vor TableDefs.Append. Abgewiesene Präzision
+hinterlässt keine Teiltabelle und erhält Dialogeingaben; korrigierter Vierstellen-
+Default wird tatsächlich gespeichert. App/GUI gebaut; erster GUI-Lauf überschritt20s; erster Lookup-Retry ebenfalls. Phasenmessung
+zeigte nur26ms für den Assistenten. Unveränderliche VBA-Syntaxmuster werden nun
+einmalig kompiliert. Bestehendes Core/GUI/DAO-Bündel3/3 in15,18s bestanden, GUI in12,29s bei unverändert20s-Watchdog bestanden; echte Dialog-/Metadata- /
+SQL-/Currency-Wert-Belege, keine neuen CTest-/Katalog-IDs;456/386/70.
+Vorstufeda72e727 privat remote/Baum geprüft: neues DEB/Paketprüfung bestanden,
+Original1/1 in120,33s und Inventar1/1 in46,11s, sieben geschützte Hashes unverändert.
+Aktueller Inventarbeleg jetztda72e727100/78/22 (73+5 Ausführungen ohne Access-Orakel,
+3 Originalspalten/9 fehlende Abhängigkeiten/10 Jet-/Bindinggrenzen). Makrogrenze
+bleibt, kein positiver initialisierter Verkauf/Druck. Dieses Paket liegt vor
+Currency-Auswahl im anfänglichen Assistenten. Ohne Zwischenabschluss fortsetzen;
+keine vollständige Currency-/Jet-/Windows-/Distributions-Parität behaupten.
+
+
+VBA-Syntaxmuster-Engpass: VBA_IMMUTABLE_SYNTAX_PATTERNS.md dokumentiert62 feste
+Regexmuster, deren unveränderte Bytes/Flags jetzt einmalig initialisiert werden.
+Keine Modulquellen/Symbolumgebungen/Argumente/Host-/Variablen-/Ergebniszustände neu
+gecacht; Match-Ergebnisse bleiben lokal. Primitive Typen überspringen Objekttabellen,
+Scripting-Lookup fremde Präfixe. Optionaler GUI-Phasenlogger enthält nur Namen/Zeit.
+20s-Watchdog unverändert, keine vorhandenen Prüfungen entfernt; finales bestehendes
+Core/GUI/DAO-Bündel3/3 in15,18s (0,55/12,29/2,35) bestanden. Tatsächliche Etappenzeiten,
+keine allgemeine Benchmark-/Paritätsquote; keine neuen CTest-/Katalog-IDs;456/386/70.
+Ohne Zwischenabschluss weitere allgemeine Anforderungen fortsetzen.
