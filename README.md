@@ -1291,3 +1291,5 @@ und weitere native Zahlentyp-/Operatorschritte fortsetzen. Kein Abschlussanruf.
 Native SQL string conversion: [CStr and checked source types](docs/NATIVE_SQL_CSTR.md).
 
 Laufende Berichtssummen je Gruppe oder über alle Datensätze: [Umfang und Ausgabe](docs/REPORT_RUNNING_SUM.md).
+
+SQL-Zeichenfolgen mit nativen VBA-Regeln: [Str, Left/Right/Mid und Replace](docs/NATIVE_SQL_STRINGS.md).

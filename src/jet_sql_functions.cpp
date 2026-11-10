@@ -21,6 +21,7 @@
 #include "vba_decimal.hpp"
 #include "vba_qt_value.hpp"
 #include <QSet>
+#include <QStringList>
 #include <QLibrary>
 #include <QSqlDriver>
 #include <QSqlQuery>
@@ -261,37 +262,62 @@ void double_subtract(sqlite3_context* context,int count,sqlite3_value** args) no
 void double_multiply(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"*",2,2,0,true);}
 void double_divide(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"/",2,2,0,true);}
 void numericPower(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"^",2,2,0,true);}
-void stringCStrImpl(sqlite3_context* context,int count,sqlite3_value** args,bool typed) noexcept {
+void stringSqlFunction(sqlite3_context* context,int count,sqlite3_value** args,std::string_view builtin,int minimum,int maximum,bool typed) noexcept {
     auto& native=api();
     try {
-        if(count!=(typed ? 2 : 1)) throw VbaRuntimeError(450,"CStr requires one value");
-        QString declared;
+        const int offset=typed ? 1 : 0,arguments=count-offset;
+        if(arguments<minimum || arguments>maximum) throw VbaRuntimeError(450,"Invalid string SQL arity");
+        QStringList declared;
         if(typed) {
-            if(native.type(args[0])!=SQLITE_TEXT) throw VbaRuntimeError(450,"Typed CStr requires a type");
-            declared=scalarText(args[0]);
-            static const QSet<QString> supported{"CURRENCY_REAL","DATETIME","SINGLE_REAL","INTEGER1","INTEGER2","INTEGER4","BOOL","BOOLEAN","DOUBLE"};
-            if(!supported.contains(declared)) throw VbaRuntimeError(3251,"CStr source type is unsupported");
+            if(native.type(args[0])!=SQLITE_TEXT) throw VbaRuntimeError(450,"Typed string SQL requires argument types");
+            declared=scalarText(args[0]).split(',');
+            if(declared.size()!=arguments) throw VbaRuntimeError(450,"Typed string SQL argument types mismatch");
+            static const QSet<QString> supported{"","CURRENCY_REAL","DATETIME","SINGLE_REAL","INTEGER1","INTEGER2","INTEGER4","BOOL","BOOLEAN","DOUBLE"};
+            for(const auto& type:declared) if(!supported.contains(type)) throw VbaRuntimeError(3251,"String SQL source type is unsupported");
         }
-        auto* argument=args[count-1]; QVariant storage;
-        switch(native.type(argument)) {
-        case SQLITE_NULL: break;
-        case SQLITE_INTEGER: storage=QVariant::fromValue<qlonglong>(native.integer(argument)); break;
-        case SQLITE_FLOAT: storage=native.number(argument); break;
-        case SQLITE_TEXT: {
-            const auto* bytes=native.text(argument);const auto size=native.bytes(argument);
-            if(!bytes && size) throw VbaRuntimeError(7,"CStr text unavailable");
-            storage=QString::fromUtf8(bytes ? reinterpret_cast<const char*>(bytes) : "",size);break;
+        VbaVariables values;std::string expression=std::string(builtin)+"(";
+        for(int index=0;index<arguments;++index) {
+            auto* argument=args[index+offset];QVariant storage;
+            switch(native.type(argument)) {
+            case SQLITE_NULL: break;
+            case SQLITE_INTEGER: storage=QVariant::fromValue<qlonglong>(native.integer(argument));break;
+            case SQLITE_FLOAT: storage=native.number(argument);break;
+            case SQLITE_TEXT: {
+                const auto* bytes=native.text(argument);const auto size=native.bytes(argument);
+                if(!bytes && size) throw VbaRuntimeError(7,"String SQL text unavailable");
+                storage=QString::fromUtf8(bytes ? reinterpret_cast<const char*>(bytes) : "",size);break;
+            }
+            default: throw VbaRuntimeError(13,"String SQL binary input is unsupported");
+            }
+            const auto name="_la_arg"+std::to_string(index);values.emplace(name,qtFieldValue(storage,declared.value(index)));
+            if(index) expression+=',';expression+=name;
         }
-        default: throw VbaRuntimeError(13,"CStr binary input is unsupported");
-        }
-        ScalarStringHost host;
-        const auto result=evaluateVbaExpression("CStr(_la_arg0)",host,{{"_la_arg0",qtFieldValue(storage,declared)}});
-        returnText(context,QString::fromUtf8(result.text.data(),static_cast<qsizetype>(result.text.size())));
+        expression+=')';ScalarStringHost host;
+        const auto result=evaluateVbaExpression(expression,host,values);
+        if(result.kind==VbaValue::Kind::Null) native.nullResult(context);
+        else if(result.kind==VbaValue::Kind::Text) returnText(context,QString::fromUtf8(result.text.data(),static_cast<qsizetype>(result.text.size())));
+        else throw VbaRuntimeError(13,"String SQL result type mismatch");
     } catch(const VbaRuntimeError& failure) { functionError(context,failure); }
-      catch(...) { native.error(context,"SQL CStr evaluation failed",-1); }
+      catch(...) { native.error(context,"SQL string evaluation failed",-1); }
 }
-void stringCStr(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringCStrImpl(context,count,args,false);}
-void stringCStrTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringCStrImpl(context,count,args,true);}
+void stringCStr(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"CStr",1,1,false);}
+void stringCStrTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"CStr",1,1,true);}
+void stringStr(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Str",1,1,false);}
+void stringStrTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Str",1,1,true);}
+void stringLeft(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Left",2,2,false);}
+void stringLeftTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Left",2,2,true);}
+void stringLeftString(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Left$",2,2,false);}
+void stringLeftStringTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Left$",2,2,true);}
+void stringRight(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Right",2,2,false);}
+void stringRightTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Right",2,2,true);}
+void stringRightString(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Right$",2,2,false);}
+void stringRightStringTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Right$",2,2,true);}
+void stringMid(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Mid",2,3,false);}
+void stringMidTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Mid",2,3,true);}
+void stringMidString(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Mid$",2,3,false);}
+void stringMidStringTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Mid$",2,3,true);}
+void stringReplace(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Replace",3,6,false);}
+void stringReplaceTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Replace",3,6,true);}
 void convert_cbool(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"CBool",1,1);}
 void convert_cbyte(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"CByte",1,1);}
 void convert_cint(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"CInt",1,1);}
@@ -771,7 +797,23 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_double_divide",2,&double_divide,nullptr,nullptr);
 
     ensure("linaccess_jet_cstr",-1,&stringCStr,nullptr,nullptr);
-    ensure("linaccess_jet_cstr_typed",2,&stringCStrTyped,nullptr,nullptr);
+    ensure("linaccess_jet_cstr_typed",-1,&stringCStrTyped,nullptr,nullptr);
+    ensure("linaccess_jet_str",-1,&stringStr,nullptr,nullptr);
+    ensure("linaccess_jet_str_typed",-1,&stringStrTyped,nullptr,nullptr);
+    ensure("linaccess_jet_left",-1,&stringLeft,nullptr,nullptr);
+    ensure("linaccess_jet_left_typed",-1,&stringLeftTyped,nullptr,nullptr);
+    ensure("linaccess_jet_left_string",-1,&stringLeftString,nullptr,nullptr);
+    ensure("linaccess_jet_left_string_typed",-1,&stringLeftStringTyped,nullptr,nullptr);
+    ensure("linaccess_jet_right",-1,&stringRight,nullptr,nullptr);
+    ensure("linaccess_jet_right_typed",-1,&stringRightTyped,nullptr,nullptr);
+    ensure("linaccess_jet_right_string",-1,&stringRightString,nullptr,nullptr);
+    ensure("linaccess_jet_right_string_typed",-1,&stringRightStringTyped,nullptr,nullptr);
+    ensure("linaccess_jet_mid",-1,&stringMid,nullptr,nullptr);
+    ensure("linaccess_jet_mid_typed",-1,&stringMidTyped,nullptr,nullptr);
+    ensure("linaccess_jet_mid_string",-1,&stringMidString,nullptr,nullptr);
+    ensure("linaccess_jet_mid_string_typed",-1,&stringMidStringTyped,nullptr,nullptr);
+    ensure("linaccess_jet_replace",-1,&stringReplace,nullptr,nullptr);
+    ensure("linaccess_jet_replace_typed",-1,&stringReplaceTyped,nullptr,nullptr);
     ensure("linaccess_jet_cbool",-1,&convert_cbool,nullptr,nullptr);
     ensure("linaccess_jet_cbyte",-1,&convert_cbyte,nullptr,nullptr);
     ensure("linaccess_jet_cint",-1,&convert_cint,nullptr,nullptr);

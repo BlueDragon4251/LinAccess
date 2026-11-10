@@ -27,3 +27,7 @@ SQLite-only hex literal in Jet SQL. No new CTest or catalog identity.
 Latest checked package is application62d00929 with the packaging correction
 published5ec76beb, before this function; original116.96s, inventory49.42s, seven
 protected hashes unchanged. No Windows or full-suite claim.
+
+The shared adapter and per-argument metadata have since been generalized in
+[NATIVE_SQL_STRINGS.md](NATIVE_SQL_STRINGS.md). Proven argument types now also
+reach scalar clauses within the existing query resolver's bounds.

@@ -1992,6 +1992,23 @@ End Function
         int error=0;try{(void)database->member("OpenRecordset",{linaccess::VbaValue::string(failure.first)});}catch(const linaccess::VbaRuntimeError& actual){error=actual.number;}assert(error==failure.second);
     }
 
+    const auto pieces=database->member("OpenRecordset",{linaccess::VbaValue::string("SELECT Left('A😀B',3) AS prefix,Right('A😀B',3) AS suffix,Mid('A😀BC',2,2) AS middle,Mid('abcd',3) AS tail,Left$(CBool(1),4) AS flag,Replace(CBool(1),'True','ok') AS replaced,Replace('x','x',CBool(1)) AS replacement,Replace('AaAa','a','x',2,1,1) AS limited,Str(CCur('0.1001')) AS positive,Str$(CBool(1)) AS negative,Left(NULL,1) AS empty,Mid('abc',9) AS beyond,Mid('abcdef',CDate(2),2) AS dateStart")}).object;
+    assert(pieces->item("prefix").text=="A😀" && pieces->item("suffix").text=="😀B" && pieces->item("middle").text=="😀" && pieces->item("tail").text=="cd");
+    assert(pieces->item("flag").text=="True" && pieces->item("replaced").text=="ok" && pieces->item("replacement").text=="True" && pieces->item("limited").text=="xAa");
+    assert(pieces->item("positive").text==" .1001" && pieces->item("negative").text=="-1" && pieces->item("empty").kind==linaccess::VbaValue::Kind::Null && pieces->item("beyond").kind==linaccess::VbaValue::Kind::Text && pieces->item("beyond").text.empty() && pieces->item("dateStart").text=="bc");pieces->member("Close",{});
+    for(const auto& failure:std::vector<std::pair<std::string,int>>{{"SELECT Left('x',-1)",5},{"SELECT Mid('x',0)",5},{"SELECT Right('x',NULL)",94},{"SELECT Left$(NULL,1)",94},{"SELECT Mid$(NULL,1)",94},{"SELECT Right$(NULL,1)",94},{"SELECT Str(NULL)",94},{"SELECT Replace(NULL,'a','b')",94},{"SELECT Replace('x','x','y',0)",5},{"SELECT Replace('x','x','y',1,1,9)",5},{"SELECT Replace('Ä','ä','x',1,-1,1)",3251}}) {
+        int error=0;try{(void)database->member("OpenRecordset",{linaccess::VbaValue::string(failure.first)});}catch(const linaccess::VbaRuntimeError& actual){error=actual.number;}
+        if(error!=failure.second) std::cerr<<"Native string adapter error: "<<failure.first<<" actual="<<error<<" expected="<<failure.second<<'\n';assert(error==failure.second);
+    }
+    assert(sql.exec("CREATE TABLE string_keys(id INTEGER4,flag BOOLEAN,money CURRENCY_REAL,stamp DATETIME)"));
+    assert(sql.exec("INSERT INTO string_keys VALUES(1,-1,0.1001,'2003-04-05 00:00:00'),(2,0,0.1001,'2003-04-05 00:00:00'),(3,1,549755813887.9999,'2003-04-05 00:00:00')"));sql.finish();
+    const auto stringOrder=database->member("OpenRecordset",{linaccess::VbaValue::string("SELECT id FROM string_keys ORDER BY CStr(flag),id ASC")}).object;
+    for(int expected:{2,1,3}) {assert(!stringOrder->member("EOF",{}).boolean && stringOrder->item("id").asNumber()==expected);stringOrder->member("MoveNext",{});}assert(stringOrder->member("EOF",{}).boolean);stringOrder->member("Close",{});
+    const auto stringGroups=database->member("OpenRecordset",{linaccess::VbaValue::string("SELECT Replace(flag,'True','ok') AS label,Count(*) AS n FROM string_keys GROUP BY Replace(flag,'True','ok') ORDER BY label")}).object;
+    assert(stringGroups->item("label").text=="False" && stringGroups->item("n").asNumber()==1);stringGroups->member("MoveNext",{});assert(stringGroups->item("label").text=="ok" && stringGroups->item("n").asNumber()==2);stringGroups->member("MoveNext",{});assert(stringGroups->member("EOF",{}).boolean);stringGroups->member("Close",{});
+    const auto currencyText=database->member("OpenRecordset",{linaccess::VbaValue::string("SELECT id FROM string_keys WHERE CStr(money)='549755813887.9999'")}).object;assert(currencyText->item("id").asNumber()==3);currencyText->member("Close",{});
+    const auto dateText=database->member("OpenRecordset",{linaccess::VbaValue::string("SELECT id FROM string_keys WHERE CStr(stamp)='2003-04-05' ORDER BY CStr(flag) DESC,id DESC")}).object;
+    for(int expected:{3,1,2}) {assert(!dateText->member("EOF",{}).boolean && dateText->item("id").asNumber()==expected);dateText->member("MoveNext",{});}assert(dateText->member("EOF",{}).boolean);dateText->member("Close",{});
     const auto typedRows=database->member("OpenRecordset",{linaccess::VbaValue::string(typedSource.toStdString())}).object;
     const auto enabled=typedRows->member("Fields",{linaccess::VbaValue::string("enabled")}).object;
     assert(enabled->member("Type",{}).asNumber()==1 && enabled->member("Size",{}).asNumber()==1);

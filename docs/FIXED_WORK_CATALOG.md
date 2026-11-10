@@ -591,3 +591,20 @@ Speichern/Wiederöffnen/Restaurierung geprüft. Keine neuen CTest-/Katalog-IDs;
 456/386/70. Vorstufe1579977d privat/Baum geprüft. Paket noch app62d00929 mit
 Verpackungskorrektur5ec76beb; vor SQL-CStr/OverGroup. Original116,96s, Inventar
 49,42s,7Hash gleich. Ohne Zwischenabschluss weitere offene Anforderungen umsetzen.
+
+
+Allgemeine native SQL-Zeichenfolgen (2026-11-10): NATIVE_SQL_STRINGS.md.
+CStr/Str/Left/Right/Mid einschließlich $-Varianten und Replace verwenden gemeinsame
+VBA-Auswertung und belegte Typen aller Argumente. UTF-16-Positionen, optionale
+Argumente, Str-Vorzeichen/Fraction, Null94/Stringvarianten, Replace Start/Count/
+Compare; NUL bleibt erhalten, Binär/inexakte Integer verweigert. Typisierte
+Argumente erreichen innerhalb der bisherigen Quellenresolver-Grenzen auch
+Filter/Gruppier-/Sortierausdrücke; ASC/DESC/mehrere Schlüssel bleiben. Vorhandene
+numericOnly-Guards für Date-/Currency-Operatoren nicht gelockert, keine allgemeine
+Join-/Subquery-/HAVING-/Jet-Locale-Parität. App/DAO/Currency gebaut: vorhandenes
+Bündel2/2 in3,02s (DAO2,95/Currency0,07); vorher StringfamilieDAO2,78s. Reale
+DAO-Pfade inkl. Boolean-Gruppierung/Sortierung, Date-Filter und vierstelliger
+Currency nahe2^39, UTF-16/Null/Optionen geprüft. Keine neuen CTest-/Katalog-IDs;
+456/386/70. Vorstufec2c5be8c privat/Baum geprüft; DEB noch62d00929 mit5ec76beb,
+vor CStr/OverGroup/Stringadaptern. Gebündelte neue Paket-/Original-/Inventarprüfung
+folgt. Ohne Zwischenabschluss weitere offene Anforderungen implementieren.
