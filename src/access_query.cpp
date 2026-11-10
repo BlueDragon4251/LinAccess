@@ -546,7 +546,18 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
             auto expression=tokens.mid(first,i-first); QVector<Token> alias;
             if(expression.size()>=3 && expression[expression.size()-2].kind==Token::Word && expression[expression.size()-2].value.compare("AS",Qt::CaseInsensitive)==0 && name(expression.back())) { alias=expression.mid(expression.size()-2); expression.resize(expression.size()-2); }
             if((expression.size()==1 && symbol(expression.front(),"*")) || (expression.size()>=3 && symbol(expression.back(),"*") && symbol(expression[expression.size()-2],"."))) return {};
-            auto parsed=parse(expression,0); result.append(parsed.type);
+            auto parsed=parse(expression,0);
+            auto direct=expression;
+            while(direct.size()>=3 && symbol(direct.front(),"(") && symbol(direct.back(),")")) {
+                int level=0;qsizetype close=-1;
+                for(qsizetype token=0;token<direct.size();++token) {if(symbol(direct[token],"(")) ++level;else if(symbol(direct[token],")") && --level==0) {close=token;break;}}
+                if(close!=direct.size()-1) break;direct=direct.mid(1,direct.size()-2);
+            }
+            if(parsed.type.isEmpty() && direct.size()==1 && name(direct.front())) {
+                static const QMap<QString,QString> numericParameters{{"byte","INTEGER1"},{"short","INTEGER2"},{"integer","INTEGER4"},{"long","INTEGER4"},{"single","SINGLE_REAL"},{"double","DOUBLE"},{"boolean","BOOLEAN"},{"yesno","BOOLEAN"}};
+                for(const auto& parameter:parameters) if(parameter.name.compare(direct.front().value,Qt::CaseInsensitive)==0) {parsed.type=numericParameters.value(parameter.type);break;}
+            }
+            result.append(parsed.type);
             if(alias.isEmpty() && std::any_of(parsed.code.cbegin(),parsed.code.cend(),[](const Token& token) {
                 return token.kind==Token::Word && token.value.startsWith("linaccess_");
             })) alias={{Token::Word,"AS"},{Token::Identifier,renderJetTokens(expression)}};

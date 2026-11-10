@@ -344,6 +344,13 @@ int main(int argc, char** argv) {
     catch(const linaccess::VbaRuntimeError&) { rejected = true; }
     assert(rejected);
 
+    struct DeclaredProjection {QString declaration,type;QVariant value;};
+    for(const auto& declared:QVector<DeclaredProjection>{{"TINYINT","INTEGER1",255},{"SMALLINT","INTEGER2",-32768},{"INTEGER","INTEGER4",2147483647},{"REAL","SINGLE_REAL",0.1},{"FLOAT8","DOUBLE",0.1},{"BIT","BOOLEAN",true},{"YESNO","BOOLEAN",false}}) {
+        model.execute(db,"PARAMETERS p "+declared.declaration+"; SELECT [p] AS projected,(([p])) AS parenthesized",{{"p",declared.value}});
+        assert(model.fieldSqlType(0)==declared.type && model.fieldSqlType(1)==declared.type && model.index(0,0).data()==model.index(0,1).data());
+    }
+    model.execute(db,"PARAMETERS p BYTE; SELECT [p] AS projected",{{"p",QVariant{}}});assert(model.fieldSqlType(0)=="INTEGER1" && model.index(0,0).data().isNull());
+    model.execute(db,"PARAMETERS p BYTE; SELECT -[p] AS negative",{{"p",255}});assert(model.index(0,0).data().toInt()==-255 && model.fieldSqlType(0).isEmpty());
     model.execute(db,"SELECT Count(*) AS all_rows,Count(label) AS named_rows,Count(NULL) AS null_rows FROM samples");
     assert(model.rowCount()==1 && model.index(0,0).data().toInt()==4 && model.index(0,1).data().toInt()==3 && model.index(0,2).data().toInt()==0);
     for(int column=0;column<3;++column) assert(model.fieldSqlType(column)=="INTEGER4");

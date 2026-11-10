@@ -1572,6 +1572,16 @@ End Function
         assert(sql.exec("SELECT SUM(value) FROM inputs") && sql.next() && sql.value(0).toInt()==12); sql.finish();
         assert(metadataFrame->values.at("calls").asNumber()==beforeMetadata);
     }
+    struct NumericProjection {const char* declaration;int type,size;linaccess::VbaValue value;linaccess::VbaValue::NumericType subtype;};
+    for(const auto& projected:std::vector<NumericProjection>{{"TINYINT",2,1,linaccess::VbaValue::numeric(255),linaccess::VbaValue::NumericType::Byte},{"SMALLINT",3,2,linaccess::VbaValue::numeric(-32768),linaccess::VbaValue::NumericType::Integer},{"INTEGER",4,4,linaccess::VbaValue::numeric(2147483647),linaccess::VbaValue::NumericType::Long},{"REAL",6,4,linaccess::VbaValue::numeric(0.1),linaccess::VbaValue::NumericType::Single},{"FLOAT8",7,8,linaccess::VbaValue::numeric(0.1),linaccess::VbaValue::NumericType::Double},{"BIT",1,1,linaccess::VbaValue::logical(true),linaccess::VbaValue::NumericType::Double}}) {
+        const auto query=database->member("CreateQueryDef",{linaccess::VbaValue::string(""),linaccess::VbaValue::string(std::string("PARAMETERS p ")+projected.declaration+"; SELECT [p] AS projected")}).object;
+        query->member("Parameters",{linaccess::VbaValue::string("p")}).object->assign("Value",projected.value);
+        const auto field=query->member("Fields",{linaccess::VbaValue::string("projected")}).object;
+        assert(field->member("Type",{}).asNumber()==projected.type && field->member("Size",{}).asNumber()==projected.size);
+        const auto cursor=query->member("OpenRecordset",{}).object;const auto actual=cursor->item("projected");
+        assert(projected.type==1 ? actual.kind==linaccess::VbaValue::Kind::Boolean && actual.boolean : actual.kind==linaccess::VbaValue::Kind::Number && actual.numericType==projected.subtype);
+        cursor->member("Close",{});
+    }
     const auto countDefinition=database->member("CreateQueryDef",{linaccess::VbaValue::string(""),linaccess::VbaValue::string("SELECT Count(*) AS n FROM inputs")}).object;
     const auto countField=countDefinition->member("Fields",{linaccess::VbaValue::string("n")}).object;
     assert(countField->member("Type",{}).asNumber()==4 && countField->member("Size",{}).asNumber()==4 && metadataFrame->values.at("calls").asNumber()==beforeMetadata);

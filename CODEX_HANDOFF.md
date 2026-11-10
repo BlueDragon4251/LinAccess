@@ -5485,3 +5485,17 @@ keine Ableitung aus beliebigen Integerwerten; F068/F121/F122/456/386/70 unverän
 Vorstufe3fa14b9 privat remote/Baum geprüft. Anschließend ohne Zwischenabschluss
 aktuelles Debianpaket bauen und prüfen, GUI/Originalpfad nach zusammenhängenden
 SQL-/DAO-Änderungen einmal integrieren; geprüftes DEBc8bd82b bleibt bis dahin älter.
+
+
+Direkte deklarierte Parameterprojektionen: PARAMETER_RESULT_TYPES.md dokumentiert
+Byte/Short/Long-Integer/Single/Double/Boolean-YesNo-Metadaten einschließlich
+normalisierter Aliase, kompletter Klammern, echter DAO-Typen/Größen/Varianten und
+Null. Nur direkte Parameter annotiert; Byte-Negation erhält keinen falschen Byte-
+Typ. App gebaut; erstes bestehendes DAO-/Abfragemodell-Bündel2/2 in3,02s
+(2,89/0,13), keine neuen Tests/IDs;456/386/70 unverändert. Vorstufecc19000 privat
+remote/Baum geprüft. Dessen aktualisiertes DEB /workspace/work/count-result-types/
+package/linaccess-0.7.0-Linux.deb besteht echte Build-ID/MDBTools1.0.1/SQLite3.54.1/
+nestedJOIN/NULL/counter/Rechte/Desktop/keine-Fixtures-Prüfung; danach GUI19,32s und
+Original119,69s,2/2 in139,02s, alle sieben Hashes unverändert. Bekannte Makrogrenze
+bleibt. Paket und Integration liegen vor dieser Parameterannotation. Ohne
+Zwischenabschluss native SQL-Potenzoperatoren mit echter VBA-Präzedenz fortsetzen.
