@@ -1016,10 +1016,31 @@ private:
     QString name_;
 };
 
+class PreviewReportGroupObject final : public linaccess::VbaObject,private PreviewObjectBase {
+public:
+    using Reader=std::function<linaccess::AccessReportGroup(const AccessFormPreview&)>;
+    PreviewReportGroupObject(AccessFormPreview& preview,Reader reader):PreviewObjectBase(preview),reader_(std::move(reader)) {}
+    std::string_view className() const override {return "GroupLevel";}
+    bool isNativeType(std::string_view type) const override {return type=="access.grouplevel";}
+    linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
+        const auto group=reader_(checked());if(!args.empty()) throw linaccess::VbaRuntimeError(450,"GroupLevel properties take no arguments");
+        const auto key=text(name).toCaseFolded();
+        if(key=="controlsource") {if(group.controlSource) return linaccess::VbaValue::string(bytes(*group.controlSource));}
+        else if(key=="sortorder" || key=="groupheader" || key=="groupfooter") {const auto flag=key=="sortorder" ? group.sortOrder : key=="groupheader" ? group.groupHeader : group.groupFooter;if(flag) return linaccess::VbaValue::logical(*flag);}
+        else if(key=="groupon") {if(group.groupOn) return linaccess::VbaValue::integer(static_cast<std::int16_t>(*group.groupOn));}
+        else if(key=="groupinterval") {if(group.groupInterval) return linaccess::VbaValue::longInteger(*group.groupInterval);}
+        else if(key=="keeptogether") {if(group.keepTogether) return linaccess::VbaValue::byte(static_cast<unsigned char>(*group.keepTogether));}
+        else throw linaccess::VbaRuntimeError(438,"Unknown GroupLevel property");
+        throw linaccess::VbaRuntimeError(3251,"GroupLevel property is absent from the source; no default is inferred");
+    }
+    void assign(std::string_view name,const linaccess::VbaValue&) override {(void)member(name,{});throw linaccess::VbaRuntimeError(383,"Native GroupLevel metadata is read-only");}
+private: Reader reader_;
+};
 class PreviewFormObject final : public linaccess::VbaObject, private PreviewObjectBase {
 public:
     explicit PreviewFormObject(AccessFormPreview& preview) : PreviewObjectBase(preview),report_(preview.layout_.kind==linaccess::AccessDocumentKind::Report) {}
     std::optional<linaccess::VbaArgumentSignature> argumentSignature(std::string_view name) const override {
+        if(report_ && text(name).compare("GroupLevel",Qt::CaseInsensitive)==0) return linaccess::VbaArgumentSignature{{"Index"},1};
         return linaccess::nativeVbaPropertySignature(checked().vba_.toUtf8().toStdString(),name,linaccess::VbaPropertyAccess::Get,true);
     }
     std::optional<linaccess::VbaArgumentSignature> assignmentSignature(std::string_view name,bool reference) const override {
@@ -1037,6 +1058,16 @@ public:
     }
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         auto& preview = checked(); const auto key = text(name).toCaseFolded();
+        if(key=="grouplevel") {
+            if(!report_) throw linaccess::VbaRuntimeError(438,"GroupLevel requires a report");
+            if(args.size()!=1 || args[0].kind==linaccess::VbaValue::Kind::Missing) throw linaccess::VbaRuntimeError(450,"GroupLevel requires Index");
+            const auto scalar=linaccess::scalarVbaValue(args[0]);if(scalar.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Null GroupLevel index");
+            const auto index=static_cast<int>(linaccess::coerceVbaModuleValue(scalar,"long").number);auto& current=checked();
+            if(index<0 || index>=current.layout_.reportGroups.size()) throw linaccess::VbaRuntimeError(5,"GroupLevel index is outside the actual source");
+            auto& weak=current.reportGroupObjects_[index];auto object=weak.lock();
+            if(!object) {object=std::make_shared<PreviewReportGroupObject>(current,[index](const AccessFormPreview& source) {if(index>=source.layout_.reportGroups.size()) throw linaccess::VbaRuntimeError(2450,"GroupLevel source is unavailable");return source.layout_.reportGroups[index];});weak=object;}
+            return linaccess::VbaValue::reference(object);
+        }
         if(key=="section") {
             if(args.size()!=1) throw linaccess::VbaRuntimeError(450,"Section requires one index or imported name");
             const auto scalar=linaccess::scalarVbaValue(args[0]); QString section;
@@ -1179,7 +1210,7 @@ public:
     }
     linaccess::VbaValue objectMember(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         const auto key=text(name).toCaseFolded();
-        if (!args.empty() || key=="page" || key=="pages" || key=="name" || key=="caption" || key=="visible" || key=="tag" || key=="dataentry" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="selheight" || key=="recordsource" || key=="recordset" || key=="recordsetclone" || key=="bookmark" || key=="currentrecord" || key=="openargs" || key=="modal" || key=="popup" || key=="dirty" || key=="newrecord" || key=="controls" || key=="requery" || key=="recalc" || key=="repaint" || key=="undo" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="setfocus" || key=="filter" || key=="filteron" || key=="orderby" || key=="orderbyon")
+        if (!args.empty() || key=="grouplevel" || key=="page" || key=="pages" || key=="name" || key=="caption" || key=="visible" || key=="tag" || key=="dataentry" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="selheight" || key=="recordsource" || key=="recordset" || key=="recordsetclone" || key=="bookmark" || key=="currentrecord" || key=="openargs" || key=="modal" || key=="popup" || key=="dirty" || key=="newrecord" || key=="controls" || key=="requery" || key=="recalc" || key=="repaint" || key=="undo" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="setfocus" || key=="filter" || key=="filteron" || key=="orderby" || key=="orderbyon")
             return member(name,args);
         if (auto value=checked().getModuleMember(name,true)) return *value;
         return objectItem(bytes(checked().controlMemberName(text(name))));

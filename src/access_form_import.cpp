@@ -115,7 +115,7 @@ bool isControl(const QString& type) {
 
 AccessFormLayout parseAccessFormLayout(const QString& source) {
     AccessFormLayout form;
-    struct Block { QString type; int control{-1}; QString section; bool controlTemplate{}; };
+    struct Block { QString type; int control{-1}; QString section; bool controlTemplate{}; int group{-1}; };
     QVector<Block> stack;
     QHash<QString, int> sections;
     QHash<QString,AccessControlFont> templateFonts;
@@ -141,8 +141,10 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
         if (start.hasMatch()) {
             const auto type = start.captured(1);
             if (stack.isEmpty() && type.compare("Report",Qt::CaseInsensitive)==0) form.kind = AccessDocumentKind::Report;
-            if (form.kind==AccessDocumentKind::Report && type=="GroupLevel")
+            if (form.kind==AccessDocumentKind::Report && type.compare("GroupLevel",Qt::CaseInsensitive)==0)
                 form.reportPrintLimitations.append("GroupLevel");
+            if(form.kind==AccessDocumentKind::Report && (type.compare("BreakHeader",Qt::CaseInsensitive)==0 || type.compare("BreakFooter",Qt::CaseInsensitive)==0))
+                form.reportPrintLimitations.append("BreakSection");
             QString section;
             for (auto it = stack.crbegin(); it != stack.crend(); ++it)
                 if (!it->section.isEmpty()) { section = it->section; break; }
@@ -176,7 +178,12 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
                 item.section = section;
                 form.controls.push_back(item);
             }
-            stack.push_back({type, control, section, isControl(type) && section.isEmpty()});
+            int group=-1;
+            if(form.kind==AccessDocumentKind::Report && (type.compare("BreakLevel",Qt::CaseInsensitive)==0 || type.compare("GroupLevel",Qt::CaseInsensitive)==0)) {
+                if(form.reportGroups.size()>=10) throw std::runtime_error("Report grouping exceeds ten levels");
+                group=form.reportGroups.size();form.reportGroups.append(AccessReportGroup{});
+            }
+            stack.push_back({type, control, section, isControl(type) && section.isEmpty(),group});
             continue;
         }
         if (line.compare("End", Qt::CaseInsensitive) == 0) {
@@ -189,6 +196,8 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
         const auto value = propertyValue(assignment.captured(2));
         const auto current = stack.back();
         if (form.kind==AccessDocumentKind::Report) {
+            if(current.type.compare("BreakLevel",Qt::CaseInsensitive)==0 && key=="ControlSource" && !value.trimmed().isEmpty())
+                form.reportPrintLimitations.append("BreakLevel");
             if (((key=="CanShrink" || key=="RepeatSection"
                   || key=="HideDuplicates" || key=="Vertical") && accessBoolean(value,false))
                 || (key=="CanGrow" && accessBoolean(value,false) && current.type!="Section"
@@ -209,6 +218,18 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
             continue;
         }
         const auto integer = [&] { bool ok = false; const int result = value.toInt(&ok); return ok ? result : 0; };
+        if(current.group>=0) {
+            auto& group=form.reportGroups[current.group];const auto name=key.toCaseFolded();
+            if(name=="controlsource") group.controlSource=value;
+            else if(name=="sortorder" || name=="groupheader" || name=="groupfooter") {
+                const auto flag=accessBoolean(value,false);if(name=="sortorder") group.sortOrder=flag;else if(name=="groupheader") group.groupHeader=flag;else group.groupFooter=flag;
+            } else if(name=="groupon" || name=="groupinterval" || name=="keeptogether") {
+                bool valid=false;const auto number=value.toLongLong(&valid);
+                if(!valid || number<std::numeric_limits<int>::min() || number>std::numeric_limits<int>::max() || (name=="groupon" && (number<-32768 || number>32767)) || (name=="keeptogether" && (number<0 || number>255))) throw std::runtime_error("Invalid report group property type");
+                if(name=="groupon") group.groupOn=number;else if(name=="groupinterval") group.groupInterval=number;else group.keepTogether=number;
+            }
+            continue;
+        }
         if(key=="RunningSum" && current.type=="TextBox" && (current.controlTemplate || current.control>=0)) {
             bool valid=false;const auto setting=value.toInt(&valid);
             if(!valid || setting<0 || setting>2) throw std::runtime_error("Invalid imported RunningSum");

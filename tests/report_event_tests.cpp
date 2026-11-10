@@ -526,6 +526,39 @@ End)RUNNING";
         AccessFormPreview groupRunning("unsupported group running sum",groupRunningSource,{},db);
         assert(!groupRunning.exportReportPdf(runningPdf) && groupRunning.close());
         assert(query.exec("DROP TABLE native_running_values"));query.finish();
+        for(const auto& type:{QByteArray("BreakLevel"),QByteArray("breaklevel"),QByteArray("GroupLevel"),QByteArray("BreakHeader"),QByteArray("BreakFooter")}) {
+            auto groupedSource=pagedSource;groupedSource.replace("Begin Report\n","Begin Report\nBegin "+type+"\nControlSource =\"id\"\nEnd\n");
+            const auto groupedLayout=linaccess::parseAccessFormLayout(QString::fromUtf8(groupedSource));assert(!groupedLayout.reportPrintLimitations.isEmpty());
+            AccessFormPreview grouped("grouped source output boundary",groupedSource,{},db);assert(!grouped.exportReportPdf(document));
+            QFile protectedOutput(document);assert(protectedOutput.open(QIODevice::ReadOnly) && protectedOutput.readAll()==bytes);assert(grouped.close());
+        }
+        auto inactiveBreakSource=pagedSource;inactiveBreakSource.replace("Begin Report\n","Begin Report\nBegin BreakLevel\nControlSource =\"\"\nEnd\n");assert(linaccess::parseAccessFormLayout(QString::fromUtf8(inactiveBreakSource)).reportPrintLimitations.isEmpty());
+        auto groupMetadataSource=pagedSource;groupMetadataSource.replace("Begin Report\n","Begin Report\nBegin BreakLevel\nControlSource =\"id\"\nSortOrder =NotDefault\nGroupHeader =-1\nGroupFooter =0\nGroupOn =0\nGroupInterval =1\nKeepTogether =2\nEnd\nBegin BreakLevel\nControlSource =\"name\"\nEnd\n");
+        const auto metadataLayout=linaccess::parseAccessFormLayout(QString::fromUtf8(groupMetadataSource));assert(metadataLayout.reportGroups.size()==2 && metadataLayout.reportGroups[0].controlSource.value()=="id" && metadataLayout.reportGroups[0].sortOrder.value());
+        const QByteArray metadataCode=R"VBA(Function GetLevel() As Access.GroupLevel
+Set GetLevel=Me.GroupLevel(Index:=0)
+End Function
+Function ReadLevel() As String
+Dim level As Access.GroupLevel
+Set level=GetLevel()
+If Not (level Is Me.GroupLevel(0)) Then Err.Raise 5
+If VarType(level.SortOrder)<>vbBoolean Or VarType(level.GroupOn)<>vbInteger Or VarType(level.GroupInterval)<>vbLong Or VarType(level.KeepTogether)<>vbByte Then Err.Raise 5
+ReadLevel=level.ControlSource & ":" & CStr(level.SortOrder) & ":" & CStr(level.GroupHeader) & ":" & CStr(level.GroupFooter)
+End Function)VBA";
+        AccessFormPreview metadataReport("actual group metadata",groupMetadataSource,metadataCode,db);auto metadataObject=makePreviewFormObject(metadataReport);
+        auto level=metadataObject->member("GroupLevel",{linaccess::VbaValue::integer(0)}).object;
+        assert(level==metadataObject->member("GroupLevel",{linaccess::VbaValue::integer(0)}).object && level->isNativeType("access.grouplevel"));
+        assert(level->member("ControlSource",{}).asText()=="id" && level->member("GroupHeader",{}).truthy() && !level->member("GroupFooter",{}).truthy());
+        assert(level->member("GroupOn",{}).numericType==linaccess::VbaValue::NumericType::Integer && level->member("GroupInterval",{}).numericType==linaccess::VbaValue::NumericType::Long && level->member("KeepTogether",{}).numericType==linaccess::VbaValue::NumericType::Byte);
+        const auto groupError=[](auto operation,int expected) {int actual=0;try {operation();}catch(const linaccess::VbaRuntimeError& error) {actual=error.number;}assert(actual==expected);};
+        groupError([&] {metadataObject->member("GroupLevel",{});},450);groupError([&] {metadataObject->member("GroupLevel",{linaccess::VbaValue{}});},94);
+        groupError([&] {metadataObject->member("GroupLevel",{linaccess::VbaValue::integer(2)});},5);
+        groupError([&] {level->member("SortOrder",{linaccess::VbaValue::integer(0)});},450);groupError([&] {level->assign("SortOrder",linaccess::VbaValue::logical(false));},383);
+        auto incomplete=metadataObject->member("GroupLevel",{linaccess::VbaValue::integer(1)}).object;groupError([&] {incomplete->member("SortOrder",{});},3251);
+        std::vector<linaccess::VbaValue> groupArguments;const auto metadataResult=metadataReport.executeProcedure("ReadLevel",groupArguments);
+        if(metadataResult.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Group metadata error="<<metadataResult.errorNumber<<" line="<<metadataResult.line<<'\n';
+        assert(metadataResult.status==linaccess::VbaExecutionStatus::Completed && metadataResult.returnValue=="id:True:True:False");
+        assert(!metadataReport.exportReportPdf(document));assert(metadataReport.close());groupError([&] {level->member("ControlSource",{});},2450);
         auto shrinkingSource=pagedSource; shrinkingSource.replace("Name =\"Name\"","Name =\"Name\"\nCanShrink =-1");
         AccessFormPreview shrinking("shrinking report",shrinkingSource,{},db);
         assert(shrinking.findChild<QTabWidget*>("access-report-view-tabs")->currentIndex()==1);

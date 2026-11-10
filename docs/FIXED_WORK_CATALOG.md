@@ -440,7 +440,7 @@ keine Tests oder Teilpunkte allein zur Erhöhung einer Fortschrittszahl anlegen.
 
 ### Berichte, Druck und Ausgabe
 
-- [ ] **F085** — Report sections/grouping/aggregates/headers/footers/pagination and complete report event order. Native population statistics are documented in POPULATION_STATISTICS.md and bounded detail running sums in REPORT_RUNNING_SUM.md; the complete requirement remains open.
+- [ ] **F085** — Report sections/grouping/aggregates/headers/footers/pagination and complete report event order. Actual group metadata and output bounds: [scope](REPORT_GROUP_METADATA.md). Native population statistics are documented in POPULATION_STATISTICS.md and bounded detail running sums in REPORT_RUNNING_SUM.md; the complete requirement remains open.
 - [ ] **F087** — Full report print/PDF pagination and output compared against original reference reports.
 - [ ] **F166** — Compare Access 2003 ListCount list-header, ListBox and record-limit behavior; original fixtures contain only commented ListCount references.
 - [x] **F191** — Native DoCmd.OpenReport preview with WhereCondition, imported Report VBA, failure/cancellation and independent lifetime; original preview handler and bound button open the original report with independently checked fields.

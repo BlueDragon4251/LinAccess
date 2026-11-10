@@ -87,6 +87,11 @@ struct AccessVisualControl {
 };
 
 enum class AccessDocumentKind { Form, Report };
+struct AccessReportGroup {
+    std::optional<QString> controlSource;
+    std::optional<bool> sortOrder,groupHeader,groupFooter;
+    std::optional<int> groupOn,groupInterval,keepTogether;
+};
 struct AccessFormLayout {
     AccessDocumentKind kind{AccessDocumentKind::Form};
     QString caption;
@@ -114,6 +119,7 @@ struct AccessFormLayout {
     QMap<QString,bool> sectionCanGrow;
     int detailForceNewPage{},reportHeaderForceNewPage{},reportFooterForceNewPage{};
     QStringList reportPrintLimitations;
+    QVector<AccessReportGroup> reportGroups;
     QVector<AccessVisualControl> controls;
     QMap<QString,QString> events;
 };

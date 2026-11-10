@@ -6022,3 +6022,22 @@ Vorstufec59e828 privat remote/Baum geprüft; letztes geprüftes DEBa23c7009, Ori
 1/1 in119,54s und sieben geschützte Hashes unverändert. Dieses Paket liegt vor
 Feldfähigkeiten/Objektschlüsseln. Kein vollständiger COM-/Windows-/Lifetimebeleg;
 ohne Zwischenabschluss weitere allgemeine Anforderungen implementieren.
+
+
+Berichtsgruppen: REPORT_GROUP_METADATA.md dokumentiert echte42 aktive BreakLevel-
+Blöcke in neun Originalberichten sowie30/29 BreakHeader/Footer. Ausgabegrenze
+übersah bislang diese Access2003-Struktur; aktive Quellen/Break-Abschnitte werden
+nun ausdrücklich vor vereinfachtem Druck/PDF abgefangen, Ziel-PDF bleibt erhalten.
+Quellparser bewahrt bis10 tatsächliche Gruppen und explizite Eigenschaften;
+Report.GroupLevel(Index) liefert lebensdauergebundene gecachte native Objekte mit
+ControlSource String, SortOrder/Header/Footer Boolean, GroupOn Integer, Interval
+Long und KeepTogether Byte. Qualifizierte As-Bindung/Funktionsrückgabe/named Index
+funktionieren; fehlende Defaults3251, Mutation383, Arity450, Null94, Index5.
+App/Core/Layout gebaut; frühe Ausgabegrenzenprüfung1/1 in13,67s, anschließend
+kombiniertes bestehendes Core/Layout-Bündel2/2 in18,77s bestanden. Echte VBA- /
+Objektidentitäts-/Metadaten-/Closed-/PDF-Erhalt-Belege; Originalkorpus bindet seine
+neun tatsächlichen Quellen ohne neue private VBA-Ausführung. Keine neuen CTest-/
+Katalog-IDs;456/386/70. Gruppendruck/-sortierung/-intervalle/-events/-Mutationen und
+Windows-Parität bleiben offen. Vorstufe29ed6fd5 privat remote/Baum geprüft;
+letztes DEBa23c7009/Original119,54s/sieben Hashes unverändert liegt vor späteren
+Feld-/Container-/Gruppenänderungen. Ohne Zwischenabschluss weiterentwickeln.

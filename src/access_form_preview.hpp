@@ -174,6 +174,7 @@ private:
 
     std::weak_ptr<linaccess::VbaObject> formObject_, formsObject_, reportsObject_, controlsObject_;
     QMap<QString,std::weak_ptr<linaccess::VbaObject>> controlObjects_,sectionObjects_;
+    QMap<int,std::weak_ptr<linaccess::VbaObject>> reportGroupObjects_;
     std::unordered_map<std::string,std::shared_ptr<linaccess::VbaModuleState>> moduleStates_;
     std::weak_ptr<linaccess::VbaObject> applicationObject_,doCmdObject_,screenObject_;
     QMap<QWidget*,std::weak_ptr<linaccess::VbaObject>> commandBarObjects_;
