@@ -12,7 +12,7 @@ dpkg-deb --contents "$1" > "$listing"
 awk '
     $1 ~ /^d/ {
         if ($1 != "drwxr-xr-x") exit 1
-        if ($6 != "./usr/" && $6 != "./usr/bin/" && $6 != "./usr/lib/" && $6 != "./usr/lib/linaccess/" && $6 != "./usr/share/" && $6 != "./usr/share/applications/" && $6 != "./usr/share/doc/" && $6 != "./usr/share/doc/linaccess/") exit 1
+        if ($6 != "./usr/" && $6 != "./usr/bin/" && $6 != "./usr/lib/" && $6 != "./usr/lib/linaccess/" && $6 != "./usr/share/" && $6 != "./usr/share/applications/" && $6 != "./usr/share/doc/" && $6 != "./usr/share/doc/linaccess/" && $6 != "./usr/share/doc/linaccess/licenses/" && $6 != "./usr/share/doc/linaccess/licenses/visualbasic-random/") exit 1
         next
     }
     $6 == "./usr/bin/linaccess" { if ($1 != "-rwxr-xr-x" || $3 == 0) exit 1; app++; next }
@@ -20,8 +20,9 @@ awk '
     $6 == "./usr/share/applications/linaccess.desktop" { if ($1 != "-rw-r--r--" || $3 == 0) exit 1; desktop++; next }
     $6 == "./usr/lib/linaccess/libsqlite3.so.0" { if ($1 != "-rw-r--r--" && $1 != "-rwxr-xr-x") exit 1; if ($3 == 0) exit 1; sqlite++; next }
     $6 == "./usr/share/doc/linaccess/sqlite.txt" { if ($1 != "-rw-r--r--" || $3 == 0) exit 1; notice++; next }
+    $6 == "./usr/share/doc/linaccess/licenses/visualbasic-random/LICENSE" { if ($1 != "-rw-r--r--" || $3 == 0) exit 1; random_notice++; next }
     { exit 1 }
-    END { if (app != 1 || desktop != 1 || sqlite != 1 || notice != 1 || metadata != 1) exit 1 }
+    END { if (app != 1 || desktop != 1 || sqlite != 1 || notice != 1 || metadata != 1 || random_notice != 1) exit 1 }
 ' "$listing" || { echo 'Package content or permissions check failed' >&2; exit 1; }
 if (( $# == 2 )); then
     dpkg-deb --extract "$1" "$staging"

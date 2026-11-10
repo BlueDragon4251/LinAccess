@@ -72,13 +72,14 @@ if(LINACCESS_BUILD_GUI)
     set(CMAKE_INSTALL_DEFAULT_DIRECTORY_PERMISSIONS
         OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
     set(CPACK_INSTALL_DEFAULT_DIRECTORY_PERMISSIONS ${CMAKE_INSTALL_DEFAULT_DIRECTORY_PERMISSIONS})
-    foreach(directory IN ITEMS "." "bin" "lib" "lib/linaccess" "share" "share/applications" "share/doc" "share/doc/linaccess")
+    foreach(directory IN ITEMS "." "bin" "lib" "lib/linaccess" "share" "share/applications" "share/doc" "share/doc/linaccess" "share/doc/linaccess/licenses" "share/doc/linaccess/licenses/visualbasic-random")
         install(DIRECTORY DESTINATION "${directory}" DIRECTORY_PERMISSIONS
             OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
     endforeach()
     install(TARGETS linaccess RUNTIME DESTINATION bin)
     install(TARGETS linaccess_mdb_metadata RUNTIME DESTINATION lib/linaccess)
     install(FILES packaging/linaccess.desktop DESTINATION share/applications)
+    install(FILES third_party/visualbasic-random/LICENSE DESTINATION share/doc/linaccess/licenses/visualbasic-random)
 
     set(CPACK_PACKAGE_NAME "linaccess")
     set(CPACK_PACKAGE_VENDOR "LinAccess Community")
@@ -375,6 +376,3 @@ if(BUILD_TESTING)
         endif()
     endif()
 endif()
-
-
-install(FILES third_party/visualbasic-random/LICENSE DESTINATION share/doc/linaccess/licenses/visualbasic-random)

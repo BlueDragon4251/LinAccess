@@ -4011,3 +4011,20 @@ Beobachtung ist für diesen Stand ersetzt. Keine neuen CTest-/Katalog-IDs;
 456/386/70. Vorstufe6578f056 privat/Baum geprüft. DEB/Original/Inventar noch299b946f,
 vorStrConv/RNG/Seitenbereichen/Gruppierung; neue gebündelte Paketprüfung folgt.
 Ohne Zwischenabschluss weiter. Allgemeine SQL-CStr-Lücke separat beheben.
+
+
+Paket-/Originalbeleg nach nativer Gruppierung (2026-11-10): Anwendungscode
+62d00929; korrigierte öffentliche Rechte der neuen MIT-Lizenzverzeichnisse und
+strikte Paket-Allowlist. DEB unter work/native-report-grouping/package-retry/
+package/linaccess-0.7.0-Linux.deb: Inhalt/Rechte/Build-ID/SQLite/Metadatenhelfer
+bestanden. Vorhandenes Inventar49,42s:100/78/22, unveränderte Kategorien73/5/3/9/10,
+kein Access-Ergebnisoracle. Vorhandener Originalablauf nach gezielter Korrektur
+des Summenvergleichs1/1 in116,96s bestanden; sieben geschützte Hashes unverändert.
+Neue Gruppencontrols hatten Annahmen des alten Prüfers offengelegt: direktes
+SQLite umgeht die typisierte Quellausführung; die Regex umfasste auch kombinierte
+Summen. Separate schreibgeschützte Quellzeilen-/Aggregatbindung rechnet vollständige
+Ausdrücke mit unabhängiger Summenakkumulation nach, ohne Berichtscache/-Gruppenscope.
+Keine Anwendungsgrenze gelockert, keine neuen CTest-/Katalog-IDs. Original-Layout-
+PDFs bleiben0 positiv/3 belegte Verweigerungen, bekannte Makro-/Tastaturgrenzen
+bleiben; keine initialisierte Verkaufs-/Windows-/Gesamtparität behauptet.456/386/70.
+Weiter mit allgemeinem SQL-CStr, anschließend weiteren offenen Anforderungen.

@@ -47,6 +47,63 @@
 #include <set>
 #include <cmath>
 namespace {
+// Independent row binding for expected sums; never calls report aggregates,
+// control caches or group scopes and never executes original source modules.
+class ReportSourceRowHost final : public linaccess::VbaHost {
+public:
+    ReportSourceRowHost(const linaccess::AccessQueryResult& source,const QVariantList& row):source_(source),row_(row) {}
+    linaccess::VbaValue expressionValue(std::string_view name,bool reference) override {
+        if(reference) throw linaccess::VbaRuntimeError(3251,"Reference in source-row sum unsupported");
+        const auto key=QString::fromUtf8(name.data(),static_cast<qsizetype>(name.size()));
+        int found=-1;
+        for(int column=0;column<source_.columns.size();++column) if(source_.columns[column].compare(key,Qt::CaseInsensitive)==0) {assert(found<0);found=column;}
+        if(found<0) throw linaccess::VbaRuntimeError(2465,"Source-row field unavailable");
+        return linaccess::qtFieldValue(row_[found],source_.columnTypes.value(found));
+    }
+    std::optional<std::string> field(std::string_view name) override {return expressionValue(name,false).asField();}
+    void setField(std::string_view,std::optional<std::string>) override {throw linaccess::VbaRuntimeError(3251,"Read-only source row");}
+    void message(std::string_view) override {throw linaccess::VbaRuntimeError(3251,"Source row has no UI");}
+    void saveRecord() override {throw linaccess::VbaRuntimeError(3251,"Read-only source row");}
+private:
+    const linaccess::AccessQueryResult& source_;const QVariantList& row_;
+};
+class ReportSourceAggregateHost final : public linaccess::VbaHost {
+public:
+    explicit ReportSourceAggregateHost(const linaccess::AccessQueryResult& source):source_(source) {}
+    std::optional<std::string> field(std::string_view) override {throw linaccess::VbaRuntimeError(3251,"Scalar field outside source aggregate");}
+    void setField(std::string_view,std::optional<std::string>) override {throw linaccess::VbaRuntimeError(3251,"Read-only source aggregate");}
+    void message(std::string_view) override {throw linaccess::VbaRuntimeError(3251,"Source aggregate has no UI");}
+    void saveRecord() override {throw linaccess::VbaRuntimeError(3251,"Read-only source aggregate");}
+    linaccess::VbaValue expressionAggregate(std::string_view function,std::string_view field,bool all) override {
+        if(all) {assert(function=="count");return linaccess::VbaValue::numeric(source_.rows.size());}
+        return accumulate(function,[&](ReportSourceRowHost& row) {return row.expressionValue(field,false);});
+    }
+    linaccess::VbaValue expressionAggregateExpression(std::string_view function,std::string_view expression) override {
+        return accumulate(function,[&](ReportSourceRowHost& row) {return linaccess::evaluateAccessExpression(expression,row);});
+    }
+private:
+    template<class Read> linaccess::VbaValue accumulate(std::string_view function,Read read) {
+        assert(function=="sum" || function=="count");
+        long double total=0,units=0;int count=0;bool currency=false;
+        for(const auto& values:source_.rows) {
+            ReportSourceRowHost row(source_,values);const auto item=read(row);
+            assert(item.kind!=linaccess::VbaValue::Kind::Error);
+            if(item.kind==linaccess::VbaValue::Kind::Null) continue;
+            if(function=="count") {++count;continue;}
+            if(!count) currency=item.kind==linaccess::VbaValue::Kind::Currency;
+            assert(currency==(item.kind==linaccess::VbaValue::Kind::Currency));
+            if(currency) units+=item.currencyUnits;else total+=item.asNumber();++count;
+        }
+        if(function=="count") return linaccess::VbaValue::numeric(count);
+        if(!count) return {};
+        if(currency) {
+            assert(units>=std::numeric_limits<std::int64_t>::min() && units<=std::numeric_limits<std::int64_t>::max());
+            return linaccess::VbaValue::currency(static_cast<std::int64_t>(units));
+        }
+        return linaccess::VbaValue::numeric(static_cast<double>(total));
+    }
+    const linaccess::AccessQueryResult& source_;
+};
 class OriginalKeyDelivery final : public QObject {
 public:
     explicit OriginalKeyDelivery(QWidget& scope):scope_(scope) { QApplication::instance()->installEventFilter(this); }
@@ -874,22 +931,21 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
                     if (!line->property("la_null").toBool()) ++reportCells;
                 }
             }
+            const auto checkedSource=linaccess::executeAccessQueryPlan(db,plan,bindings);
             const QRegularExpression rootSum(R"sum(^=Sum\((.*)\)$)sum",QRegularExpression::CaseInsensitiveOption);
             for (const auto& control:layout.controls) {
                 const auto match=rootSum.match(control.controlSource.trimmed());
                 if (!match.hasMatch()) continue;
                 auto* line=report.findChild<QLineEdit*>("access-control-"+control.name);
                 assert(line && line->property("la_calculation_error").toInt()==0);
-                auto rows=plan.sql.trimmed(); if(rows.endsWith(';')) rows.chop(1);
-                const auto aggregatePlan=linaccess::compileAccessQuery("SELECT "+control.controlSource.trimmed().mid(1)
-                    +" AS total FROM ("+rows+") AS report_rows");
-                QSqlQuery aggregate(db); assert(aggregate.prepare(aggregatePlan.sql));
-                for(auto it=bindings.cbegin();it!=bindings.cend();++it) aggregate.bindValue(it.key(),it.value());
-                assert(aggregate.exec() && aggregate.next());
-                assert(line->property("la_null").toBool()==aggregate.value(0).isNull());
-                if (!aggregate.value(0).isNull()) {
+                ReportSourceAggregateHost expectedHost(checkedSource);
+                const auto expectedResult=linaccess::evaluateAccessExpression(control.controlSource.trimmed().mid(1).toUtf8().toStdString(),expectedHost);
+                assert(expectedResult.kind!=linaccess::VbaValue::Kind::Error);
+                const auto expectedValue=linaccess::sqlFieldValue(expectedResult,"");
+                assert(line->property("la_null").toBool()==expectedValue.isNull());
+                if (!expectedValue.isNull()) {
                     const auto value=makePreviewFormObject(report)->item(control.name.toStdString());
-                    const auto native=value.asNumber(),expected=aggregate.value(0).toDouble();
+                    const auto native=value.asNumber(),expected=expectedValue.toDouble();
                     assert(std::abs(native-expected)<=qMax(1e-9,std::abs(expected)*1e-12));
                     if(control.format.isEmpty()) {bool valid=false;const auto displayed=line->text().toDouble(&valid);assert(valid && std::abs(displayed-expected)<=qMax(1e-9,std::abs(expected)*1e-12));}
                     else try {const auto display=linaccess::formatAccessValue(value,control.format.toUtf8().toStdString(),true);assert(line->text()==QString::fromStdString(display.asText()) && !line->property("la_format_error").toInt());}
@@ -932,7 +988,7 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
     assert(output.write(QJsonDocument(inventory).toJson())>0);
     std::cout<<"Original reports: "<<scanned<<", executed sources: "<<available<<", non-NULL bound controls: "<<cells<<'\n';
     for (auto it=failures.cbegin();it!=failures.cend();++it) std::cout<<"Report source category "<<it.key().toStdString()<<": "<<it.value()<<'\n';
-    std::cout<<"Original report aggregate expressions independently SQL-checked: "<<reportAggregateCells<<'\n';
+    std::cout<<"Original report aggregate expressions independently source-row checked: "<<reportAggregateCells<<'\n';
     assert(reportAggregateCells>0);
     assert(available>0 && cells>0);
     acknowledge.stop();
