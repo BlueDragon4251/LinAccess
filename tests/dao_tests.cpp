@@ -1976,6 +1976,22 @@ End Function
     assert(converted->item("b").numericType==linaccess::VbaValue::NumericType::Byte && converted->item("i").numericType==linaccess::VbaValue::NumericType::Integer && converted->item("l").numericType==linaccess::VbaValue::NumericType::Long);
     assert(converted->item("s").numericType==linaccess::VbaValue::NumericType::Single && converted->item("d").numericType==linaccess::VbaValue::NumericType::Double && converted->item("flag").kind==linaccess::VbaValue::Kind::Boolean);
     converted->member("Close",{});
+    assert(sql.exec("CREATE TABLE cstr_inputs(flag BOOLEAN,sample SINGLE_REAL,stamp DATETIME,amount CURRENCY_REAL,payload BLOB)"));
+    assert(sql.exec("INSERT INTO cstr_inputs VALUES(-1,0.5,'2003-04-05 06:07:08',0.1001,X'00')"));sql.finish();
+    const auto stringParameter=database->member("CreateQueryDef",{linaccess::VbaValue::string(""),linaccess::VbaValue::string("PARAMETERS flag BIT; SELECT CStr(flag) AS label")}).object;
+    stringParameter->member("Parameters",{linaccess::VbaValue::string("flag")}).object->assign("Value",linaccess::VbaValue::logical(false));
+    const auto parameterStrings=stringParameter->member("OpenRecordset",{}).object;assert(parameterStrings->item("label").text=="False");parameterStrings->member("Close",{});stringParameter->member("Close",{});
+    const auto fieldStrings=database->member("OpenRecordset",{linaccess::VbaValue::string("SELECT CStr(c.flag) AS flag,CStr(c.sample) AS sample,CStr(c.stamp) AS stamp,CStr(c.amount) AS amount FROM cstr_inputs AS c")}).object;
+    assert(fieldStrings->item("flag").text=="True" && fieldStrings->item("sample").text==linaccess::VbaValue::single(0.5f).asText() && fieldStrings->item("amount").text=="0.1001");
+    assert(fieldStrings->item("stamp").text==linaccess::qtFieldValue(QString("2003-04-05 06:07:08"),"DATETIME").asText());fieldStrings->member("Close",{});
+    const auto strings=database->member("OpenRecordset",{linaccess::VbaValue::string("SELECT CStr(value) AS source,CStr(CBool(value)) AS flag,CStr(CCur('0.1001')) AS money,CStr(CSng(16777217)) AS singleValue,CStr(True) AS literal,CStr('a' & Chr(0) & 'b') AS embedded FROM inputs ORDER BY value")}).object;
+    assert(strings->item("source").text=="2" && strings->item("flag").text=="True" && strings->item("money").text=="0.1001");
+    assert(strings->item("singleValue").text==linaccess::VbaValue::single(16777216).asText() && strings->item("literal").text=="True");
+    assert(strings->item("embedded").text==std::string("a\0b",3));strings->member("Close",{});
+    for(const auto& failure:std::vector<std::pair<std::string,int>>{{"SELECT CStr(NULL)",94},{"SELECT CStr(payload) FROM cstr_inputs",13},{"SELECT CStr(9007199254740993)",6},{"SELECT CStr()",450},{"SELECT CStr(1,2,3)",450},{"SELECT CStr('BOOLEAN',1)",450}}) {
+        int error=0;try{(void)database->member("OpenRecordset",{linaccess::VbaValue::string(failure.first)});}catch(const linaccess::VbaRuntimeError& actual){error=actual.number;}assert(error==failure.second);
+    }
+
     const auto typedRows=database->member("OpenRecordset",{linaccess::VbaValue::string(typedSource.toStdString())}).object;
     const auto enabled=typedRows->member("Fields",{linaccess::VbaValue::string("enabled")}).object;
     assert(enabled->member("Type",{}).asNumber()==1 && enabled->member("Size",{}).asNumber()==1);

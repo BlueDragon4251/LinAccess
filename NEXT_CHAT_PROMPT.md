@@ -4028,3 +4028,17 @@ Keine Anwendungsgrenze gelockert, keine neuen CTest-/Katalog-IDs. Original-Layou
 PDFs bleiben0 positiv/3 belegte Verweigerungen, bekannte Makro-/Tastaturgrenzen
 bleiben; keine initialisierte Verkaufs-/Windows-/Gesamtparität behauptet.456/386/70.
 Weiter mit allgemeinem SQL-CStr, anschließend weiteren offenen Anforderungen.
+
+
+Allgemeines natives SQL-CStr (2026-11-10): docs/NATIVE_SQL_CSTR.md. Gemeinsamer
+VBA-Auswerter und belegte Feld-/Parametertypen erhalten Boolean/Single/Date/
+Currency in typisierten Projektionen; Text einschließlich NUL, Null94, echte
+BLOB-Felder13, nicht exakt darstellbare große SQLite-Integer6, Arity450.
+Tokenbasierte Übersetzung, keine Geschäftsdatenersatzwerte oder Zustands-Caches.
+App/DAO gebaut, bestehendes dao_execution1/1 in2,43s bestanden. Fixture erwartete
+zunächst1 trotz vorherigem NativeScale-UPDATE auf2 und verwendete SQLite-X-Hex
+statt eines echten Binärfeldes; gezielt korrigiert, keine Laufzeitgrenze gelockert.
+Kein kompletter Jet-Locale-/Join-/Subquery-Typnachweis, keine neuen CTest-/Katalog-
+IDs;456/386/70. PRIVAT/Baum geprüfte Vorstufe5ec76beb; Paket noch Anwendung62d00929
+mit Verpackungskorrektur, vor SQL-CStr. Original116,96s/Inventar49,42s/7Hash gleich.
+Ohne Zwischenabschluss weiter mit laufenden nativen Berichtssummen je Gruppe.

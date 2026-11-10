@@ -1287,3 +1287,5 @@ neuen Tests/IDs; F041/F067/F068/F071/F121/F122/456/386/70 unverändert. Vorstufe
 privat remote/Baum geprüft. Geprüftes DEBcc19000 liegt vor späteren Umfängen.
 Danach ohne Zwischenabschluss aktuellen Paket-/Original-/Inventarlauf ausführen
 und weitere native Zahlentyp-/Operatorschritte fortsetzen. Kein Abschlussanruf.
+
+Native SQL string conversion: [CStr and checked source types](docs/NATIVE_SQL_CSTR.md).
