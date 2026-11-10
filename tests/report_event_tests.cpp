@@ -512,6 +512,8 @@ End)RUNNING";
             };
             const auto extracted=readRunning();
             for(const auto& value:{"10.0001","30.0003","70.0007","1010.0001","1030.0003","1070.0007"}) assert(extracted.contains(value));
+            for(const auto& pattern:{QString("10\\.0001\\s+1\\s+1010\\.0001"),QString("30\\.0003\\s+2\\s+1030\\.0003"),QString("70\\.0007\\s+3\\s+1070\\.0007")})
+                assert(QRegularExpression(pattern).match(extracted).hasMatch());
             assert(running.exportReportPdf(runningPdf) && readRunning()==extracted);
         }
         QFile runningProtected(runningPdf);assert(runningProtected.open(QIODevice::ReadOnly));const auto runningBytes=runningProtected.readAll();runningProtected.close();

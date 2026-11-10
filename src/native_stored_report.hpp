@@ -23,7 +23,8 @@ inline NativeStoredReport nativeStoredReport(QString name,const QJsonObject& def
     if (!plan.makeTable.isEmpty() || !plan.sql.trimmed().startsWith("SELECT",Qt::CaseInsensitive))
         throw VbaRuntimeError(3251,"Native report requires a read-only SELECT source");
     if (installAccessQueryViews(database)<0) throw VbaRuntimeError(3251,"Native report query views are busy");
-    const auto columns=accessQueryColumns(database,plan); // prepare only, never step rows.
+    QVector<QString> columnTypes;
+    const auto columns=accessQueryColumns(database,plan,&columnTypes); // prepare only, never step rows.
     if (columns.isEmpty() || columns.size()>32) throw VbaRuntimeError(3251,"Native report automatic layout supports 1-32 columns");
     const auto captions=definition.value("field_captions").toObject();
     if(definition.contains("field_formats") && !definition.value("field_formats").isObject()) throw VbaRuntimeError(5,"Invalid native field Format catalog");
@@ -32,6 +33,16 @@ inline NativeStoredReport nativeStoredReport(QString name,const QJsonObject& def
     for (const auto& column:columns) {
         if (column.isEmpty() || used.contains(column.toCaseFolded())) throw VbaRuntimeError(3251,"Native report columns are empty or ambiguous");
         (void)quoted(column); used.insert(column.toCaseFolded());
+    }
+    const auto runningValue=definition.value("running_sum_field");
+    if(!runningValue.isUndefined() && !runningValue.isString()) throw VbaRuntimeError(5,"Invalid running sum field");
+    const auto runningField=runningValue.toString().trimmed();
+    if(!runningField.isEmpty()) {
+        int index=-1;for(int i=0;i<columns.size();++i) if(columns[i].compare(runningField,Qt::CaseInsensitive)==0) {index=i;break;}
+        if(index<0) throw VbaRuntimeError(3265,"Running sum field is not in the report source");
+        static const QSet<QString> numeric{"INTEGER","INT","INTEGER1","INTEGER2","INTEGER4","REAL","DOUBLE","SINGLE_REAL","CURRENCY_REAL","CURRENCY_TICKS"};
+        if(index>=columnTypes.size() || !numeric.contains(columnTypes[index].trimmed().toUpper()))
+            throw VbaRuntimeError(3251,"Running sum requires a proven native numeric source field");
     }
     const auto unique=[&used](QString base) {
         auto result=base; int suffix=1;
@@ -78,7 +89,8 @@ inline NativeStoredReport nativeStoredReport(QString name,const QJsonObject& def
     for (int i=0;i<columns.size();++i) {
         lines<<"Begin TextBox"<<"Name ="+quoted(columns[i])<<"ControlSource ="+quoted("["+columns[i]+"]");
         if(const auto format=formats.value(columns[i].toCaseFolded());!format.isUndefined()) {if(!format.isString()) throw VbaRuntimeError(5,"Invalid native report field Format");lines<<"Format ="+quoted(format.toString());}
-        if(definition.value("can_grow").toBool()) lines<<"CanGrow =-1";
+        if(!runningField.isEmpty() && columns[i].compare(runningField,Qt::CaseInsensitive)==0) lines<<"RunningSum =2";
+        else if(definition.value("can_grow").toBool()) lines<<"CanGrow =-1";
         lines<<"Left ="+QString::number(i*width+30)<<"Top =30"<<"Width ="+QString::number(width-60)<<"Height =270"<<"End";
     }
     lines<<"End";

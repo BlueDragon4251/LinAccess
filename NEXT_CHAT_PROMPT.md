@@ -3288,3 +3288,15 @@ Texte verglichen und atomarer Zielschutz geprüft. Keine neuen Test-/Katalog-IDs
 456/386/70 unverändert. Vorstufe2db95826 privat remote/Baum geprüft. Geprüftes
 DEB8fd1d50 liegt vor nativen Operatoren und RunningSum. Ohne Zwischenabschluss
 native Berichtsentwurfsbedienung für laufende Feldsummen fortsetzen.
+
+
+Native RunningSum-Berichtsbedienung: optionales running_sum_field im echten
+Berichtsentwurf, vorbereitete tatsächliche Ergebnisspalten/-typen ohne Zeilen/
+Benutzerfunktionsausführung, fehlend3265/nichtnumerisch3251. Speicherung/Wieder-
+öffnung, laufendes Detailfeld ohne CanGrow und unveränderte andere Textfelder,
+VBA-/Quell-/Seitenmetadaten-Zusammenführung geprüft. Präfixumfang auf1MioZellen
+begrenzt. App/GUI/Layout gebaut; ein bestehendes Bündel2/2 in32,05s (19,09/12,96)
+bestanden, PDF-Zeilen mit tatsächlichen Ordinalen1/2/3 und Currency-Präfixen geprüft.
+Keine neuen Test-/Katalog-IDs;456/386/70 unverändert. Vorstufe3dd9019c privat remote/
+Baum geprüft. Ohne Zwischenabschluss jetzt aktuellen DEB-/Originalpfadnachweis
+für beide Operator- und RunningSum-Umfänge bündeln, danach weiter implementieren.

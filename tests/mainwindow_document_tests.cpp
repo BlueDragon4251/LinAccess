@@ -675,6 +675,7 @@ End Sub
         dialog->findChild<QPlainTextEdit*>("native-report-sql")->setPlainText(source);
         dialog->findChild<QPlainTextEdit*>("native-report-vba")->setPlainText(module);
         dialog->findChild<QCheckBox*>("native-report-cangrow")->setChecked(true);
+        dialog->findChild<QLineEdit*>("native-report-running-field")->setText("id");
         dialog->findChild<QComboBox*>("native-report-page-break")->setCurrentIndex(3);
         dialog->findChild<QComboBox*>("native-report-header-break")->setCurrentIndex(2);
         auto* code=dialog->findChild<QPlainTextEdit*>("native-report-vba");
@@ -691,6 +692,9 @@ End Sub
     const auto saved=QJsonDocument::fromJson(sql.value(0).toByteArray()).object(); sql.finish();
     assert(saved.value("sql").toString()==source && saved.value("vba").toString()==module);
     assert(saved.value("can_grow").toBool());
+    assert(saved.value("running_sum_field").toString()=="id");
+    {const auto packet=nativeStoredReport("validation",saved,db);const auto layout=parseAccessFormLayout(QString::fromUtf8(packet.layout));bool found=false;for(const auto& control:layout.controls) if(control.name=="id") {assert(control.runningSum==2 && !control.canGrow);found=true;}assert(found);
+        for(const auto& field:{QString("missing"),QString("Display value")}) {auto bad=saved;bad.insert("running_sum_field",field);int code=0;try {(void)nativeStoredReport("invalid",bad,db);}catch(const VbaRuntimeError& error){code=error.number;}assert(code==(field=="missing" ? 3265 : 3251));}}
     assert(saved.value("detail_force_new_page").toInt()==3 && saved.value("header_force_new_page").toInt()==2);
     assert(sql.exec("SELECT COUNT(*) FROM native_report_events") && sql.next() && sql.value(0).toInt()==0); sql.finish();
     auto* explorer=window.findChild<QTreeWidget*>("database-explorer"); assert(explorer);
@@ -784,6 +788,7 @@ End Sub
         assert(dialog->findChild<QPlainTextEdit*>("native-report-vba")->toPlainText()==module);
         assert(dialog->findChild<QComboBox*>("native-report-page-break")->currentIndex()==3);
         assert(dialog->findChild<QComboBox*>("native-report-header-break")->currentIndex()==2);
+        assert(dialog->findChild<QLineEdit*>("native-report-running-field")->text()=="id");
         bool previewed=false;
         QTimer::singleShot(0,dialog,[&] {
             auto* preview=dynamic_cast<AccessFormPreview*>(QApplication::activeModalWidget());
@@ -808,6 +813,7 @@ End Sub
     const auto finalDesign=QJsonDocument::fromJson(sql.value(0).toByteArray()).object(); sql.finish();
     assert(finalDesign.value("page_setup").toObject().value("margins_mm").toArray()[0].toDouble()==30);
     assert(finalDesign.value("sql").toString()==source && finalDesign.value("vba").toString()==module);
+    assert(finalDesign.value("running_sum_field").toString()=="id");
     assert(sql.exec("SELECT COUNT(*) FROM native_report_events WHERE kind='open'") && sql.next() && sql.value(0).toInt()==5); sql.finish();
     assert(sql.exec("SELECT COUNT(*) FROM native_report_events WHERE kind='close'") && sql.next() && sql.value(0).toInt()==5); sql.finish();
     QTimer::singleShot(0,&window,[&] {

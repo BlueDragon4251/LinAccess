@@ -386,8 +386,11 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
     // Build each record prefix once. Pagination and repeated preview paints only
     // read these values, so split sections never accumulate the same row twice.
     try {
+        qsizetype prefixCells=0;
         for(const auto& control:layout_.controls) {
             if(!control.runningSum) continue;
+            if(recordRows_.size()>1000000-prefixCells) return false;
+            prefixCells+=recordRows_.size();
             auto field=control.controlSource.trimmed();
             const bool counter=field=="=1";
             if(field.startsWith('[') && field.endsWith(']')) field=field.mid(1,field.size()-2);
