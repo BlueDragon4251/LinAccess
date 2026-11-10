@@ -3638,3 +3638,19 @@ vor Quellbindung/Restartable/Löschzustand; anschließend diese gesammelten Änd
 gebündelt paketieren/Original prüfen und weitere offene Anforderungen fortsetzen.
 Spezifische BOF-/EOF-/Move-Dokumentation verwenden; moderne generierte Delete-
 Seiten enthalten widersprüchliches unsupported, keine Blindübernahme als Orakel.
+
+
+DAO schreibbare Sternabfragen: DAO_EDITABLE_STAR_QUERIES.md dokumentiert echte
+Mode2-Edit/Update/Delete auf streng geprüften schlüsselgebundenen einzelnen main-
+Tabellen mit vollständigem */t.*. WHERE wird beim Laden und Schreiben angewandt;
+ORDER BY nutzt physische Felder. Klone, Herkunft und abgeleitete Snapshots bleiben
+nutzbar. Ungefiltertes AddNew unterstützt; gefiltertes AddNew explizit3251 vor
+Entwurf/Defaults/Reservierung. Projektionen/Parameter/komplexe/keylose Quellen und
+Mode4 werden nicht schreibbar erklärt. App/DAO/QueryModel/Currency gebaut; einmaliges
+bestehendes Bündel5/5 in3,88s bestanden, DAO3,34s; echte SQL-/VBA-/Klon-/Stale-
+Predicate-/Retry-/Lösch-/Insert-Belege. Keine neuen CTest-/Katalog-IDs;456/386/70.
+Vorstufec67cbd9e privat remote/Baum geprüft, neues DEB geprüft und Original1/1
+in120,41s bestanden, sieben geschützte Hashes unverändert; Makrogrenze bleibt.
+Dieses Paket liegt vor Sternabfragen. Inventar unverändert letzter tatsächlicher
+Lauf4ebc3f6c100/78/22. Keine Windows-Orakel-/vollständige Dynaset-Paritätsbehauptung.
+Weitere allgemeine Anforderungen ohne Zwischenabschluss umsetzen.

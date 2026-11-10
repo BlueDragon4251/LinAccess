@@ -534,6 +534,16 @@ public:
         : db_(std::move(db)), source_(std::move(source)), bindings_(std::move(bindings)), readOnly_(snapshot), recordsetType_(cursorKind ? cursorKind : snapshot ? 4 : 2),queryPlan_(std::move(plan)) {
         data_->workspace=workspaceState(db_); data_->rollbackRevision=data_->workspace->rollbackRevision;
         table_ = db_.tables().contains(source_, Qt::CaseInsensitive);
+        if(!table_ && !snapshot && recordsetType_==2 && !queryPlan_.source.isEmpty() && queryPlan_.parameters.isEmpty()) {
+            try {
+                QString predicate;QVector<QPair<int,Qt::SortOrder>> ordering;
+                const auto target=editableAccessQueryTable(db_,queryPlan_.source,&predicate,&ordering);
+                (void)physicalRowIdentity(db_,target);(void)readTableSchemaColumns(db_,target);
+                const auto schema=db_.record(target);QStringList terms;
+                for(const auto& item:ordering) terms.append(quote(schema.fieldName(item.first))+(item.second==Qt::DescendingOrder ? " DESC" : " ASC"));
+                source_=target;table_=true;queryBased_=true;queryWhere_=predicate;queryOrdering_=terms;
+            } catch(const VbaRuntimeError& failure) {if(failure.number!=3251) throw;}
+        }
         if(table_ && nativeTableNames(db_).contains(source_,Qt::CaseInsensitive)) tableGeneration_=data_->workspace->tableGenerations.value(source_.toCaseFolded());
         readOnly_ |= !table_ || !connectionUpdatable(db_);
         reload();
@@ -777,6 +787,7 @@ public:
         }
         if (key == "edit" || key == "addnew") {
             checkPhysicalSource();
+            if(key=="addnew" && queryBased_ && !queryWhere_.isEmpty()) throw VbaRuntimeError(3251,"DAO: Filtered query AddNew membership is not yet validated");
             require(!readOnly_, "DAO: Recordset is read-only");
             require(mode_ == Mode::Browse, "DAO: Edit already in progress");
             changed_.clear();chunkFields_.clear();
@@ -815,7 +826,7 @@ public:
             for(auto* cursor:data_->cursors) if(!cursor->closed_ && !cursor->deleted_ && cursor->position_>=0 && cursor->position_<data_->ids.size() && data_->ids[cursor->position_]==deletedId)
                 if(auto lease=cursor->weak_from_this().lock()) affected.push_back(std::move(lease));
             QSqlQuery query(db_);
-            require(query.prepare("DELETE FROM main." + quote(source_) + " WHERE "+data_->rowIdentity+"=?"), "DAO: Delete prepare failed");
+            require(query.prepare("DELETE FROM main." + quote(source_) + " WHERE "+data_->rowIdentity+"=?"+queryPredicate()), "DAO: Delete prepare failed");
             query.addBindValue(data_->ids[position_]);
             require(query.exec() && query.numRowsAffected() == 1, "DAO: Delete failed or record changed");
             for(const auto& cursor:affected) {cursor->deleted_=neighbors;cursor->emptyBoundary_=0;}
@@ -1020,13 +1031,13 @@ public:
     }
 private:
     void checkDerivedSource() const {
-        if(frozen_ || table_ || queryPlan_.sql.isEmpty() || !recordsetType_ || (*recordsetType_!=2 && *recordsetType_!=4))
+        if(frozen_ || (table_ && !queryBased_) || queryPlan_.sql.isEmpty() || !recordsetType_ || (*recordsetType_!=2 && *recordsetType_!=4))
             throw VbaRuntimeError(3251,"DAO: Derived snapshots require a query-backed dynaset or snapshot");
     }
     struct CloneTag {};
     Recordset(const Recordset& source,CloneTag)
         : data_(source.data_),db_(source.db_),source_(source.source_),bindings_(source.bindings_),
-          table_(source.table_),readOnly_(source.readOnly_),frozen_(source.frozen_),recordsetType_(source.recordsetType_),tableGeneration_(source.tableGeneration_),indexName_(source.indexName_),position_(-1),queryPlan_(source.queryPlan_),queryDefinitionSource_(source.queryDefinitionSource_),filter_(source.filter_),sort_(source.sort_) {
+          table_(source.table_),readOnly_(source.readOnly_),frozen_(source.frozen_),queryBased_(source.queryBased_),recordsetType_(source.recordsetType_),tableGeneration_(source.tableGeneration_),indexName_(source.indexName_),position_(-1),queryPlan_(source.queryPlan_),queryDefinitionSource_(source.queryDefinitionSource_),filter_(source.filter_),sort_(source.sort_),queryWhere_(source.queryWhere_),queryOrdering_(source.queryOrdering_) {
         cloneCounted_=true; ++data_->workspace->clones;
         data_->cursors.insert(this);
     }
@@ -1036,6 +1047,7 @@ private:
             if (data_->columns[i].compare(name, Qt::CaseInsensitive) == 0) return i;
         throw std::runtime_error("DAO: Unknown field");
     }
+    QString queryPredicate() const {return queryWhere_.isEmpty() ? QString{} : " AND ("+queryWhere_+")";}
     void current() const { if (deleted_ || position_<0 || position_>=data_->rows.size()) throw VbaRuntimeError(3021,"DAO: No current record"); }
     void navigate(qsizetype target,int emptyDirection=0) {
         checkTransaction();if(closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");
@@ -1184,7 +1196,8 @@ private:
         SqliteExecutionBudget budget(db_);
         QSqlQuery query(db_);
         data_->rowIdentity=physicalRowIdentity(db_,source_);std::optional<NativeRecordsetIndex> selected;QString order;if(!indexName_.isEmpty()) {selected=checkedRecordsetIndex(db_,source_,indexName_);QStringList terms;for(int field=0;field<selected->fields.size();++field) terms.append(quote(selected->fields[field])+(selected->descending[field] ? " DESC" : " ASC"));terms.append(data_->rowIdentity+" ASC");order=" ORDER BY "+terms.join(',');}
-        exec(query,"SELECT "+data_->rowIdentity+",* FROM main." + quote(source_)+order);data_->selectedIndex=std::move(selected);
+        if(indexName_.isEmpty() && !queryOrdering_.isEmpty()) {auto terms=queryOrdering_;terms.append(data_->rowIdentity+" ASC");order=" ORDER BY "+terms.join(',');}
+        exec(query,"SELECT "+data_->rowIdentity+",* FROM main." + quote(source_)+(queryWhere_.isEmpty() ? QString{} : " WHERE ("+queryWhere_+")")+order);data_->selectedIndex=std::move(selected);
         const int offset = table_ ? 1 : 0;
         data_->columns.clear(); data_->rows.clear(); data_->ids.clear(); position_ = 0;
         const int end = query.record().count();
@@ -1232,7 +1245,7 @@ private:
         else if (!columns.empty()) {
             require(query.prepare(adding ? "INSERT INTO main." + quote(source_) + " (" + columns.join(',')
                         + ") VALUES (" + values.join(',') + ")"
-                    : "UPDATE main." + quote(source_) + " SET " + assignments.join(',') + " WHERE "+data_->rowIdentity+"=? RETURNING "+data_->rowIdentity),
+                    : "UPDATE main." + quote(source_) + " SET " + assignments.join(',') + " WHERE "+data_->rowIdentity+"=?"+queryPredicate()+" RETURNING "+data_->rowIdentity),
                     "DAO: Update prepare failed");
             for (const int i : indices) query.addBindValue(pending_[i]);
             if (!adding) query.addBindValue(id);
@@ -1260,7 +1273,7 @@ private:
     QSqlDatabase db_;
     QString source_,indexName_;
     QMap<QString,QVariant> bindings_;
-    bool table_{}, readOnly_{}, closed_{}, frozen_{},noMatch_{},cloneCounted_{};
+    bool table_{}, readOnly_{}, closed_{}, frozen_{},noMatch_{},cloneCounted_{},queryBased_{};
     std::optional<int> recordsetType_; // Opening kind, independent of write capability; unknown for host-only frozen adapters.
     std::optional<quint64> tableGeneration_;
     std::optional<VbaValue> lastModified_;
@@ -1272,7 +1285,8 @@ private:
     Mode mode_{Mode::Browse};
     AccessQueryPlan queryPlan_;
     QString queryDefinitionSource_;
-    QString filter_,sort_;
+    QString filter_,sort_,queryWhere_;
+    QStringList queryOrdering_;
     std::weak_ptr<VbaObject> fields_;
     QMap<QString,std::weak_ptr<Field>> fieldObjects_;
 };
@@ -1449,7 +1463,7 @@ public:
             const int mode=nativeRecordsetMode(args,0);
             require(plan_.sql.trimmed().startsWith("SELECT ",Qt::CaseInsensitive),"DAO: SELECT QueryDef required");
             if(mode==1) throw VbaRuntimeError(3251,"DAO: QueryDef cannot open a table-type Recordset");
-            auto cursor=std::make_shared<Recordset>(db_,plan_.sql,true,bindAccessQueryParameters(plan_,values_),plan_,mode);
+            auto cursor=std::make_shared<Recordset>(db_,plan_.sql,mode==4,bindAccessQueryParameters(plan_,values_),plan_,mode);
             cursor->retainQueryDefinition(source_);
             return VbaValue::reference(std::move(cursor));
         }
@@ -3590,7 +3604,7 @@ public:
             const auto sql = (source.trimmed().startsWith("SELECT ",Qt::CaseInsensitive) || source.trimmed().startsWith("TRANSFORM ",Qt::CaseInsensitive)) ? source : accessQuerySource(db_,source);
             const auto plan = compileAccessQuery(sql);
             require(plan.sql.trimmed().startsWith("SELECT ",Qt::CaseInsensitive),"DAO: SELECT required");
-            return VbaValue::reference(std::make_shared<Recordset>(db_,plan.sql,true,bindAccessQueryParameters(plan,{}),plan,mode));
+            return VbaValue::reference(std::make_shared<Recordset>(db_,plan.sql,mode==4,bindAccessQueryParameters(plan,{}),plan,mode));
         }
         if (key == "execute") {
             require(args.size() == 1 || (args.size() == 2 && args[1].asNumber() == 128), "DAO: Execute arguments unsupported");

@@ -1019,6 +1019,51 @@ End Sub
     assert(sql.exec("SELECT value FROM text_lists") && sql.next() && sql.value(0).toString()=="alpha|alt|alps!");
     sql.finish(); db.close();
 }
+void testEditableStarQueryDynasets() {
+    using namespace linaccess;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","dao-editable-star");db.setDatabaseName(":memory:");assert(db.open());QSqlQuery sql(db);
+    assert(sql.exec("CREATE TABLE query_edit_rows(id INTEGER PRIMARY KEY,score INTEGER,label TEXT)"));
+    assert(sql.exec("INSERT INTO query_edit_rows VALUES(1,10,'one'),(2,20,'two'),(3,30,'three')"));sql.finish();
+    auto database=makeDaoDatabase(db);const auto open=[&](const char* source,int mode=2) {return database->member("OpenRecordset",{VbaValue::string(source),VbaValue::integer(static_cast<std::int16_t>(mode))}).object;};
+    const auto error=[](auto operation,int expected) {int number=0;try {operation();}catch(const VbaRuntimeError& failure) {number=failure.number;}assert(number==expected);};
+    auto rows=open("SELECT t.* FROM query_edit_rows AS t WHERE t.score>=20 ORDER BY t.score DESC");
+    assert(rows->member("Updatable",{}).truthy() && rows->member("Type",{}).asNumber()==2 && rows->member("RecordCount",{}).asNumber()==2 && rows->item("id").asNumber()==3);
+    assert(rows->member("Fields",{VbaValue::string("score")}).object->member("SourceTable",{}).asText()=="query_edit_rows");
+    rows->member("Edit",{});rows->assignItem("score",VbaValue::longInteger(31));rows->member("Update",{});assert(rows->item("id").asNumber()==3);
+    auto peer=rows->member("Clone",{}).object;peer->member("MoveFirst",{});peer->member("Edit",{});peer->assignItem("label",VbaValue::string("edited"));peer->member("Update",{});assert(rows->item("label").asText()=="edited");
+    auto snapshot=rows->member("OpenRecordset",{VbaValue::integer(4)}).object;assert(!snapshot->member("Updatable",{}).truthy() && snapshot->member("RecordCount",{}).asNumber()==2);snapshot->member("Close",{});
+    error([&] {rows->member("AddNew",{});},3251);assert(rows->member("EditMode",{}).asNumber()==0);
+    rows->member("MoveNext",{});assert(rows->item("id").asNumber()==2);rows->member("Edit",{});rows->assignItem("score",VbaValue::longInteger(5));rows->member("Update",{});
+    assert(rows->member("RecordCount",{}).asNumber()==1);error([&] {rows->item("id");},3021);
+    rows->member("MoveFirst",{});assert(rows->item("id").asNumber()==3);
+    assert(sql.exec("UPDATE query_edit_rows SET score=0 WHERE id=3"));sql.finish();
+    rows->member("Edit",{});rows->assignItem("label",VbaValue::string("retry"));int rejected=0;try {rows->member("Update",{});}catch(const std::exception&) {rejected=1;}assert(rejected && rows->member("EditMode",{}).asNumber()==1);
+    assert(sql.exec("SELECT label FROM query_edit_rows WHERE id=3") && sql.next() && sql.value(0).toString()=="edited");sql.finish();
+    assert(sql.exec("UPDATE query_edit_rows SET score=31 WHERE id=3"));sql.finish();rows->member("Update",{});
+    rows->member("Delete",{});rows->member("MoveNext",{});assert(rows->member("EOF",{}).truthy());peer->member("Close",{});rows->member("Close",{});
+    auto ordered=open("SELECT * FROM query_edit_rows ORDER BY id ASC");assert(ordered->member("Updatable",{}).truthy());
+    ordered->member("AddNew",{});ordered->assignItem("id",VbaValue::longInteger(0));ordered->assignItem("score",VbaValue::longInteger(40));ordered->member("Update",{});
+    assert(ordered->item("id").asNumber()==1);ordered->member("MoveLast",{});assert(ordered->item("id").asNumber()==0);ordered->member("Close",{});
+    auto definition=database->member("CreateQueryDef",{VbaValue::string(""),VbaValue::string("SELECT * FROM query_edit_rows WHERE id=1")}).object;
+    auto defined=definition->member("OpenRecordset",{}).object;assert(defined->member("Updatable",{}).truthy());defined->member("Edit",{});defined->assignItem("label",VbaValue::string("defined"));defined->member("Update",{});defined->member("Close",{});
+    assert(!open("SELECT id,label FROM query_edit_rows")->member("Updatable",{}).truthy());
+    assert(!open("SELECT * FROM query_edit_rows",4)->member("Updatable",{}).truthy());
+    assert(sql.exec("CREATE TABLE no_query_key(value INTEGER)"));assert(sql.exec("INSERT INTO no_query_key VALUES(7)"));sql.finish();assert(!open("SELECT * FROM no_query_key")->member("Updatable",{}).truthy());
+    Host host(db);const auto result=executeVbaProcedure(R"VBA(Function EditStarQuery As Long
+Dim rows As DAO.Recordset
+Set rows=CurrentDb.OpenRecordset("SELECT * FROM query_edit_rows WHERE id=1",dbOpenDynaset)
+If Not rows.Updatable Then Err.Raise 5
+rows.Edit
+rows!score=12
+rows.Update
+EditStarQuery=rows!score
+rows.Close
+End Function)VBA","EditStarQuery",host);
+    if(result.status!=VbaExecutionStatus::Completed) std::cerr<<"Editable star: "<<result.explanation<<" line "<<result.line<<" error "<<result.errorNumber<<'\n';
+    assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==12);
+    assert(sql.exec("SELECT score,label FROM query_edit_rows WHERE id=1") && sql.next() && sql.value(0).toInt()==12 && sql.value(1).toString()=="defined");sql.finish();
+}
+
 void testRecordsetCopyQueryDef() {
     using namespace linaccess;
     auto db=QSqlDatabase::addDatabase("QSQLITE","dao-copy-querydef"); db.setDatabaseName(":memory:"); assert(db.open());
@@ -1170,6 +1215,7 @@ End Function)VBA","DeleteCursorRows",host);
 }
 
 void testOwnedQueryDefs() {
+    testEditableStarQueryDynasets();
     testRecordsetCopyQueryDef();
     auto db=QSqlDatabase::addDatabase("QSQLITE","owned-querydef-sql"); db.setDatabaseName(":memory:"); assert(db.open());
     QSqlQuery sql(db);
