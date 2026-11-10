@@ -296,6 +296,7 @@ void stringSqlFunction(sqlite3_context* context,int count,sqlite3_value** args,s
         const auto result=evaluateVbaExpression(expression,host,values);
         if(result.kind==VbaValue::Kind::Null) native.nullResult(context);
         else if(result.kind==VbaValue::Kind::Text) returnText(context,QString::fromUtf8(result.text.data(),static_cast<qsizetype>(result.text.size())));
+        else if(result.kind==VbaValue::Kind::Number && (result.numericType==VbaValue::NumericType::Integer || result.numericType==VbaValue::NumericType::Long || result.numericType==VbaValue::NumericType::Byte)) native.integerResult(context,static_cast<qlonglong>(result.number));
         else throw VbaRuntimeError(13,"String SQL result type mismatch");
     } catch(const VbaRuntimeError& failure) { functionError(context,failure); }
       catch(...) { native.error(context,"SQL string evaluation failed",-1); }
@@ -318,6 +319,22 @@ void stringMidString(sqlite3_context* context,int count,sqlite3_value** args) no
 void stringMidStringTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Mid$",2,3,true);}
 void stringReplace(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Replace",3,6,false);}
 void stringReplaceTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Replace",3,6,true);}
+void stringInStr(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"InStr",2,4,false);}
+void stringInStrTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"InStr",2,4,true);}
+void stringStrComp(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"StrComp",2,3,false);}
+void stringStrCompTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"StrComp",2,3,true);}
+void stringTrim(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Trim",1,1,false);}
+void stringTrimTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Trim",1,1,true);}
+void stringTrimString(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Trim$",1,1,false);}
+void stringTrimStringTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Trim$",1,1,true);}
+void stringLTrim(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"LTrim",1,1,false);}
+void stringLTrimTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"LTrim",1,1,true);}
+void stringLTrimString(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"LTrim$",1,1,false);}
+void stringLTrimStringTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"LTrim$",1,1,true);}
+void stringRTrim(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"RTrim",1,1,false);}
+void stringRTrimTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"RTrim",1,1,true);}
+void stringRTrimString(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"RTrim$",1,1,false);}
+void stringRTrimStringTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"RTrim$",1,1,true);}
 void convert_cbool(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"CBool",1,1);}
 void convert_cbyte(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"CByte",1,1);}
 void convert_cint(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"CInt",1,1);}
@@ -814,6 +831,22 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_mid_string_typed",-1,&stringMidStringTyped,nullptr,nullptr);
     ensure("linaccess_jet_replace",-1,&stringReplace,nullptr,nullptr);
     ensure("linaccess_jet_replace_typed",-1,&stringReplaceTyped,nullptr,nullptr);
+    ensure("linaccess_jet_instr",-1,&stringInStr,nullptr,nullptr);
+    ensure("linaccess_jet_instr_typed",-1,&stringInStrTyped,nullptr,nullptr);
+    ensure("linaccess_jet_strcomp",-1,&stringStrComp,nullptr,nullptr);
+    ensure("linaccess_jet_strcomp_typed",-1,&stringStrCompTyped,nullptr,nullptr);
+    ensure("linaccess_jet_trim",-1,&stringTrim,nullptr,nullptr);
+    ensure("linaccess_jet_trim_typed",-1,&stringTrimTyped,nullptr,nullptr);
+    ensure("linaccess_jet_trim_string",-1,&stringTrimString,nullptr,nullptr);
+    ensure("linaccess_jet_trim_string_typed",-1,&stringTrimStringTyped,nullptr,nullptr);
+    ensure("linaccess_jet_ltrim",-1,&stringLTrim,nullptr,nullptr);
+    ensure("linaccess_jet_ltrim_typed",-1,&stringLTrimTyped,nullptr,nullptr);
+    ensure("linaccess_jet_ltrim_string",-1,&stringLTrimString,nullptr,nullptr);
+    ensure("linaccess_jet_ltrim_string_typed",-1,&stringLTrimStringTyped,nullptr,nullptr);
+    ensure("linaccess_jet_rtrim",-1,&stringRTrim,nullptr,nullptr);
+    ensure("linaccess_jet_rtrim_typed",-1,&stringRTrimTyped,nullptr,nullptr);
+    ensure("linaccess_jet_rtrim_string",-1,&stringRTrimString,nullptr,nullptr);
+    ensure("linaccess_jet_rtrim_string_typed",-1,&stringRTrimStringTyped,nullptr,nullptr);
     ensure("linaccess_jet_cbool",-1,&convert_cbool,nullptr,nullptr);
     ensure("linaccess_jet_cbyte",-1,&convert_cbyte,nullptr,nullptr);
     ensure("linaccess_jet_cint",-1,&convert_cint,nullptr,nullptr);

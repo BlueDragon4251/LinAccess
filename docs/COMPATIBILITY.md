@@ -7051,3 +7051,21 @@ Currency nahe2^39, UTF-16/Null/Optionen geprüft. Keine neuen CTest-/Katalog-IDs
 456/386/70. Vorstufec2c5be8c privat/Baum geprüft; DEB noch62d00929 mit5ec76beb,
 vor CStr/OverGroup/Stringadaptern. Gebündelte neue Paket-/Original-/Inventarprüfung
 folgt. Ohne Zwischenabschluss weitere offene Anforderungen implementieren.
+
+
+Native SQL-Suche/Vergleich/Trim (2026-11-10): NATIVE_SQL_SEARCH_TRIM.md. InStr
+mit UTF-16-Positionen liefert Long, StrComp Integer; Trim/LTrim/RTrim inklusive
+$-Varianten, belegte Argumenttypen, Null/Varianten und optionale Vergleiche über
+gemeinsamen VBA-Auswerter. ASCII-/Locale-/LCID-/Surrogat-/Quellenkontextgrenzen
+bleiben ausdrücklich bestehen. App/DAO gebaut, vorhandenes dao_execution1/1
+in2,79s (gesamt2,80) bestanden, inkl. vorheriger String-/Kontextprüfungen. Keine
+neuen CTest-/Katalog-IDs;456/386/70.
+Aktueller geprüfter Paket-/Original-/Inventarbeleg: Quellcommit678a7fd82320afe5a255158a4e5d7f9e26b58944,
+Baum0fbe2a242c8c908120f6928ae6290d1bed7d1c30, privat verifiziert. DEB
+work/sql-string-adapters/package-proof/package/linaccess-0.7.0-Linux.deb: Inhalt/
+Rechte/App-/Helper-Build-ID/SQLite bestanden; vorhandenes Bündel2/2 in163,22s
+(Original116,95/Inventar46,27).7 geschützte Hashes unverändert.100/78/22, bekannte
+Kategorien73/5/3/9/10, kein Access-Ergebnisoracle; Original-Layout-PDF0 positiv/
+3 Verweigerungen, bekannte Makro-/Tastaturgrenzen bleiben. Das Paket enthält
+CStr/OverGroup/Stringadapter und liegt vor dieser Such-/Trim-Erweiterung.
+Ohne Zwischenabschluss weitere allgemeine offene Anforderungen implementieren.

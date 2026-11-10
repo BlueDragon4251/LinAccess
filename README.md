@@ -1293,3 +1293,5 @@ Native SQL string conversion: [CStr and checked source types](docs/NATIVE_SQL_CS
 Laufende Berichtssummen je Gruppe oder über alle Datensätze: [Umfang und Ausgabe](docs/REPORT_RUNNING_SUM.md).
 
 SQL-Zeichenfolgen mit nativen VBA-Regeln: [Str, Left/Right/Mid und Replace](docs/NATIVE_SQL_STRINGS.md).
+
+Native SQL-Suche und Leerzeichenbehandlung: [InStr, StrComp und Trim](docs/NATIVE_SQL_SEARCH_TRIM.md).

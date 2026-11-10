@@ -2009,6 +2009,15 @@ End Function
     const auto currencyText=database->member("OpenRecordset",{linaccess::VbaValue::string("SELECT id FROM string_keys WHERE CStr(money)='549755813887.9999'")}).object;assert(currencyText->item("id").asNumber()==3);currencyText->member("Close",{});
     const auto dateText=database->member("OpenRecordset",{linaccess::VbaValue::string("SELECT id FROM string_keys WHERE CStr(stamp)='2003-04-05' ORDER BY CStr(flag) DESC,id DESC")}).object;
     for(int expected:{3,1,2}) {assert(!dateText->member("EOF",{}).boolean && dateText->item("id").asNumber()==expected);dateText->member("MoveNext",{});}assert(dateText->member("EOF",{}).boolean);dateText->member("Close",{});
+    const auto searched=database->member("OpenRecordset",{linaccess::VbaValue::string("SELECT InStr('😀ab','b') AS position,InStr(3,'AaAa','a',1) AS resumed,StrComp('A','a',0) AS binary,StrComp('A','a',1) AS folded,StrComp(CBool(1),'True') AS typed,Trim$(CBool(1)) AS flag,Trim('  x  ') AS trimmed,LTrim$('  x  ') AS leading,RTrim$('  x  ') AS trailing,InStr(NULL,'x') AS nullSearch,StrComp(NULL,'x') AS nullCompare,Trim(NULL) AS nullTrim")}).object;
+    assert(searched->item("position").asNumber()==4 && searched->item("position").numericType==linaccess::VbaValue::NumericType::Long && searched->item("resumed").asNumber()==3);
+    assert(searched->item("binary").asNumber()==-1 && searched->item("binary").numericType==linaccess::VbaValue::NumericType::Integer && searched->item("folded").asNumber()==0 && searched->item("typed").asNumber()==0);
+    assert(searched->item("flag").text=="True" && searched->item("trimmed").text=="x" && searched->item("leading").text=="x  " && searched->item("trailing").text=="  x");
+    assert(searched->item("nullSearch").kind==linaccess::VbaValue::Kind::Null && searched->item("nullCompare").kind==linaccess::VbaValue::Kind::Null && searched->item("nullTrim").kind==linaccess::VbaValue::Kind::Null);searched->member("Close",{});
+    for(const auto& failure:std::vector<std::pair<std::string,int>>{{"SELECT Trim$(NULL)",94},{"SELECT LTrim$(NULL)",94},{"SELECT RTrim$(NULL)",94},{"SELECT InStr(0,'x','x')",5},{"SELECT InStr(1,'x','x',1031)",3251},{"SELECT StrComp('Ä','ä',1)",3251},{"SELECT Trim('x','x')",450}}) {
+        int error=0;try{(void)database->member("OpenRecordset",{linaccess::VbaValue::string(failure.first)});}catch(const linaccess::VbaRuntimeError& actual){error=actual.number;}
+        if(error!=failure.second) std::cerr<<"Native search/trim adapter error: "<<failure.first<<" actual="<<error<<" expected="<<failure.second<<'\n';assert(error==failure.second);
+    }
     const auto typedRows=database->member("OpenRecordset",{linaccess::VbaValue::string(typedSource.toStdString())}).object;
     const auto enabled=typedRows->member("Fields",{linaccess::VbaValue::string("enabled")}).object;
     assert(enabled->member("Type",{}).asNumber()==1 && enabled->member("Size",{}).asNumber()==1);
