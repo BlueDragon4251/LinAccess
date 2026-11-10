@@ -5934,3 +5934,14 @@ in120,41s bestanden, sieben geschützte Hashes unverändert; Makrogrenze bleibt.
 Dieses Paket liegt vor Sternabfragen. Inventar unverändert letzter tatsächlicher
 Lauf4ebc3f6c100/78/22. Keine Windows-Orakel-/vollständige Dynaset-Paritätsbehauptung.
 Weitere allgemeine Anforderungen ohne Zwischenabschluss umsetzen.
+
+
+DAO Recordset.Name: DAO_RECORDSET_NAME.md dokumentiert getrennte echte Öffnungs-
+identität für Tabelle/gespeicherte Abfrage/QueryDef und erste256Zeichen des
+ursprünglichen Access-SQL vor Übersetzung/physischem Schreibziel. Klone behalten
+Identität; schreibgeschützt383, Argument450, geschlossen3420. Frozen/transformierte
+Adapter ohne bewiesene Namenssemantik explizit3251. App/DAO gebaut; einmaliges
+bestehendes DAO-Bündel1/1 in3,41s bestanden. Keine neuen CTest-/Katalog-IDs;
+456/386/70. Vorstufe8de1ead privat remote/Baum geprüft; letztes geprüftes Paket/
+Original weiterhinc67cbd9e vor Abfrageschreiben/Namen. Ohne Zwischenabschluss
+weitere allgemeine Anforderungen implementieren; keine Windows-Orakelbehauptung.

@@ -533,6 +533,7 @@ public:
     Recordset(QSqlDatabase db, QString source, bool snapshot, QMap<QString,QVariant> bindings = {},AccessQueryPlan plan={},int cursorKind=0)
         : db_(std::move(db)), source_(std::move(source)), bindings_(std::move(bindings)), readOnly_(snapshot), recordsetType_(cursorKind ? cursorKind : snapshot ? 4 : 2),queryPlan_(std::move(plan)) {
         data_->workspace=workspaceState(db_); data_->rollbackRevision=data_->workspace->rollbackRevision;
+        openingName_=queryPlan_.source.isEmpty() ? source_ : queryPlan_.source.left(256);
         table_ = db_.tables().contains(source_, Qt::CaseInsensitive);
         if(!table_ && !snapshot && recordsetType_==2 && !queryPlan_.source.isEmpty() && queryPlan_.parameters.isEmpty()) {
             try {
@@ -556,6 +557,7 @@ public:
         for (qsizetype i=0;i<data_->rows.size();++i) data_->bookmarks.append(data_->nextBookmark++);
         data_->cursors.insert(this);
     }
+    void retainOpeningName(std::optional<QString> name) {openingName_=std::move(name);}
     void retainQueryDefinition(const QString& source) { queryDefinitionSource_=source; }
     ~Recordset() override { if (cloneCounted_) --data_->workspace->clones; data_->cursors.remove(this); }
     void checkPhysicalSource() const {
@@ -656,6 +658,7 @@ public:
         }
         if (key!="close" && key!="requery") checkTransaction();
         if((key=="edit" || key=="addnew" || key=="update" || key=="delete") && !connectionUpdatable(db_)) throw VbaRuntimeError(3027,"DAO: Database or object is read-only");
+        if(key=="name") {if(!args.empty()) throw VbaRuntimeError(450,"DAO: Name takes no arguments");if(!openingName_) throw VbaRuntimeError(3251,"DAO: Recordset opening name is not proven");return VbaValue::string(openingName_->toStdString());}
         if (key=="transactions" && args.empty()) return VbaValue::logical(true);
         if(key=="index") {if(!args.empty()) throw VbaRuntimeError(450,"DAO: Index property takes no arguments");if(!table_ || recordsetType_!=1) throw VbaRuntimeError(3251,"DAO: Index requires a table-type Recordset");if(!indexName_.isEmpty() && (!data_->selectedIndex || checkedRecordsetIndex(db_,source_,indexName_)!=*data_->selectedIndex)) throw VbaRuntimeError(3251,"DAO: Index changed; Requery is required");return VbaValue::string(indexName_.toStdString());}
         if(key=="seek") {seek(args);return {};}
@@ -713,7 +716,8 @@ public:
             if(mode_!=Mode::Browse) throw VbaRuntimeError(3219,"DAO: Pending edit");
             const auto filtered=filterAccessQueryPlan(db_,queryPlan_,filter_);
             const auto sorted=sortAccessQueryPlan(db_,filtered,sort_);
-            return VbaValue::reference(std::make_shared<Recordset>(db_,sorted.sql,true,bindings_,sorted,4));
+            auto derived=std::make_shared<Recordset>(db_,sorted.sql,true,bindings_,sorted,4);
+            derived->retainOpeningName(std::nullopt);return VbaValue::reference(std::move(derived));
         }
         if (key=="copyquerydef") {
             if(!args.empty()) throw VbaRuntimeError(450,"DAO: CopyQueryDef takes no arguments");
@@ -858,6 +862,7 @@ public:
             if(closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");checkTransaction();if(!table_ || recordsetType_!=1) throw VbaRuntimeError(3251,"DAO: Index requires a table-type Recordset");if(mode_!=Mode::Browse) throw VbaRuntimeError(3219,"DAO: Pending edit");const auto revision=data_->revision;const auto scalar=scalarVbaValue(value);checkTransaction();if(closed_) throw VbaRuntimeError(3420,"DAO: Recordset closed during index evaluation");if(mode_!=Mode::Browse || revision!=data_->revision) throw VbaRuntimeError(3219,"DAO: Recordset changed during index evaluation");if(scalar.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null index name");
             const auto requested=text(scalar.asText());std::optional<NativeRecordsetIndex> next;if(!requested.isEmpty()) next=checkedRecordsetIndex(db_,source_,requested);const auto name=next ? next->name : QString{};if(name==indexName_ && next==data_->selectedIndex) return;if(data_->cursors.size()!=1) throw VbaRuntimeError(3251,"DAO: Change Index before creating clones or after closing them");const auto old=indexName_;const auto id=position_>=0 && position_<data_->ids.size() ? data_->ids[position_] : QVariant{};indexName_=name;try {reload(false);if(!id.isNull()) position_=data_->ids.indexOf(id);}catch(...) {indexName_=old;throw;}return;
         }
+        if(lower(name)=="name") {if(closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");checkTransaction();throw VbaRuntimeError(383,"DAO: Recordset.Name is read-only");}
         if(lower(name)=="restartable") {
             if(closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");
             checkTableGeneration();throw VbaRuntimeError(383,"DAO: Restartable is read-only");
@@ -1036,7 +1041,7 @@ private:
     }
     struct CloneTag {};
     Recordset(const Recordset& source,CloneTag)
-        : data_(source.data_),db_(source.db_),source_(source.source_),bindings_(source.bindings_),
+        : data_(source.data_),db_(source.db_),source_(source.source_),openingName_(source.openingName_),bindings_(source.bindings_),
           table_(source.table_),readOnly_(source.readOnly_),frozen_(source.frozen_),queryBased_(source.queryBased_),recordsetType_(source.recordsetType_),tableGeneration_(source.tableGeneration_),indexName_(source.indexName_),position_(-1),queryPlan_(source.queryPlan_),queryDefinitionSource_(source.queryDefinitionSource_),filter_(source.filter_),sort_(source.sort_),queryWhere_(source.queryWhere_),queryOrdering_(source.queryOrdering_) {
         cloneCounted_=true; ++data_->workspace->clones;
         data_->cursors.insert(this);
@@ -1272,6 +1277,7 @@ private:
     std::shared_ptr<RecordsetData> data_{std::make_shared<RecordsetData>()};
     QSqlDatabase db_;
     QString source_,indexName_;
+    std::optional<QString> openingName_;
     QMap<QString,QVariant> bindings_;
     bool table_{}, readOnly_{}, closed_{}, frozen_{},noMatch_{},cloneCounted_{},queryBased_{};
     std::optional<int> recordsetType_; // Opening kind, independent of write capability; unknown for host-only frozen adapters.
@@ -1465,6 +1471,7 @@ public:
             if(mode==1) throw VbaRuntimeError(3251,"DAO: QueryDef cannot open a table-type Recordset");
             auto cursor=std::make_shared<Recordset>(db_,plan_.sql,mode==4,bindAccessQueryParameters(plan_,values_),plan_,mode);
             cursor->retainQueryDefinition(source_);
+            cursor->retainOpeningName(name_.isEmpty() ? source_.left(256) : name_);
             return VbaValue::reference(std::move(cursor));
         }
         if (key == "execute") {
@@ -3604,7 +3611,9 @@ public:
             const auto sql = (source.trimmed().startsWith("SELECT ",Qt::CaseInsensitive) || source.trimmed().startsWith("TRANSFORM ",Qt::CaseInsensitive)) ? source : accessQuerySource(db_,source);
             const auto plan = compileAccessQuery(sql);
             require(plan.sql.trimmed().startsWith("SELECT ",Qt::CaseInsensitive),"DAO: SELECT required");
-            return VbaValue::reference(std::make_shared<Recordset>(db_,plan.sql,mode==4,bindAccessQueryParameters(plan,{}),plan,mode));
+            auto cursor=std::make_shared<Recordset>(db_,plan.sql,mode==4,bindAccessQueryParameters(plan,{}),plan,mode);
+            cursor->retainOpeningName(source==sql ? source.left(256) : source);
+            return VbaValue::reference(std::move(cursor));
         }
         if (key == "execute") {
             require(args.size() == 1 || (args.size() == 2 && args[1].asNumber() == 128), "DAO: Execute arguments unsupported");

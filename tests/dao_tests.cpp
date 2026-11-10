@@ -1026,7 +1026,17 @@ void testEditableStarQueryDynasets() {
     assert(sql.exec("INSERT INTO query_edit_rows VALUES(1,10,'one'),(2,20,'two'),(3,30,'three')"));sql.finish();
     auto database=makeDaoDatabase(db);const auto open=[&](const char* source,int mode=2) {return database->member("OpenRecordset",{VbaValue::string(source),VbaValue::integer(static_cast<std::int16_t>(mode))}).object;};
     const auto error=[](auto operation,int expected) {int number=0;try {operation();}catch(const VbaRuntimeError& failure) {number=failure.number;}assert(number==expected);};
+    auto namedTable=open("query_edit_rows",1);assert(namedTable->member("Name",{}).asText()=="query_edit_rows");
+    error([&] {namedTable->member("Name",{VbaValue::integer(1)});},450);error([&] {namedTable->assign("Name",VbaValue::string("other"));},383);
+    const std::string longSql="SELECT * FROM query_edit_rows WHERE id=1 "+std::string(280,' ');
+    auto longCursor=open(longSql.c_str());assert(longCursor->member("Name",{}).asText()==longSql.substr(0,256));
+    auto namedQuery=database->member("CreateQueryDef",{VbaValue::string("NamedRows"),VbaValue::string("SELECT * FROM query_edit_rows")}).object;
+    auto fromDefinition=namedQuery->member("OpenRecordset",{}).object;assert(fromDefinition->member("Name",{}).asText()=="NamedRows");
+    auto byQueryName=open("NamedRows");assert(byQueryName->member("Name",{}).asText()=="NamedRows");
+    auto nameClone=byQueryName->member("Clone",{}).object;assert(nameClone->member("Name",{}).asText()=="NamedRows");
+    byQueryName->member("Close",{});error([&] {byQueryName->member("Name",{});},3420);
     auto rows=open("SELECT t.* FROM query_edit_rows AS t WHERE t.score>=20 ORDER BY t.score DESC");
+    assert(rows->member("Name",{}).asText()=="SELECT t.* FROM query_edit_rows AS t WHERE t.score>=20 ORDER BY t.score DESC");
     assert(rows->member("Updatable",{}).truthy() && rows->member("Type",{}).asNumber()==2 && rows->member("RecordCount",{}).asNumber()==2 && rows->item("id").asNumber()==3);
     assert(rows->member("Fields",{VbaValue::string("score")}).object->member("SourceTable",{}).asText()=="query_edit_rows");
     rows->member("Edit",{});rows->assignItem("score",VbaValue::longInteger(31));rows->member("Update",{});assert(rows->item("id").asNumber()==3);
