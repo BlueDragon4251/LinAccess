@@ -4111,3 +4111,17 @@ Layout1/1 in10,45s; kein neuer kombinierter2/2- oder Windows-Nachweis.
 Keine neuen CTest-/Katalog-IDs;456/386/70. Vorstufe00f8e4ef privat/Baum geprüft.
 DEB/Original/Inventar weiterhin678a7fd8 (116,95/46,27s,7Hash gleich), vor Such-/Trim
 und dieser Erweiterung. Ohne Zwischenabschluss weitere offene Anforderungen.
+
+
+Typisierte native SQL-Groß-/Kleinschreibung und Rückwärtssuche (2026-11-10):
+NATIVE_SQL_CASE_REVERSE.md. LCase/UCase samt $-Varianten, StrReverse/InStrRev
+verwenden gemeinsame belegte Argumenttypen; Boolean-Text, exakte begrenzte
+Currency-Ziffern und Long-Ergebnistyp von InStrRev. Bestehende ASCII-/Locale-/
+UTF-16-Grenzen bleiben. StrReverse(Null)94, nullable Such-/Case-Varianten und
+String-Result-Grenzen korrekt unterschieden; keine Windows-Parität behauptet.
+App/DAO gebaut, vorhandenes dao_execution1/1 in2,96s bestanden. Keine neuen
+CTest-/Katalog-IDs;456/386/70. Vorstufee64854cf privat/Baum geprüft. Paket weiterhin
+678a7fd8 (Original116,95/Inventar46,27s/7Hash gleich), vor Such-/Trim-/RepeatSection/
+Case-Erweiterungen; neue gebündelte Paketprüfung folgt. Danach echte modellose
+DoCmd.OpenModule-Ausgabe für allgemeine VBA-Entwicklung nachvollziehen/umsetzen.
+Keine Zwischenabschlüsse; weitere offene Anforderungen kontinuierlich bearbeiten.

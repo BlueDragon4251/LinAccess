@@ -1297,3 +1297,5 @@ SQL-Zeichenfolgen mit nativen VBA-Regeln: [Str, Left/Right/Mid und Replace](docs
 Native SQL-Suche und Leerzeichenbehandlung: [InStr, StrComp und Trim](docs/NATIVE_SQL_SEARCH_TRIM.md).
 
 Gruppenköpfe auf Folgeseiten und native Abschnitts-API: [Umfang](docs/NATIVE_REPORT_REPEAT_HEADER.md).
+
+Typisierte ASCII-Schreibweise und Rückwärtssuche in SQL: [LCase/UCase, StrReverse/InStrRev](docs/NATIVE_SQL_CASE_REVERSE.md).

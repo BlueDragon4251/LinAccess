@@ -335,6 +335,10 @@ void stringRTrim(sqlite3_context* context,int count,sqlite3_value** args) noexce
 void stringRTrimTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"RTrim",1,1,true);}
 void stringRTrimString(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"RTrim$",1,1,false);}
 void stringRTrimStringTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"RTrim$",1,1,true);}
+void stringLCaseString(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"LCase$",1,1,false);}
+void stringLCaseStringTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"LCase$",1,1,true);}
+void stringUCaseString(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"UCase$",1,1,false);}
+void stringUCaseStringTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"UCase$",1,1,true);}
 void convert_cbool(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"CBool",1,1);}
 void convert_cbyte(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"CByte",1,1);}
 void convert_cint(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"CInt",1,1);}
@@ -353,8 +357,10 @@ void financialFv(sqlite3_context* context,int count,sqlite3_value** args) noexce
 void financialPmt(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Pmt",3,5); }
 void partitionRange(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Partition",4,4); }
 void stringLenB(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"LenB",1,1); }
-void stringReverse(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"StrReverse",1,1); }
-void stringInStrRev(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"InStrRev",2,4); }
+void stringReverse(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"StrReverse",1,1,false);}
+void stringReverseTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"StrReverse",1,1,true);}
+void stringInStrRev(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"InStrRev",2,4,false);}
+void stringInStrRevTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"InStrRev",2,4,true);}
 void mathSqr(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Sqr",1,1); }
 void mathExp(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Exp",1,1); }
 void mathLog(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Log",1,1); }
@@ -362,8 +368,10 @@ void mathSin(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
 void mathCos(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Cos",1,1); }
 void mathTan(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Tan",1,1); }
 void mathAtn(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Atn",1,1); }
-void stringLCase(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"LCase",1,1); }
-void stringUCase(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"UCase",1,1); }
+void stringLCase(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"LCase",1,1,false);}
+void stringLCaseTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"LCase",1,1,true);}
+void stringUCase(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"UCase",1,1,false);}
+void stringUCaseTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"UCase",1,1,true);}
 void currentDirectory(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"CurDir",0,1); }
 void fileLength(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"FileLen",1,1); }
 void fileModified(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"FileDateTime",1,1); }
@@ -847,6 +855,14 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_rtrim_typed",-1,&stringRTrimTyped,nullptr,nullptr);
     ensure("linaccess_jet_rtrim_string",-1,&stringRTrimString,nullptr,nullptr);
     ensure("linaccess_jet_rtrim_string_typed",-1,&stringRTrimStringTyped,nullptr,nullptr);
+    ensure("linaccess_jet_lcase_typed",-1,&stringLCaseTyped,nullptr,nullptr);
+    ensure("linaccess_jet_ucase_typed",-1,&stringUCaseTyped,nullptr,nullptr);
+    ensure("linaccess_jet_lcase_string",-1,&stringLCaseString,nullptr,nullptr);
+    ensure("linaccess_jet_lcase_string_typed",-1,&stringLCaseStringTyped,nullptr,nullptr);
+    ensure("linaccess_jet_ucase_string",-1,&stringUCaseString,nullptr,nullptr);
+    ensure("linaccess_jet_ucase_string_typed",-1,&stringUCaseStringTyped,nullptr,nullptr);
+    ensure("linaccess_jet_strreverse_typed",-1,&stringReverseTyped,nullptr,nullptr);
+    ensure("linaccess_jet_instrrev_typed",-1,&stringInStrRevTyped,nullptr,nullptr);
     ensure("linaccess_jet_cbool",-1,&convert_cbool,nullptr,nullptr);
     ensure("linaccess_jet_cbyte",-1,&convert_cbyte,nullptr,nullptr);
     ensure("linaccess_jet_cint",-1,&convert_cint,nullptr,nullptr);

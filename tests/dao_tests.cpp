@@ -2018,6 +2018,15 @@ End Function
         int error=0;try{(void)database->member("OpenRecordset",{linaccess::VbaValue::string(failure.first)});}catch(const linaccess::VbaRuntimeError& actual){error=actual.number;}
         if(error!=failure.second) std::cerr<<"Native search/trim adapter error: "<<failure.first<<" actual="<<error<<" expected="<<failure.second<<'\n';assert(error==failure.second);
     }
+    const auto cases=database->member("OpenRecordset",{linaccess::VbaValue::string("SELECT UCase$(CBool(1)) AS upper,LCase$(CBool(1)) AS lower,StrReverse(CBool(1)) AS reversed,InStrRev('😀ab😀b','b') AS position,InStrRev(CBool(1),'r') AS typedPosition,InStrRev('AaAa','a',-1,1) AS folded,LCase(NULL) AS noLower,UCase(NULL) AS noUpper,InStrRev(NULL,'x') AS noPosition")}).object;
+    assert(cases->item("upper").text=="TRUE" && cases->item("lower").text=="true" && cases->item("reversed").text=="eurT");
+    assert(cases->item("position").asNumber()==7 && cases->item("position").numericType==linaccess::VbaValue::NumericType::Long && cases->item("typedPosition").asNumber()==2 && cases->item("folded").asNumber()==4);
+    for(const auto* name:{"noLower","noUpper","noPosition"}) assert(cases->item(name).kind==linaccess::VbaValue::Kind::Null);cases->member("Close",{});
+    const auto exactCase=database->member("OpenRecordset",{linaccess::VbaValue::string("SELECT LCase(money) AS exact FROM string_keys WHERE id=3")}).object;assert(exactCase->item("exact").text=="549755813887.9999");exactCase->member("Close",{});
+    for(const auto& failure:std::vector<std::pair<std::string,int>>{{"SELECT StrReverse(NULL)",94},{"SELECT UCase$(NULL)",94},{"SELECT LCase$(NULL)",94},{"SELECT UCase('ä')",3251},{"SELECT InStrRev('x','x',0)",5}}) {
+        int error=0;try{(void)database->member("OpenRecordset",{linaccess::VbaValue::string(failure.first)});}catch(const linaccess::VbaRuntimeError& actual){error=actual.number;}
+        if(error!=failure.second) std::cerr<<"Native case/reverse adapter error: "<<failure.first<<" actual="<<error<<" expected="<<failure.second<<'\n';assert(error==failure.second);
+    }
     const auto typedRows=database->member("OpenRecordset",{linaccess::VbaValue::string(typedSource.toStdString())}).object;
     const auto enabled=typedRows->member("Fields",{linaccess::VbaValue::string("enabled")}).object;
     assert(enabled->member("Type",{}).asNumber()==1 && enabled->member("Size",{}).asNumber()==1);
