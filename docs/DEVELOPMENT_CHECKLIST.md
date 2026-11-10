@@ -5386,3 +5386,17 @@ Keine neuen CTest-/Katalog-IDs, F040/F122 bleiben offene Vollanforderungen;
 456/386/70 unverändert. Funktionsvorstand4e68489b948cf8344467e94ae42c60e4e7f44421,
 Baum59d5837f3f8651ee9b31901701fbd9a7c6e9c1e4 privat verifiziert.
 Nächste Implementierung: Typzeichen an For/Next, direkten Aufrufen und Stringzielen.
+
+
+Typzeichen in Anweisungspositionen (2026-11-10): VBA_IDENTIFIER_TYPES.md ergänzt.
+For/Next und unterstütztes For Each, direkte lokale Function-Aufrufe mit Call/
+Anweisungsform, Mid$-Zuweisung und LSet/RSet auf denselben kanonischen Namen.
+Typisierte Arrayquellen behalten Live-Mutationswachen. Lokale Signaturprüfung
+nach Namensraumtreffer; eingebaute Dollar-Funktionen bleiben verfügbar (zunächst
+bestehende Fixed-String-Prüfung fehlgeschlagen, genau diesen Filter korrigiert).
+Double# an Namen/Zahlen verwechselt Anweisungsdoppelpunkte nicht mit Datumliteralen;
+Uhrzeitliteral geschützt. Vorhandenes core_tests1/1 in0,53s bestanden.
+Kein neues CTest/Katalog-Item.456/386/70. Vorstufe88fdf1f0b8a26c9e6769172dc34e9b7f4141a0e3,
+Baum158eeec6c3759bd7be7aae583255916945dfdb24 privat verifiziert; App/Kern/DAO
+auf dieser Vorstufe2/2 in3,54s. Nächster Paket-/Original-/Inventarbeleg folgt,
+danach typisierte Konstanteninitialisierer und weitere offene native Anforderungen.

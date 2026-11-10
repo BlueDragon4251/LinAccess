@@ -5586,6 +5586,32 @@ End Sub
     assert(typedStaticSecond.status==VbaExecutionStatus::Completed && typedStaticSecond.returnValue=="2");
     const auto typedRedim=executeVbaProcedure("Option Explicit\nFunction TypedRedim() As Long\nReDim values%(0 To 1)\nvalues%(1)=6\nTypedRedim=values%(1)\nEnd Function","TypedRedim",host);
     assert(typedRedim.status==VbaExecutionStatus::Completed && typedRedim.returnValue=="6");
+    const auto typedControls=executeVbaProcedure(R"VBA(
+Private invoked As Long
+Function TouchTyped%(ByVal value%)
+invoked=invoked+value%
+TouchTyped%=invoked
+End Function
+Sub TypedControls()
+Dim i%, total&, text$
+For i%=1 To 3
+total&=total&+i%
+Next i
+For implicit%=1 To 2
+total&=total&+implicit%
+Next implicit%
+Call TouchTyped%(2)
+TouchTyped% 3
+text$="abcd"
+Mid$(text$,2,1)="X"
+Me!TypedMid=text$
+RSet text$="y"
+Me!TypedControls=CStr(total&) & ":" & CStr(invoked) & ":" & text$
+End Sub
+)VBA","TypedControls",host);
+    assert(typedControls.status==VbaExecutionStatus::Completed && host.fields["TypedControls"]=="9:5:   y" && host.fields["TypedMid"]=="aXcd");
+    const auto typedDoubleColon=executeVbaProcedure("Sub DoubleColon()\nDim value#: value#=2#: Me!TypedDoubleColon=value#: Me!TypedDateColon=Hour(#1/2/2000 12:34:00#)\nEnd Sub","DoubleColon",host);
+    assert(typedDoubleColon.status==VbaExecutionStatus::Completed && host.fields["TypedDoubleColon"]=="2" && host.fields["TypedDateColon"]=="12");
     testVbaDebugger();
     testVbaDebugOutput();
     testVbaProperties();

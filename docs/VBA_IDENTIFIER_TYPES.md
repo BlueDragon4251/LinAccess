@@ -20,7 +20,7 @@ Der Access-/Jet-Ausdrucksmodus wird dadurch nicht auf VBA-Typzeichen umgestellt.
 Bestehende String-Intrinsics mit `$` bleiben eigenständige Intrinsics, sofern
 keine deklarierte lokale Variable die Namensauflösung übernimmt.
 
-Noch offen sind insbesondere Typzeichen an Property-Accessoren, Schleifensteuerungen, vollständige typisierte Konstanteninitialisierer und die
+Noch offen sind insbesondere Typzeichen an Property-Accessoren, vollständige typisierte Konstanteninitialisierer und die
 vollständige frühe Bindung qualifizierter Projekt-/Objektmitglieder. `^`/LongLong
 gehört nicht zum hier unterstützten Access-2003-Profil. Dies ist kein Nachweis
 vollständiger VBA- oder Access-Parität. Die feste Katalogzahl bleibt 456;
@@ -72,3 +72,20 @@ in0,52s. Die nachfolgende gemeinsame Anwendungs-/Kern-/DAO-Prüfung enthält
 zusätzlich die Korrekturen für statische Funktionsidentität und neue typisierte
 ReDim-Ziele; Ergebnis: Anwendung, Kern- und DAO-Ziele gebaut; core_tests0,57s und
 dao_execution2,97s, gemeinsam2/2 in3,54s bestanden.
+
+
+## Anweisungspositionen
+
+For/Next, For Each im vorhandenen unterstützten Sammlungspfad und direkte
+lokale Function-Aufrufe mit Call oder als Anweisung binden dieselben kanonischen
+Namen. Typisierte Arrayquellen behalten die bestehende Live-Mutationswache bei
+For Each. Bei Arrayiteration bleibt die Voraussetzung eines Variant-Steuerelements
+bestehen. Mid$-Zuweisung und LSet/RSet akzeptieren typisierte einfache Stringziele.
+Die Signaturprüfung betrifft vorhandene lokale Prozeduren; eingebaute `$`-
+Funktionen werden dadurch nicht zu vermeintlichen lokalen Verfahren.
+
+Die Quellanweisungstrennung unterscheidet ein angehängtes Double-Typzeichen
+von einem Datumsliteral. Doppelpunkt-Anweisungen nach Bezeichnern und Zahlen mit
+`#` werden getrennt; Uhrzeit-Doppelpunkte innerhalb echter Datumsliterale bleiben
+im Literal. Vorhandenes core_tests nach Korrektur des lokalen Signaturfilters:
+1/1 in0,53s. Keine neuen CTest-Einträge und kein vollständiger Compilernachweis.

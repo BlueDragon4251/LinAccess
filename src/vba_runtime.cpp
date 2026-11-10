@@ -464,7 +464,7 @@ std::string inlineStatementLines(const std::string& source,bool preserveLabels=f
         if (bracket) { if (ch==']') { if (i+1<result.size() && result[i+1]==']') ++i; else bracket=false; } continue; }
         if(beginning && lower(result.substr(i,3))=="rem" && (i+3==result.size() || std::isspace(static_cast<unsigned char>(result[i+3])) || result[i+3]==':')) { result.resize(i); break; }
         if(!std::isspace(static_cast<unsigned char>(ch))) beginning=false;
-        if(ch=='#') dated=true;
+        if(ch=='#' && (i==0 || !(std::isalnum(static_cast<unsigned char>(result[i-1])) || static_cast<unsigned char>(result[i-1])>=128 || result[i-1]=='_'))) dated=true;
         else if (ch=='"') quoted=true; else if (ch=='[') bracket=true;
         else if (ch=='(') ++depth; else if (ch==')') --depth;
         else if (ch==':' && depth==0 && (i+1>=result.size() || result[i+1]!='=')) {
@@ -787,7 +787,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
     static const std::regex variableAssignment(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?)\s*=\s*(.+)$)", std::regex::icase);
     static const std::regex arrayElementType(R"(^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)(?:\s*\*\s*([0-9]+|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))?$)",std::regex::icase);
     static const std::regex midDollarTarget(R"(^Mid\$\s*\((.*)\)$)",std::regex::icase);
-    static const std::regex stringAlignment(R"(^(LSet|RSet)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*=\s*(.+)$)",std::regex::icase);
+    static const std::regex stringAlignment(R"(^(LSet|RSet)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?)\s*=\s*(.+)$)",std::regex::icase);
     static const std::regex message(R"(^MsgBox(?:\s+(.+)|\((.*)\))$)", std::regex::icase);
     static const std::regex debugPrint(R"(^Debug\s*\.\s*(?:Print\b|\?)\s*(.*)$)",std::regex::icase);
     static const std::regex debugAssert(R"(^Debug\s*\.\s*Assert\s+(.+)$)",std::regex::icase);
@@ -804,8 +804,8 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
     static const std::regex controlRequery(R"(^Me\s*([!.])\s*(\[[^\]]+\]|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\.\s*Requery$)", std::regex::icase);
     static const std::regex controlFocus(R"(^Me\s*([!.])\s*(\[[^\]]+\]|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\.\s*SetFocus$)", std::regex::icase);
     static const std::regex controlVisible(R"(^Me\s*([!.])\s*(\[[^\]]+\]|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\.\s*Visible\s*=\s*(.+)$)", std::regex::icase);
-    static const std::regex call(R"(^Call\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s*\((.*)\))?$)", std::regex::icase);
-    static const std::regex implicitCall(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s+(.+)|\((.*)\))?$)", std::regex::icase);
+    static const std::regex call(R"(^Call\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?)(?:\s*\((.*)\))?$)", std::regex::icase);
+    static const std::regex implicitCall(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?)(?:\s+(.+)|\((.*)\))?$)", std::regex::icase);
     static const std::regex memberCall(R"(^((?:[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*(?:\([^)]*\))?)(?:[.!][A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*(?:\([^)]*\))?)+)\s+(.+)$)",std::regex::icase);
     static const std::regex parameter(R"(^(?:(Optional)\s+)?(?:(ByRef|ByVal)\s+)?([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?)(?:\s+As\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_.\x80-\xFF]*))?(?:\s*=\s*(.+))?$)", std::regex::icase);
     static const std::regex cancelParam(R"(^Cancel\s+As\s+(?:Integer|Boolean)$)", std::regex::icase);
@@ -826,8 +826,8 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
     static const std::regex exitDoKeyword(R"(^Exit\s+Do$)",std::regex::icase);
     static const std::regex dim(R"(^(?:Dim|Static)\s+(.+)$)", std::regex::icase);
     static const std::regex declaration(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?)(?:\s+As\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_.\x80-\xFF]*)(?:\s*\*\s*([0-9]+|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))?)?$)", std::regex::icase);
-    static const std::regex forStart(R"(^For\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*=\s*(.+?)\s+To\s+(.+?)(?:\s+Step\s+(.+))?$)", std::regex::icase);
-    static const std::regex forEach(R"(^For\s+Each\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s+In\s+(.+)$)", std::regex::icase);
+    static const std::regex forStart(R"(^For\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?)\s*=\s*(.+?)\s+To\s+(.+?)(?:\s+Step\s+(.+))?$)", std::regex::icase);
+    static const std::regex forEach(R"(^For\s+Each\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?)\s+In\s+(.+)$)", std::regex::icase);
     static const std::regex next(R"(^Next(?:\s+(.+))?$)", std::regex::icase);
 
     std::istringstream stream{std::string(module)};
@@ -1327,18 +1327,18 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
         } else if (std::regex_match(source, match, next)) {
             const auto names=match[1].matched ? splitArguments(match[1].str()) : std::vector<std::string>{""};
             const auto groupStart=statements.size();
-            static const std::regex identifier(R"(^[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*$)");
+            static const std::regex identifier(R"(^[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?$)");
             for(const auto& name:names) {
                 if(match[1].matched && !std::regex_match(name,identifier)) return {VbaExecutionStatus::Error,"Invalid Next control variable",line};
                 if(blocks.empty() || blocks.back()!=Statement::Type::For || forStarts.empty())
                     return {VbaExecutionStatus::Error,"Next ohne For",line};
                 const int startIndex=forStarts.back();
-                if(!name.empty() && lower(name)!=lower(statements[startIndex].argument))
+                if(!name.empty() && lower(vbaIdentifierName(name))!=lower(vbaIdentifierName(statements[startIndex].argument)))
                     return {VbaExecutionStatus::Error,"Next-Variable passt nicht zum For",line};
                 forStarts.pop_back(); blocks.pop_back();
                 const int nextIndex=static_cast<int>(statements.size());
                 statements[startIndex].partner=nextIndex;
-                statements.push_back({Statement::Type::Next,{},{},line}); statements.back().partner=startIndex;
+                statements.push_back({Statement::Type::Next,name,{},line}); statements.back().partner=startIndex;
             }
             if(statements.size()>groupStart)
                 for(auto index=groupStart;index<statements.size();++index) statements[index].sourceStatementEnd=static_cast<int>(statements.size()-1);
@@ -2633,6 +2633,14 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         if(declared!=type) throw VbaRuntimeError(13,"Identifier type character does not match its declaration");
         return key;
     };
+    const auto loopVariableName=[&](std::string_view name) {
+        if(vbaIdentifierType(name).empty()) return lower(std::string(name));
+        const auto key=lower(vbaIdentifierName(name));
+        if(!locals.contains(key)) ensureImplicitLocal(key,false,{},vbaIdentifierType(name));
+        const auto canonical=typedIdentifier(name);
+        if(!canonical || !locals.contains(*canonical)) throw VbaRuntimeError(3251,"Typed loop control requires a variable");
+        return *canonical;
+    };
     const auto boundVariableName=[&](std::string_view name) {
         if(vbaIdentifierType(name).empty()) return lower(std::string(name));
         auto canonical=typedIdentifier(name);
@@ -2641,6 +2649,12 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
     };
     const auto invoke = [&](std::string_view name, std::vector<VbaValue>& actuals,
                             const VbaArgumentReferences& referenceInfo, bool needsValue) -> VbaValue {
+        std::string canonicalProcedure;
+        if(!vbaIdentifierType(name).empty()) {
+            const auto declaration=localProcedureSignature(module,name);
+            if(!declaration || !declaration->function) throw VbaRuntimeError(13,"Typed call does not match a local function declaration");
+            canonicalProcedure=vbaIdentifierName(name);name=canonicalProcedure;
+        }
         storeAliases();
         std::string getterSelector;
         auto signature=localProcedureSignature(module,name);const bool property=!signature;
@@ -2822,11 +2836,15 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
     };
     std::optional<std::unordered_set<std::string>> fallbackProcedures;
     resolver.argumentSignature=[&](std::string_view name) -> std::optional<VbaArgumentSignature> {
-        const auto key=lower(std::string(name));
+        const auto key=lower(vbaIdentifierName(name));
         const auto& state=stateOwners.front();
         if(!state->procedureInventoryComplete && !fallbackProcedures) fallbackProcedures=moduleProcedureNames(module);
         const auto& names=state->procedureInventoryComplete ? state->procedures : *fallbackProcedures;
         if(!names.contains(key)) return {};
+        if(!vbaIdentifierType(name).empty()) {
+            const auto typed=localProcedureSignature(module,name);
+            if(!typed || !typed->function) throw VbaRuntimeError(13,"Typed call signature mismatch");
+        }
         const auto found=signatureCache.find(key);
         if(found!=signatureCache.end()) return found->second;
         auto signature=localProcedureSignature(module,name);
@@ -3384,13 +3402,13 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                     if((name=="mid$" || (name=="mid" && initial==locals.end())) && instruction.stepExpression!="object") {
                         const auto parts=splitArguments(instruction.endExpression);
                         if(parts.size()<2 || parts.size()>3) throw VbaRuntimeError(450,"Mid assignment requires a String variable, start and optional length");
-                        static const std::regex targetName(R"(^[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*$)");
+                        static const std::regex targetName(R"(^[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?$)");
                         const auto destination=trim(parts[0]);
                         if(!std::regex_match(destination,targetName)) throw VbaRuntimeError(3251,"Mid assignment requires a simple String variable");
                         const auto start=static_cast<std::int64_t>(coerceVbaModuleValue(scalarVbaValue(evaluate(parts[1])),"long").number);
                         const auto requested=parts.size()==3 ? static_cast<std::int64_t>(coerceVbaModuleValue(scalarVbaValue(evaluate(parts[2])),"long").number) : std::numeric_limits<std::int32_t>::max();
                         const auto input=coerceVbaModuleValue(scalarVbaValue(evaluate(instruction.expression)),"string");
-                        const auto target=locals.find(lower(destination));
+                        const auto target=locals.find(boundVariableName(destination));
                         if(target==locals.end() || target->second.kind!=VbaValue::Kind::Text) throw VbaRuntimeError(3251,"Mid assignment requires an existing String variable");
                         const auto width=vbaStringCodeUnits(target->second.text),inputWidth=vbaStringCodeUnits(input.text);
                         if(start<1 || requested<0) throw VbaRuntimeError(5,"Invalid Mid assignment start or length");
@@ -3404,7 +3422,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                             {"_mid_count",VbaValue::longInteger(static_cast<std::int32_t>(count))},
                             {"_mid_tail",VbaValue::longInteger(static_cast<std::int32_t>(start+count))}};
                         const auto result=evaluateVbaExpression("Left$(_mid_target,_mid_prefix) & Left$(_mid_input,_mid_count) & Mid$(_mid_target,_mid_tail)",host,values);
-                        assignVariable(lower(destination),result); break;
+                        assignVariable(boundVariableName(destination),result); break;
                     }
                     const auto propertyAccess=instruction.stepExpression=="object" ? VbaPropertyAccess::Set : VbaPropertyAccess::Let;
                     const auto getter=initial==locals.end() && stateOwners.front()->procedures.contains(name) ? nativeVbaPropertySignature(module,instruction.argument,VbaPropertyAccess::Get,false) : std::nullopt;
@@ -3465,7 +3483,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
             case Statement::Type::StringAlign:
                 if(active) {
                     const auto input=coerceVbaModuleValue(scalarVbaValue(evaluate(instruction.expression)),"string");
-                    const auto name=lower(instruction.argument); const auto target=locals.find(name);
+                    const auto name=boundVariableName(instruction.argument); const auto target=locals.find(name);
                     if(target==locals.end() || target->second.kind!=VbaValue::Kind::Text)
                         throw VbaRuntimeError(3251,"LSet/RSet requires an existing String variable");
                     const auto width=vbaStringCodeUnits(target->second.text);
@@ -3511,13 +3529,14 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                 const auto collection = evaluate(instruction.expression);
                 if(isVbaArray(collection)) {
                     if(vbaArrayRank(collection)==0) throw VbaRuntimeError(9,"For Each requires an allocated array");
-                    const auto name=lower(instruction.argument);
+                    const auto name=loopVariableName(instruction.argument);
                     if(!implicitTypes.forName(name).empty()) ensureImplicitLocal(name);
                     const auto type=variableType(name);
                     if(!type.empty() && type!="variant") throw VbaRuntimeError(13,"Array For Each control must be Variant");
                     LoopFrame loop{static_cast<int>(ip)};
                     loop.array=collection;
-                    const auto source=lower(trim(instruction.expression));
+                    auto source=lower(trim(instruction.expression));
+                    if(const auto root=nativeVariableTarget(source); root && !root->arguments) source=boundVariableName(root->name);
                     if(const auto variable=locals.find(source); variable!=locals.end()) {
                         if(source==name) throw VbaRuntimeError(3251,"Array source and For Each control must be distinct");
                         loop.arrayRoot=source;
@@ -3560,7 +3579,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                     ip = static_cast<std::size_t>(instruction.partner);
                     break;
                 }
-                const auto counter=lower(instruction.argument);
+                const auto counter=loopVariableName(instruction.argument);
                 if(!implicitTypes.forName(counter).empty()) ensureImplicitLocal(counter);
                 const auto type=variableType(counter);
                 if(type=="currency") {
@@ -3602,7 +3621,8 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                 if (loops.empty() || loops.back().forIndex != instruction.partner)
                     throw std::runtime_error("VBA-For/Next-Laufzeitstapel ungültig");
                 const auto& start = instructions[loops.back().forIndex];
-                const auto name = lower(start.argument);
+                const auto name = boundVariableName(start.argument);
+                if(!instruction.argument.empty() && boundVariableName(instruction.argument)!=name) throw VbaRuntimeError(13,"Next control variable binding mismatch");
                 if (start.type == Statement::Type::ForEach) {
                     auto& loop = loops.back();
                     if(isVbaArray(loop.array)) {
