@@ -57,3 +57,7 @@ it from its actual saved definition. The existing schema test checks both paths.
 Statistical numeric fixed-heading aggregates Avg/Var/StDev/VarP/StDevP are now
 implemented in STATISTICAL_CROSSTABS.md; earlier blanket statistical-function
 limitations are superseded only within that documented numeric physical scope.
+
+FIXED_CROSSTAB_SUMS.md supersedes the earlier blanket Sum limitation only for
+proven Double/REAL and native Currency physical input fields. Dynamic headings,
+other sum type promotions and full TRANSFORM remain open.

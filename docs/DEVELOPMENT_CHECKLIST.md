@@ -4392,3 +4392,15 @@ Fälle bleiben im gleichen Schemafall geprüft. Keine neuen Tests/Katalogpunkte;
 F068/F122 und456/386/70 unverändert. Vorstufe8cbf0af privat remote/Baum geprüft.
 Geprüftes DEBc8bd82b und Original120,75s liegen vor diesen späteren Änderungen.
 Ohne Zwischenabschluss weitere allgemeine SQL-/Objektmodellanforderungen umsetzen.
+
+
+Feste Kreuztabellensummen: FIXED_CROSSTAB_SUMS.md beschreibt TRANSFORM Sum mit
+nachgewiesenen Double/REAL- oder nativen Currency-Quellen. Geld verwendet den
+vorhandenen exakten Currency-Akkumulator, keine rohe SQLite-Gleitkommasumme.
+Tatsächliche Double-/Currency-Werte, Dezimalkompensation, Null und DAO-Typ7/5 im
+bestehenden Schemafall geprüft: erster Lauf1/1 in0,13s; App gebaut. Integer/Single/
+Decimal-Promotion und größere physische MONEY-Bereiche bleiben ausdrücklich offen.
+Keine neuen Tests/IDs;456/386/70 unverändert. Vorstufe103af93 privat remote/Baum
+geprüft. Geprüftes DEBc8bd82b bleibt älter. Ohne Zwischenabschluss weiter an echten
+festen Pivot-Auswahlen First/Last arbeiten, ohne nichtpassende Null-Zeilen als
+falsche erste/letzte Pivotwerte einzubeziehen.
