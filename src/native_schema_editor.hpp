@@ -7,6 +7,8 @@
 namespace linaccess {
 struct NativeFieldDisplayProperties {std::optional<QString> caption,description;bool nativeOwned{};std::optional<QString> format;};
 QMap<QString,NativeFieldDisplayProperties> nativeTableFieldDisplayProperties(QSqlDatabase database,const QString& table);
+// True only for an owned native Currency declaration with exact supported storage.
+bool nativeFieldHasExactCurrencyStorage(QSqlDatabase database,const QString& table,const QString& field);
 // True only for an owned native Date declaration with canonical storage.
 bool nativeFieldHasCanonicalDateStorage(QSqlDatabase database,const QString& table,const QString& field);
 // Atomic same-type native field edit: Required, DefaultValue, AllowZeroLength,

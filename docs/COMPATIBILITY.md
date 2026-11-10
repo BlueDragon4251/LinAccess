@@ -6856,3 +6856,17 @@ Currency-Regelsperre ist für diesen begrenzten Umfang ersetzt; keine volle
 Jet-/Windows-Ausdrucks-/Currency-Parität. Vorstufeb8fee632 privat/Baum geprüft;
 sieben geschützte Hashes unverändert. DEB/Original/Inventar weiterhinda72e727.
 Ohne Zwischenabschluss bei weiteren allgemeinen Anforderungen fortsetzen.
+
+
+Native Currency Index/Seek und Beziehungsoberfläche:
+NATIVE_CURRENCY_INDEX_AND_RELATION_UI.md. Gemeinsame Prüfung tatsächlicher
+nativer REAL/CURRENCY_REAL-Speicherung für DAO-Beziehungen, Indexnavigation und
+GUI-Auswahl bei referenzieller Integrität/1:1. Seek akzeptiert jetzt tatsächliche
+Currency-Schlüssel und numerische Schlüssel über den vorhandenen Feldcodec;
+Text bleibt abgewiesen, Null-/absteigende Bereichsgrenzen bleiben ausdrücklich.
+Echte GUI-Beziehung mit Update-/Delete-Kaskade, DAO Gleichheits-/Bereichssuche,
+NoMatch/Bookmark und Zurückweisung bei erhaltenem aktuellen Wert geprüft.
+App/GUI/DAO gebaut; ein bestehendes Bündel2/2 in14,37s bestanden:
+GUI11,91s (20s unverändert), DAO2,46s. Keine neue CTest-/Katalog-ID;456/386/70.
+Vorstufe8a198ce2 privat/Baum geprüft; letztes DEB/Original/Inventar bleibt da72e727.
+Keine volle Jet-/Windows-Parität; ohne Zwischenabschluss weiterentwickeln.
