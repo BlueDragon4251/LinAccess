@@ -1,3 +1,4 @@
+#include <cmath>
 #include "access_form_preview.hpp"
 #include "access_form_objects.hpp"
 #include "access_query.hpp"
@@ -100,6 +101,31 @@ End Function
             const auto dates=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery(QString(query).replace("c.amount","c.stamp")),{});
             assert(dates.types.value("a")=="DATETIME" && dates.rows[0][1].toString()==(minimum ? "2003-01-01 00:00:00" : "2003-12-31 18:05:06"));
         }
+        assert(sql.exec("CREATE TABLE cross_statistics(row_key INTEGER,category TEXT,value REAL)"));
+        assert(sql.exec("INSERT INTO cross_statistics VALUES(1,'A',10),(1,'A',20),(1,'A',30),(1,'B',7),(1,'B',NULL),(2,'A',NULL),(2,'Z',5)"));sql.finish();
+        const QString statisticalSource="TRANSFORM Avg(s.value) SELECT s.row_key FROM cross_statistics AS s GROUP BY s.row_key ORDER BY s.row_key PIVOT s.category IN ('A','B','absent')";
+        for(const auto& function:QStringList{"Avg","Var","StDev","VarP","StDevP"}) {
+            const auto source=QString(statisticalSource).replace("Avg(",function+'(');
+            const auto values=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery(source),{});
+            assert(values.rows.size()==2 && values.types.value("a")=="DOUBLE" && values.types.value("b")=="DOUBLE");
+            const double expected=function=="Avg" ? 20 : function=="Var" ? 100 : function=="StDev" ? 10 : function=="VarP" ? 200.0/3 : std::sqrt(200.0/3);
+            assert(qAbs(values.rows[0][1].toDouble()-expected)<1e-10 && values.rows[0][3].isNull() && values.rows[1][1].isNull() && values.rows[1][2].isNull());
+            if(function=="Var" || function=="StDev") assert(values.rows[0][2].isNull());
+            else assert(!values.rows[0][2].isNull() && values.rows[0][2].toDouble()==(function=="Avg" ? 7 : 0));
+            auto cursor=open(source.toStdString());const auto field=cursor->member("Fields",{VbaValue::string("A")}).object;
+            assert(field->member("Type",{}).number==7 && field->member("Value",{}).kind==VbaValue::Kind::Number);
+            cursor->member("Close",{});
+        }
+        auto statisticDefinition=database->member("CreateQueryDef",{VbaValue::string(""),VbaValue::string(("PARAMETERS wanted LONG; "+QString(statisticalSource).replace("GROUP BY","WHERE s.row_key=[wanted] GROUP BY")).toStdString())}).object;
+        assert(statisticDefinition->member("Type",{}).number==16);
+        statisticDefinition->member("Parameters",{VbaValue::string("wanted")}).object->assign("Value",VbaValue::longInteger(1));
+        auto statisticCursor=statisticDefinition->member("OpenRecordset",{}).object;assert(statisticCursor->member("RecordCount",{}).number==1);statisticCursor->member("Close",{});
+        for(const auto& bad:QStringList{QString(statisticalSource).replace("s.value","s.category"),QString(extrema).replace("Min(","Avg(")}) {
+            int error=0;try{(void)linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery(bad),{});}catch(const linaccess::VbaRuntimeError& failure){error=failure.number;}assert(error==3251);
+        }
+        assert(sql.exec("CREATE TEMP TABLE cross_statistics(row_key INTEGER,category TEXT,value REAL)"));
+        int shadowError=0;try{(void)linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery(statisticalSource),{});}catch(const linaccess::VbaRuntimeError& failure){shadowError=failure.number;}assert(shadowError==3251);
+        assert(sql.exec("DROP TABLE temp.cross_statistics"));sql.finish();
         auto extremumDefinition=database->member("CreateQueryDef",{VbaValue::string("fixed_extrema"),VbaValue::string(extrema.toStdString())}).object;
         assert(extremumDefinition->member("Type",{}).number==16);
         rows=open("fixed_extrema");assert(rows->member("Fields",{VbaValue::string("A")}).object->member("Type",{}).number==5);rows->member("Close",{});

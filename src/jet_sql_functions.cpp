@@ -364,7 +364,7 @@ void fieldStore(sqlite3_context* context,int count,sqlite3_value** args) noexcep
     try {
         if(count!=2 || native.type(args[0])!=SQLITE_TEXT) throw VbaRuntimeError(450,"Field conversion requires type and value");
         const auto type=scalarText(args[0]);
-        static const QSet<QString> supported{"SINGLE_REAL","INTEGER1","INTEGER2","INTEGER4","BOOL","BOOLEAN","DATE","DATETIME"};
+        static const QSet<QString> supported{"REAL","DOUBLE","SINGLE_REAL","INTEGER1","INTEGER2","INTEGER4","BOOL","BOOLEAN","DATE","DATETIME"};
         if(!supported.contains(type)) throw VbaRuntimeError(3251,"SQL field target type unsupported");
         if(native.type(args[1])==SQLITE_NULL) { native.nullResult(context); return; }
         VbaValue input;

@@ -5410,3 +5410,16 @@ verifiziert. Geprüftes DEBc8bd82b unter /workspace/work/population-statistics/p
 liegt vor Name/Move; letztes Original120,75s/DAO2,81s ebenfalls davor. Weiter ohne
 Zwischenabschluss: feste numerische TRANSFORM-Kreuztabellen um Avg/Var/StDev/
 VarP/StDevP mit nachgewiesener Double-Ausgabetypisierung erweitern.
+
+
+Feste statistische Kreuztabellen: STATISTICAL_CROSSTABS.md dokumentiert tatsächliche
+TRANSFORM Avg/Var/StDev/VarP/StDevP über nachgewiesene numerische physische Felder,
+inklusive Aliase, Parameter, Null/fehlende Spalten und stabile Double-Metadaten.
+Zuerst gemeinsames Schema-/Abfragemodell-Bündel; Modell0,12s bestand. Zwei konkrete
+Implementierungslücken geschlossen: Feldkonverter REAL/DOUBLE und tatsächliche
+DAO-Zuordnung nachgewiesener DOUBLE→Typ7. Danach nur betroffenes Schema+DAO2/2 in
+2,98s (0,13/2,85); App gebaut. Vorhandene Count/Min/Max-Währungs-/Datums-/Ganzzahl-
+Fälle bleiben im gleichen Schemafall geprüft. Keine neuen Tests/Katalogpunkte;
+F068/F122 und456/386/70 unverändert. Vorstufe8cbf0af privat remote/Baum geprüft.
+Geprüftes DEBc8bd82b und Original120,75s liegen vor diesen späteren Änderungen.
+Ohne Zwischenabschluss weitere allgemeine SQL-/Objektmodellanforderungen umsetzen.
