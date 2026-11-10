@@ -618,10 +618,13 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
     else if (op == "-") answer = a - b;
     else if (op == "*") answer = a * b;
     else if (op == "/") {
-        if (b == 0) throw error("VBA: Division durch Null", 11);
+        if (b == 0) {
+            const bool emptyException=right.kind==VbaValue::Kind::Empty && (left.kind==VbaValue::Kind::Date || left.kind==VbaValue::Kind::Text || (left.kind==VbaValue::Kind::Number && (left.numericType==VbaValue::NumericType::Single || left.numericType==VbaValue::NumericType::Double)));
+            throw error(a==0 && !emptyException ? "VBA: Numerischer Überlauf" : "VBA: Division durch Null",a==0 && !emptyException ? 6 : 11);
+        }
         answer = a / b;
     } else throw error("Nicht unterstützter Operator " + op);
-    if (!std::isfinite(answer)) throw error("VBA: Ungültiges numerisches Ergebnis");
+    if (!std::isfinite(answer)) throw error("VBA: Ungültiges numerisches Ergebnis",6);
     return VbaValue::numeric(answer);
 }
 

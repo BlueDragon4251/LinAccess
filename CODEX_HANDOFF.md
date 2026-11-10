@@ -5512,3 +5512,20 @@ Vorstufeca0ebc0 privat remote/Baum geprüft. Geprüftes DEBcc19000 unter
 /workspace/work/count-result-types/package/linaccess-0.7.0-Linux.deb und GUI19,32/
 Original119,69/7Hashes liegen vor Parameterannotation/Potenz. Ohne Zwischenabschluss
 weiter echte typisierte numerische SQL-Arithmetik und Divisionsfehler umsetzen.
+
+
+Typisierte numerische SQL-Arithmetik: TYPED_SQL_ARITHMETIC.md beschreibt echte
+Double-Operationen, gebrochene Ganzzahldivision, nachgewiesene Feld-/Parametertypen,
+Null, WHERE/HAVING und reale SQLite-Ursprünge auch bei Sternprojektionen. Read-only
+Treiber-Cache prüft Schema/Katalog/Definition/Speicher; keine Werte/VBA-Module.
+0/0 und numerischer Überlauf melden normgemäß6, sonstige Division durch0 meldet11;
+SQL-Fehler11 jetzt korrekt weitergereicht. Core5,55s/GUI18,91s bestanden vor letzten
+SQL-Verfeinerungen; zuletzt DAO3,00s und Abfragemodell0,19s. Import-Cachefixture
+verwendet tatsächlichen REAL-Import mit Double-Metadaten samt normaler Logtabelle;
+DAO erstellt physisch DOUBLE. Metadatenänderung ohne Schemaversion, TEMP-Schatten,
+reale Untertypen und unveränderte Überschriften geprüft. Normale indizierte
+ID-Prädikate bleiben unverpackt, tatsächlicher Scan-Zähler0 bestätigt. Keine
+neuen Tests/IDs; F041/F067/F068/F071/F121/F122/456/386/70 unverändert. Vorstufe2fdd9dc
+privat remote/Baum geprüft. Geprüftes DEBcc19000 liegt vor späteren Umfängen.
+Danach ohne Zwischenabschluss aktuellen Paket-/Original-/Inventarlauf ausführen
+und weitere native Zahlentyp-/Operatorschritte fortsetzen. Kein Abschlussanruf.

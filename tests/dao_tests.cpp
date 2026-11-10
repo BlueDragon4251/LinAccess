@@ -1572,6 +1572,10 @@ End Function
         assert(sql.exec("SELECT SUM(value) FROM inputs") && sql.next() && sql.value(0).toInt()==12); sql.finish();
         assert(metadataFrame->values.at("calls").asNumber()==beforeMetadata);
     }
+    const auto arithmeticRows=database->member("OpenRecordset",{linaccess::VbaValue::string("SELECT CDbl(6)*CDbl(2)/CDbl(4)+1 AS result,2/4 AS half,(NULL^2)/CDbl(0) AS empty")}).object;
+    assert(arithmeticRows->member("Fields",{linaccess::VbaValue::string("result")}).object->member("Type",{}).asNumber()==7 && arithmeticRows->item("result").numericType==linaccess::VbaValue::NumericType::Double && arithmeticRows->item("result").asNumber()==4);
+    assert(arithmeticRows->item("half").asNumber()==0.5 && arithmeticRows->item("empty").kind==linaccess::VbaValue::Kind::Null);arithmeticRows->member("Close",{});
+    for(const auto& failure:std::vector<std::pair<std::string,int>>{{"SELECT 0/0",6},{"SELECT CDbl(1)/CDbl(0)",11},{"SELECT CDbl(1e308)*CDbl(1e308)",6}}) {int error=0;try{(void)database->member("OpenRecordset",{linaccess::VbaValue::string(failure.first)});}catch(const linaccess::VbaRuntimeError& actual){error=actual.number;}assert(error==failure.second);}
     const auto powerRows=database->member("OpenRecordset",{linaccess::VbaValue::string("SELECT CLng(3.5)^2 AS square,NULL^2 AS empty")}).object;
     assert(powerRows->member("Fields",{linaccess::VbaValue::string("square")}).object->member("Type",{}).asNumber()==7);
     assert(powerRows->item("square").numericType==linaccess::VbaValue::NumericType::Double && powerRows->item("square").asNumber()==16 && powerRows->item("empty").kind==linaccess::VbaValue::Kind::Null);powerRows->member("Close",{});

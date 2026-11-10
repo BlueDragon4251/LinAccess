@@ -922,6 +922,10 @@ Me!DecimalState=CStr(entries(0)) & ":" & CStr(VarType(entries(0)))
 End Sub
 )VBA","DecimalValues",host);assert(result.status==VbaExecutionStatus::Completed && host.fields["DecimalState"]=="79228162514264337593543950334:14");
     NativeReportAggregate sum("sum"),minimum("min"),maximumAggregate("max");for(const auto& source:{"12345678901234567890.1","0.2"}) {const auto value=decimalLiteral(source);sum.add(value);minimum.add(value);maximumAggregate.add(value);}assert(sum.result().asText()=="12345678901234567890.3" && minimum.result().asText()=="0.2" && maximumAggregate.result().asText()=="12345678901234567890.1");
+    for(const auto& [source,wanted]:std::vector<std::pair<std::string,int>>{{"CDbl(0)/CDbl(0)",6},{"CLng(0)/Empty",6},{"CDbl(0)/Empty",11},{"CDbl(1)/CDbl(0)",11},{"CDbl(1e308)*CDbl(1e308)",6},{"CDbl(1e308)+CDbl(1e308)",6}}) {
+        int error=0;try{(void)eval(source);}catch(const VbaRuntimeError& failure){error=failure.number;}assert(error==wanted);
+    }
+    assert(eval("Null/CDbl(0)").kind==VbaValue::Kind::Null);
     assert(eval("Null Or 2").kind==VbaValue::Kind::Null && eval("Null And 2").kind==VbaValue::Kind::Null);
     assert(host.eval("-2^2").asNumber()==4 && eval("-2^2").asNumber()==-4);
     assert(host.eval("Nz(Null)").kind==VbaValue::Kind::Empty && evaluateAccessExpression("Nz(Null)",host).kind==VbaValue::Kind::Text);

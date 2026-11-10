@@ -1,3 +1,7 @@
+#include "access_table_import.hpp"
+#include <QSqlDriver>
+#include <sqlite3.h>
+#include "dao_database.hpp"
 #include "access_table_model.hpp"
 #include <QSqlRecord>
 #include <cmath>
@@ -344,6 +348,10 @@ int main(int argc, char** argv) {
     catch(const linaccess::VbaRuntimeError&) { rejected = true; }
     assert(rejected);
 
+    model.execute(db,"SELECT 2/4 AS ratio,CDbl(6)*2/4+1 AS mixed,CLng(3)/CLng(4) AS integers,(NULL^2)/CDbl(0) AS empty");
+    assert(model.index(0,0).data().toDouble()==0.5 && model.index(0,1).data().toDouble()==4 && model.index(0,2).data().toDouble()==0.75 && model.index(0,3).data().isNull());
+    for(int column=0;column<4;++column) assert(model.fieldSqlType(column)=="DOUBLE");
+    for(const auto& bad:std::vector<std::pair<QString,int>>{{"SELECT 0/0",6},{"SELECT 1/0",11},{"SELECT CDbl(1e308)*2",6},{"SELECT 1e308+1e308",6}}) {int error=0;try{model.execute(db,bad.first);}catch(const linaccess::VbaRuntimeError& failure){error=failure.number;}assert(error==bad.second);}
     model.execute(db,"SELECT 2^3^2 AS chain,2^(3^2) AS nested,-2^2 AS negative,(-2)^2 AS grouped,2^-2 AS inverse,3^-2^3 AS signed_chain,2*3^2+1 AS mixed,Abs(-2)^3 AS called,CLng(3.5)^2 AS converted,NULL^2 AS empty,'2^3' AS literal");
     const QVector<double> powers{64,512,-4,4,0.25,1.0/729,19,8,16};
     for(int column=0;column<powers.size();++column) assert(qAbs(model.index(0,column).data().toDouble()-powers[column])<1e-12);
@@ -434,6 +442,55 @@ int main(int argc, char** argv) {
     int binaryStatError=0;try{model.execute(db,"SELECT StDev(value) FROM aggregate_blobs");}catch(const linaccess::VbaRuntimeError& failure){binaryStatError=failure.number;}assert(binaryStatError==13 && model.rowCount()==0);
     model.execute(db,"SELECT First(value),Last(value) FROM aggregate_blobs");
     assert(model.data(model.index(0,0)).toByteArray()==binary && model.data(model.index(0,1)).toByteArray()==binary);
+    {
+        using linaccess::VbaValue;
+        auto database=linaccess::makeDaoDatabase(db);auto table=database->member("CreateTableDef",{VbaValue::string("native_arithmetic")}).object;
+        for(const auto& field:std::vector<std::pair<const char*,int>>{{"id",4},{"amount",7},{"divisor",7},{"n",4},{"d",4},{"flag",1},{"byte_value",2},{"short_value",3},{"single_value",6}})
+            table->member("Fields",{}).object->member("Append",{table->member("CreateField",{VbaValue::string(field.first),VbaValue::integer(field.second)})});
+        database->member("TableDefs",{}).object->member("Append",{VbaValue::reference(table)});
+        database->member("Execute",{VbaValue::string("INSERT INTO native_arithmetic VALUES(1,6,4,3,4,True,2,3,4)")});
+        model.execute(db,"SELECT amount+divisor AS total,amount-divisor AS difference,amount*divisor AS product,amount/divisor AS ratio,n/d AS integer_ratio,byte_value/short_value AS small_ratio,amount/single_value AS mixed,flag/divisor AS flag_ratio FROM native_arithmetic");
+        const QVector<double> expected{10,2,24,1.5,0.75,2.0/3,1.5,-0.25};
+        for(int column=0;column<expected.size();++column) assert(model.fieldSqlType(column)=="DOUBLE" && qAbs(model.index(0,column).data().toDouble()-expected[column])<1e-12);
+        model.execute(db,"SELECT id FROM native_arithmetic WHERE amount/divisor>1");assert(model.rowCount()==1 && model.index(0,0).data().toInt()==1);
+        model.execute(db,"SELECT [amount] FROM native_arithmetic");assert(model.fieldSqlType(0)=="DOUBLE" && model.headerData(0,Qt::Horizontal).toString()=="amount");
+        model.execute(db,"SELECT * FROM native_arithmetic");assert(model.fieldSqlType(1)=="DOUBLE" && model.fieldSqlType(2)=="DOUBLE");
+        model.execute(db,"PARAMETERS amount LONG; SELECT [amount] AS parameter_value,a.amount AS column_value FROM native_arithmetic AS a",{{"amount",2}});assert(model.fieldSqlType(0)=="INTEGER4" && model.fieldSqlType(1)=="DOUBLE" && model.index(0,0).data().toInt()==2 && model.index(0,1).data().toDouble()==6);
+        model.execute(db,"PARAMETERS a LONG,b LONG; SELECT [a]/[b] AS result",{{"a",3},{"b",4}});assert(model.fieldSqlType(0)=="DOUBLE" && model.index(0,0).data().toDouble()==0.75);
+        assert(query.exec("CREATE TABLE _la_import_log(source_file,kind,name,status,details)"));query.finish();
+        const auto cacheSchema=linaccess::parseMdbSchema("CREATE TABLE `numeric_cache_probe`\n(\n`amount` DOUBLE\n);\n");
+        linaccess::importAccessTable(db,"technical-cache-probe","numeric_cache_probe",cacheSchema,linaccess::parseCsvDetailed("amount\n6\n"));
+        model.execute(db,"SELECT amount FROM numeric_cache_probe");assert(model.fieldSqlType(0)=="DOUBLE");
+        assert(query.exec("SELECT definition FROM main._la_table_schema WHERE table_name='numeric_cache_probe'") && query.next());const auto originalDefinition=query.value(0);query.finish();
+        assert(query.exec("PRAGMA main.schema_version") && query.next());const auto originalVersion=query.value(0);query.finish();
+        assert(query.exec("DELETE FROM main._la_table_schema WHERE table_name='numeric_cache_probe'"));query.finish();
+        model.execute(db,"SELECT amount FROM numeric_cache_probe");assert(model.fieldSqlType(0)=="REAL");
+        assert(query.exec("PRAGMA main.schema_version") && query.next() && query.value(0)==originalVersion);query.finish();
+        query.prepare("INSERT INTO main._la_table_schema(table_name,definition) VALUES('numeric_cache_probe',?)");query.addBindValue(originalDefinition);assert(query.exec());query.finish();
+        model.execute(db,"SELECT amount FROM numeric_cache_probe");assert(model.fieldSqlType(0)=="DOUBLE");
+        assert(query.exec("CREATE TEMP TABLE numeric_cache_probe(amount REAL)"));assert(query.exec("INSERT INTO temp.numeric_cache_probe VALUES(77)"));query.finish();
+        model.execute(db,"SELECT amount FROM numeric_cache_probe");assert(model.fieldSqlType(0).isEmpty() && model.index(0,0).data().toDouble()==77);
+        assert(query.exec("DROP TABLE temp.numeric_cache_probe"));query.finish();
+        assert(query.exec("CREATE TEMP TABLE _la_table_schema(table_name TEXT,definition TEXT)"));query.finish();
+        int shadow=0;try{model.execute(db,"SELECT amount FROM numeric_cache_probe");}catch(const linaccess::VbaRuntimeError& failure){shadow=failure.number;}assert(shadow==3251);
+        assert(query.exec("DROP TABLE temp._la_table_schema"));query.finish();
+        assert(query.exec("DROP TABLE numeric_cache_probe"));assert(query.exec("DELETE FROM main._la_table_schema WHERE table_name='numeric_cache_probe'"));query.finish();
+        database->member("Execute",{VbaValue::string("INSERT INTO native_arithmetic VALUES(10,6,4,3,4,True,2,3,4),(11,6,4,3,4,True,2,3,4)")});
+        assert(query.exec("CREATE INDEX native_arithmetic_id_idx ON native_arithmetic(id)"));query.finish();
+        struct ScanProbe {int seen{},steps{-1};} scan;
+        auto nativeHandle=db.driver()->handle();assert(QByteArray(nativeHandle.typeName())=="sqlite3*");auto* connection=*static_cast<sqlite3* const*>(nativeHandle.constData());
+        assert(sqlite3_trace_v2(connection,SQLITE_TRACE_PROFILE,[](unsigned,void* state,void* statement,void*)->int {
+            auto* probe=static_cast<ScanProbe*>(state);auto* stmt=static_cast<sqlite3_stmt*>(statement);const auto sql=QString::fromUtf8(sqlite3_sql(stmt));
+            if(sql.contains("FROM native_arithmetic WHERE",Qt::CaseInsensitive) || sql.contains("FROM [native_arithmetic] WHERE",Qt::CaseInsensitive)) {++probe->seen;probe->steps=sqlite3_stmt_status(stmt,SQLITE_STMTSTATUS_FULLSCAN_STEP,0);}return 0;
+        },&scan)==SQLITE_OK);
+        model.execute(db,"SELECT id FROM native_arithmetic WHERE id=1");
+        assert(sqlite3_trace_v2(connection,0,nullptr,nullptr)==SQLITE_OK);assert(scan.seen==1 && scan.steps==0 && model.rowCount()==1);
+        assert(query.exec("DROP INDEX native_arithmetic_id_idx"));query.finish();
+        database->member("Execute",{VbaValue::string("INSERT INTO native_arithmetic VALUES(2,10,0,0,0,False,0,0,0),(3,NULL,0,NULL,0,NULL,NULL,0,NULL)")});
+        model.execute(db,"SELECT amount/divisor AS result,n/d AS integer_result FROM native_arithmetic WHERE id=3");assert(model.index(0,0).data().isNull() && model.index(0,1).data().isNull());
+        for(const auto& failure:std::vector<std::pair<QString,int>>{{"SELECT amount/divisor FROM native_arithmetic WHERE id=2",11},{"SELECT n/d FROM native_arithmetic WHERE id=2",6},{"SELECT id FROM native_arithmetic WHERE amount/divisor>0",11}}) {int error=0;try{model.execute(db,failure.first);}catch(const linaccess::VbaRuntimeError& actual){error=actual.number;}assert(error==failure.second);}
+        database->member("TableDefs",{}).object->member("Delete",{VbaValue::string("native_arithmetic")});
+    }
     query.clear(); db.close(); assert(db.open());
     model.execute(db,"SELECT IIf(True,5,6)");
     assert(model.data(model.index(0,0)).toInt()==5);

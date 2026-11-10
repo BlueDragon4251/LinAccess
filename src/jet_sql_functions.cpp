@@ -226,7 +226,7 @@ void scalarBuiltinFunction(sqlite3_context* context,int count,sqlite3_value** ar
                 value=VbaValue::string(bytes ? std::string(reinterpret_cast<const char*>(bytes),size) : std::string{});
             } else if(type!=5) throw VbaRuntimeError(13,"Binary scalar string input is unsupported");
             if(dateArguments && (dateArguments & (1U<<index)) && value.kind!=VbaValue::Kind::Null) value=vbaDateValue(value);
-            if(infix && value.kind==VbaValue::Kind::Number && !std::isfinite(value.number)) throw VbaRuntimeError(6,"Nonfinite power operand");
+            if(infix && value.kind==VbaValue::Kind::Number && !std::isfinite(value.number)) throw VbaRuntimeError(6,"Nonfinite arithmetic operand");
             values.emplace(name,std::move(value));
             if(index) expression+=',';
             expression+=name;
@@ -255,6 +255,10 @@ void scalarBuiltinFunction(sqlite3_context* context,int count,sqlite3_value** ar
     } catch(const VbaRuntimeError& failure) { functionError(context,failure); }
       catch(...) { native.error(context,"SQL scalar evaluation failed",-1); }
 }
+void double_add(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"+",2,2,0,true);}
+void double_subtract(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"-",2,2,0,true);}
+void double_multiply(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"*",2,2,0,true);}
+void double_divide(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"/",2,2,0,true);}
 void numericPower(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"^",2,2,0,true);}
 void convert_cbool(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"CBool",1,1);}
 void convert_cbyte(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"CByte",1,1);}
@@ -662,7 +666,7 @@ std::optional<int> jetSqlFunctionErrorNumber(std::string_view foldedMessage) {
     int number=0;
     const auto parsed=std::from_chars(code.data(),code.data()+code.size(),number);
     if (parsed.ec!=std::errc{}) return {};
-    if (number==5 || number==6 || number==7 || number==13 || number==52 || number==53 || number==70 || number==75 || number==76 || number==94 || number==438 || number==450 || number==3035 || number==3113 || number==3146 || number==3162 || number==3163 || number==3315 || number==3317 || number==3061 || number==2450 || number==2451 || number==2455 || number==2465 || number==3251 || number==3420 || number==3085) return number;
+    if (number==5 || number==6 || number==7 || number==11 || number==13 || number==52 || number==53 || number==70 || number==75 || number==76 || number==94 || number==438 || number==450 || number==3035 || number==3113 || number==3146 || number==3162 || number==3163 || number==3315 || number==3317 || number==3061 || number==2450 || number==2451 || number==2455 || number==2465 || number==3251 || number==3420 || number==3085) return number;
     return {};
 }
 std::string jetSqlFunctionErrorExplanation(std::string_view message) {
@@ -727,6 +731,11 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_sin",-1,&mathSin,nullptr,nullptr);
     ensure("linaccess_jet_cos",-1,&mathCos,nullptr,nullptr);
     ensure("linaccess_jet_power",2,&numericPower,nullptr,nullptr);
+    ensure("linaccess_jet_double_add",2,&double_add,nullptr,nullptr);
+    ensure("linaccess_jet_double_subtract",2,&double_subtract,nullptr,nullptr);
+    ensure("linaccess_jet_double_multiply",2,&double_multiply,nullptr,nullptr);
+    ensure("linaccess_jet_double_divide",2,&double_divide,nullptr,nullptr);
+
     ensure("linaccess_jet_cbool",-1,&convert_cbool,nullptr,nullptr);
     ensure("linaccess_jet_cbyte",-1,&convert_cbyte,nullptr,nullptr);
     ensure("linaccess_jet_cint",-1,&convert_cint,nullptr,nullptr);
