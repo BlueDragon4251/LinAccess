@@ -254,6 +254,12 @@ void scalarBuiltinFunction(sqlite3_context* context,int count,sqlite3_value** ar
     } catch(const VbaRuntimeError& failure) { functionError(context,failure); }
       catch(...) { native.error(context,"SQL scalar evaluation failed",-1); }
 }
+void convert_cbool(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"CBool",1,1);}
+void convert_cbyte(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"CByte",1,1);}
+void convert_cint(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"CInt",1,1);}
+void convert_clng(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"CLng",1,1);}
+void convert_csng(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"CSng",1,1);}
+void convert_cdbl(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"CDbl",1,1);}
 void financialDdb(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"DDB",4,5); }
 void financialIpmt(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"IPmt",4,6); }
 void financialPpmt(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"PPmt",4,6); }
@@ -718,6 +724,13 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_log",-1,&mathLog,nullptr,nullptr);
     ensure("linaccess_jet_sin",-1,&mathSin,nullptr,nullptr);
     ensure("linaccess_jet_cos",-1,&mathCos,nullptr,nullptr);
+    ensure("linaccess_jet_cbool",-1,&convert_cbool,nullptr,nullptr);
+    ensure("linaccess_jet_cbyte",-1,&convert_cbyte,nullptr,nullptr);
+    ensure("linaccess_jet_cint",-1,&convert_cint,nullptr,nullptr);
+    ensure("linaccess_jet_clng",-1,&convert_clng,nullptr,nullptr);
+    ensure("linaccess_jet_csng",-1,&convert_csng,nullptr,nullptr);
+    ensure("linaccess_jet_cdbl",-1,&convert_cdbl,nullptr,nullptr);
+
     ensure("linaccess_jet_tan",-1,&mathTan,nullptr,nullptr);
     ensure("linaccess_jet_atn",-1,&mathAtn,nullptr,nullptr);
     ensure("linaccess_jet_lcase",-1,&stringLCase,nullptr,nullptr);

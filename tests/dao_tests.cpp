@@ -1572,6 +1572,12 @@ End Function
         assert(sql.exec("SELECT SUM(value) FROM inputs") && sql.next() && sql.value(0).toInt()==12); sql.finish();
         assert(metadataFrame->values.at("calls").asNumber()==beforeMetadata);
     }
+    const auto converted=database->member("OpenRecordset",{linaccess::VbaValue::string("SELECT CByte(2.5) AS b,CInt(-2.5) AS i,CLng(3.5) AS l,CSng(16777217) AS s,CDbl('1.25') AS d,CBool(2) AS flag")}).object;
+    const std::vector<int> conversionCodes{2,3,4,6,7,1},conversionSizes{1,2,4,4,8,1};
+    for(int column=0;column<6;++column) {const auto field=converted->member("Fields",{linaccess::VbaValue::integer(column)}).object;assert(field->member("Type",{}).asNumber()==conversionCodes[column] && field->member("Size",{}).asNumber()==conversionSizes[column]);}
+    assert(converted->item("b").numericType==linaccess::VbaValue::NumericType::Byte && converted->item("i").numericType==linaccess::VbaValue::NumericType::Integer && converted->item("l").numericType==linaccess::VbaValue::NumericType::Long);
+    assert(converted->item("s").numericType==linaccess::VbaValue::NumericType::Single && converted->item("d").numericType==linaccess::VbaValue::NumericType::Double && converted->item("flag").kind==linaccess::VbaValue::Kind::Boolean);
+    converted->member("Close",{});
     const auto typedRows=database->member("OpenRecordset",{linaccess::VbaValue::string(typedSource.toStdString())}).object;
     const auto enabled=typedRows->member("Fields",{linaccess::VbaValue::string("enabled")}).object;
     assert(enabled->member("Type",{}).asNumber()==1 && enabled->member("Size",{}).asNumber()==1);

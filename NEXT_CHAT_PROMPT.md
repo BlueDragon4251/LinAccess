@@ -3181,3 +3181,16 @@ keine Boolean-Inferenz aus beliebigen Integern. F121/F122/456/386/70 unveränder
 Vorstufeff933a1 privat remote/Baum geprüft. Letztes Originalinventar100/78/22 und
 sieben Hashes liegen vor diesem kleinen Metadatenumfang; geprüftes DEBc8bd82b
 bleibt älter. Ohne Zwischenabschluss allgemeine native SQL-Funktionen fortsetzen.
+
+
+Native SQL-Zahlenkonvertierung: SQL_NUMERIC_CONVERSIONS.md dokumentiert tatsächliche
+CBool/CByte/CInt/CLng/CSng/CDbl-Callbacks über vorhandene VBA-Konvertierung sowie
+Boolean/Byte/Integer/Long/Single/Double-Abfrage-/DAO-Metadaten. Rundung, Grenzen,
+Verschachtelung, Parameter, WHERE und präzise Fehler im gemeinsamen bestehenden
+Bündel geprüft. DAO erster Lauf2,92s bestand; SQLite-BLOB-Literal war im neuen
+Test keine Access-SQL-Grammatik: durch tatsächliches Binärfeld ersetzt, nur
+Abfragemodell erneut1/1 in0,12s. App gebaut. Keine neuen Tests/Katalogpunkte;
+Datums-/Objekt-/Decimal-Transport, CStr und vollständige Regionalsemantik bleiben
+offen.456/386/70 unverändert. Vorstufebc7cbf9 privat remote/Baum geprüft. Ohne
+Zwischenabschluss nachgewiesene Count-Ergebnistypen in DAO/SQL ergänzen und danach
+aktuelles Debianpaket bauen; geprüftes DEBc8bd82b liegt noch vor späteren Umfängen.

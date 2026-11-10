@@ -344,6 +344,19 @@ int main(int argc, char** argv) {
     catch(const linaccess::VbaRuntimeError&) { rejected = true; }
     assert(rejected);
 
+    model.execute(db,"SELECT CByte(2.5) AS b,CInt(-2.5) AS i,CLng(2147483647.49) AS l,CSng(16777217) AS s,CDbl('1.25') AS d,CBool(2) AS yes,CBool(0) AS no,CInt(CBool(2)) AS nested");
+    const QVector<double> converted{2,-2,2147483647,16777216,1.25,-1,0,-1};
+    const QStringList convertedTypes{"INTEGER1","INTEGER2","INTEGER4","SINGLE_REAL","DOUBLE","BOOLEAN","BOOLEAN","INTEGER2"};
+    for(int column=0;column<converted.size();++column) {assert(model.index(0,column).data(Qt::EditRole).toDouble()==converted[column]);assert(model.fieldSqlType(column)==convertedTypes[column]);}
+    model.execute(db,"SELECT id FROM samples WHERE CInt(score/8.0)=2 ORDER BY id");assert(model.rowCount()==2 && model.index(0,0).data().toInt()==2 && model.index(1,0).data().toInt()==3);
+    model.execute(db,"PARAMETERS value DOUBLE; SELECT CByte([value]) AS converted",{{"value",1.5}});assert(model.index(0,0).data().toInt()==2);
+    assert(query.exec("CREATE TEMP TABLE numeric_conversion_binary(value BLOB)"));assert(query.exec("INSERT INTO numeric_conversion_binary VALUES(x'0102')"));query.finish();
+    for(const auto& failure:std::vector<std::pair<QString,int>>{{"SELECT CByte(256)",6},{"SELECT CInt(32768)",6},{"SELECT CLng(2147483648)",6},{"SELECT CInt(NULL)",94},{"SELECT CDbl('invalid')",13},{"SELECT CSng(1e39)",6},{"SELECT CBool(value) FROM numeric_conversion_binary",13},{"SELECT CInt()",450},{"SELECT CInt(1,2)",450}}) {
+        int error=0;try{model.execute(db,failure.first);}catch(const linaccess::VbaRuntimeError& actual){error=actual.number;}
+        if(error!=failure.second) std::cerr<<"Numeric SQL conversion expected "<<failure.second<<" actual "<<error<<" case "<<failure.first.toStdString()<<'\n';
+        assert(error==failure.second);
+    }
+    assert(query.exec("DROP TABLE temp.numeric_conversion_binary"));query.finish();
     assert(query.exec("CREATE TABLE statistical_values(group_id INTEGER,value REAL)"));
     assert(query.exec("INSERT INTO statistical_values VALUES(1,10),(1,20),(1,NULL),(1,30),(2,1000000000001),(2,1000000000002),(2,1000000000003),(3,NULL),(4,7)"));query.finish();
     model.execute(db,"SELECT group_id,Var(value),StDev(value) FROM statistical_values GROUP BY group_id ORDER BY group_id");
