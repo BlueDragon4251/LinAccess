@@ -5580,3 +5580,37 @@ bestanden, PDF-Zeilen mit tatsächlichen Ordinalen1/2/3 und Currency-Präfixen g
 Keine neuen Test-/Katalog-IDs;456/386/70 unverändert. Vorstufe3dd9019c privat remote/
 Baum geprüft. Ohne Zwischenabschluss jetzt aktuellen DEB-/Originalpfadnachweis
 für beide Operator- und RunningSum-Umfänge bündeln, danach weiter implementieren.
+
+
+Native Dezimalliterale: NATIVE_DECIMAL_LITERALS.md dokumentiert unsuffigierte
+Integer-/Long-/Double-Literale nach MS-VBAL3.3.2, native D/d-Exponenten und
+Komposition mit vorhandener typisierter Arithmetik. Access-Eval-Sonderregeln
+unverändert; vollständige Typsuffix-/deklarierte Variant-/Überlaufbindung bleibt
+offen. App/Core/DAO/Abfragemodell gebaut, DAO3,09s/Abfragemodell0,20s bestanden im
+ersten Bündel; Core legte zwei alte Double-basierte Hex/Oct-/Not-Erwartungen frei.
+Integer-Erwartungen korrigiert, explizite Double-Varianten beibehalten; zuletzt
+nur Core5,41s bestanden. Keine neuen CTest-/Katalog-IDs;456/386/70 unverändert.
+Vorstufe5df3cba2 privat remote/Baum geprüft. Genau diese Vorstufe liegt als geprüftes
+DEB unter /workspace/work/report-running-design/package/linaccess-0.7.0-Linux.deb
+vor: Build-ID/SQLite3.54.1/MDBTools1.0.1/Inhalt/Rechte/Desktop/keine-Fixtures bestanden.
+Originalinventar46,35s und separater Originalpfad120,51s bestanden,100/78/22 und
+sieben Hashes unverändert. Erster langer Originalprozess wurdeSIGKILL beendet,
+kein bestandenes Ergebnis behauptet; gesicherter getrennter Wiederholungslauf
+exit0 liefert den tatsächlichen Originalnachweis. Paket liegt vor Literaländerung.
+
+Fehlende Windows-SQL-/DAO-Referenzen: tatsächliche v4 sql.setup/dao.setup-Fehler
+Int32→String bestätigt; Folgetabellen fehlen, keine positiven Orakel daraus.
+Gezieltes v5-Nachlaufpaket außerhalb Git unter
+/codex/browser/projectless/0001-setze-bluedragon4251-linaccess-auf-development-a/output/LinAccess-SQL-DAO-Referenz-Nachlauf-v5.zip,
+SHAfb492953ce5400113890f879c70362dce6525b0fc74f85896d162ac972223b28.
+Nur SQL/DAO, vier technische Zeilen über Jet-SQL statt instabilem COM-Feldaufbau,
+4-Zeilen-Prüfung und gesondertes setup_succeeded. Originalkopie geschützt,
+keineMDB/VBA/Originalabfragen/Controls/Druckaufträge im Ergebnis. Drei PS-Dateien
+syntaktisch geprüft, keine Windows-Ausführung behauptet. Im Chat verlinkt.
+CodexCall-Skill/README/CLI/Auth erneut gelesen; vorhandener sauberer Skillstand
+fd2cea7. Anforderung225efd3b-b622-475f-8109-43fb0427d8d7 angenommen/gespeichert;
+lokaler PollerSIGKILL, einmalige Resume-Abfrage ohne neuePOST ergibt failed,
+answers[]/confirmed_decisions[], Grund: recipient ended before agent finalization.
+Keine Zustimmung/Antwort/Zustellung erfunden, kein erneuter Anruf. Windows-
+Nachlauf und alte Makroquellen bleiben offen; unabhängig weiterprogrammieren.
+Ohne Zwischenabschluss vollständiger gebundene native Arithmetik fortsetzen.

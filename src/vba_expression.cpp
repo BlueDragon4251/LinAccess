@@ -325,7 +325,7 @@ std::vector<Token> tokenize(std::string_view input,bool accessExpression=false) 
             if (pos<input.size() && input[pos]=='.') {
                 ++pos; while (pos<input.size() && std::isdigit(static_cast<unsigned char>(input[pos]))) ++pos;
             }
-            if (pos<input.size() && (input[pos]=='e' || input[pos]=='E')) {
+            if (pos<input.size() && (input[pos]=='e' || input[pos]=='E' || input[pos]=='d' || input[pos]=='D')) {
                 ++pos; if(pos<input.size() && (input[pos]=='+' || input[pos]=='-')) ++pos;
                 const auto exponent=pos;
                 while(pos<input.size() && std::isdigit(static_cast<unsigned char>(input[pos]))) ++pos;
@@ -1088,12 +1088,18 @@ private:
             if(jetEval_ && tok.value.find_first_of(".eE")!=std::string::npos && tok.value.find_first_of("eE")==std::string::npos) return decimalLiteral(tok.value);
             std::size_t consumed = 0;
             double number;
-            try { number=std::stod(tok.value,&consumed); }
+            auto literal=tok.value;
+            if(!jetEval_) for(auto& character:literal) if(character=='d' || character=='D') character='E';
+            try { number=std::stod(literal,&consumed); }
             catch(const std::out_of_range&) { throw error("Numeric literal overflow",6); }
             catch(const std::invalid_argument&) { throw error("Invalid numeric literal",5); }
             if (consumed!=tok.value.size()) throw error("Ungültige VBA-Zahl");
             if (!std::isfinite(number)) throw error("Numeric literal overflow",6);
             if(jetEval_ && tok.value.find_first_of(".eE")==std::string::npos && number>=0 && number<=2147483647.0) return VbaValue::longInteger(static_cast<std::int32_t>(number));
+            if(!jetEval_ && tok.value.find_first_of(".eEdD")==std::string::npos) {
+                if(number<=32767) return VbaValue::integer(static_cast<std::int16_t>(number));
+                if(number<=2147483647.0) return VbaValue::longInteger(static_cast<std::int32_t>(number));
+            }
             return VbaValue::numeric(number);
         }
         if (tok.type != Token::Type::Word)

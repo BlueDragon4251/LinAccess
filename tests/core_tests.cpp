@@ -225,7 +225,8 @@ void testTypedNot() {
     assert(eval("VarType(Not CByte(10))=vbByte").truthy() && eval("TypeName(Not CByte(10))").asText()=="Byte");
     assert(eval("Not CInt(-32768)").number==32767 && eval("VarType(Not CInt(1))=vbInteger").truthy());
     assert(eval("Not CLng(-2147483648)").number==2147483647 && eval("VarType(Not CLng(1))=vbLong").truthy());
-    assert(eval("Not 10").number==-11 && eval("VarType(Not 10)=vbLong").truthy());
+    assert(eval("Not 10").number==-11 && eval("VarType(Not 10)=vbInteger").truthy());
+    assert(eval("VarType(Not 10.0)=vbLong").truthy());
     assert(eval("Not CSng(2.5)").number==-3 && eval("VarType(Not CSng(2.5))=vbLong").truthy());
     assert(eval("Not CCur(3.5)").number==-5 && eval("VarType(Not Empty)=vbInteger").truthy());
     assert(eval("Not Empty").number==-1 && eval("Not Null").kind==VbaValue::Kind::Null);
@@ -316,6 +317,17 @@ void testNativeMathFunctions() {
         "IsNull(CInt(1)+Null)", "CStr(1)+CStr(2)=CStr(12)",
         "VarType((CInt(2)+CInt(3))*CInt(4))=vbInteger"})
         assert(eval(expression).truthy());
+    for(const auto& expression:std::vector<std::string>{
+        "VarType(0)=vbInteger And VarType(32767)=vbInteger",
+        "VarType(32768)=vbLong And VarType(2147483647)=vbLong",
+        "VarType(2147483648)=vbDouble And VarType(1.0)=vbDouble",
+        "VarType(00042)=vbInteger And 00042=42",
+        "VarType(1E0)=vbDouble And VarType(1D0)=vbDouble",
+        "1d2=100 And 1D-2=0.01 And .5d+1=5",
+        "VarType(1+2)=vbInteger And VarType(32768+1)=vbLong",
+        "VarType(1/2)=vbDouble And 1/2=0.5",
+        "VarType(CSng(1)+1)=vbSingle And VarType(CSng(1)+32768)=vbDouble"})
+        assert(eval(expression).truthy());
     assert(eval("Choose(2.5,10,20,30)").asNumber()==20 && eval("Choose(0,10)").kind==VbaValue::Kind::Null);
     assert(eval("Choose(2,10,Null)").kind==VbaValue::Kind::Null);
     assert(eval("Switch(False,10,True,CCur(\"1.25\"),True,30)").kind==VbaValue::Kind::Currency);
@@ -349,7 +361,8 @@ void testCharacterFunctions() {
     assert(eval("LCase(Null)").kind==VbaValue::Kind::Null && eval("UCase(Empty)").asText().empty());
     assert(eval("Len(UCase(Chr(0) & \"ab\"))").asNumber()==3);
     assert(eval("Hex(Number:=459)").asText()=="1CB" && eval("Oct$(459)").asText()=="713");
-    assert(eval("Hex$(-1)").asText()=="FFFFFFFF" && eval("Oct(-1)").asText()=="37777777777");
+    assert(eval("Hex$(-1)").asText()=="FFFF" && eval("Oct(-1)").asText()=="177777");
+    assert(eval("Hex$(-1.0)").asText()=="FFFFFFFF" && eval("Oct(-1.0)").asText()=="37777777777");
     assert(eval("Hex(Empty)").asText()=="0" && eval("Hex(10.5)").asText()=="A");
     assert(eval("Hex(CInt(-1))").asText()=="FFFF" && eval("Oct(CInt(-1))").asText()=="177777");
     assert(eval("Hex(CLng(-1))").asText()=="FFFFFFFF");
