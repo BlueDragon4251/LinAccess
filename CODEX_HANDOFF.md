@@ -5750,3 +5750,15 @@ neues DEB geprüft, bestehende Integration3/3 in188,36s (GUI19,85/Inventar47,59/
 Original120,91), sieben geschützte Hashes unverändert. Inventar100/78/22;
 Original-Makrogrenze bleibt. Paket liegt vor abgeleiteten Snapshots. Kein
 Gesamtabschluss/Abschlussanruf; weitere allgemeine Anforderungen fortsetzen.
+
+
+Native Ordner-Metadaten: NATIVE_FILE_SYSTEM_OBJECT.md beschreibt Folder.Size
+über tatsächliche verschachtelte/versteckte Dateien mit exakter Double-Ganzzahl-
+Grenze, Besuchs-/Tiefenlimits und ausdrücklichen Link-/Spezialdatei-Grenzen sowie
+Folder.DateLastModified über vorhandene lokale Date-Konvertierung. Kein Windows-
+Variant-/atomarer Snapshot-/FSO-Vollparitätsanspruch. App/Core gebaut, einmaliges
+bestehendes Core-Bündel1/1 in5,56s bestanden, reale kleine und sparse>2GiB-Dateien,
+Zeitstempel, Link-/Löschgrenzen und typisierter VBA-Aufruf.456/386/70 unverändert,
+keine neuen Test-/Katalog-IDs. Vorstufe45a6f86a privat remote/Baum geprüft.
+Aktuelles geprüftes DEB bleibt ad42eada vor abgeleiteten Snapshots/Ordner-Metadaten.
+Ohne Zwischenabschluss weitere allgemeine offene Anforderungen fortsetzen.

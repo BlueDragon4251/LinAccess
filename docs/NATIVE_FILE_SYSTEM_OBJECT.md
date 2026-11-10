@@ -260,3 +260,33 @@ merged trees, recursive directory copying and full Windows sharing/attribute
 semantics are not introduced. The existing core scope checks both actual APIs,
 Unicode, aliases, collision/Null/directory refusal, live collection refresh and
 independently preserved file contents. No new test target or catalog point.
+
+
+## Actual native folder metadata
+
+Folder.Size traverses actual files and subfolders, including hidden names, adding
+logical byte lengths (not allocated disk blocks). Fresh reads observe actual
+changes. Empty directories contribute zero. The native numeric representation is
+Double with exact integer bounds through2^53-1; Windows Variant subtype identity
+is not claimed. Overflow6, traversal over1million entries or depth256 refuses3251.
+Symlinks and special files refuse3251, rather than following links, silently
+skipping unknown objects or blocking on streams. Permission errors70 and other
+metadata errors75 propagate. Missing/root-invalid folders retain76. Traversal is
+not an atomic filesystem snapshot; concurrent replacement, mount/reparse and
+Windows junction/provider behavior remain unproved.
+
+Folder.DateLastModified reads the actual current directory timestamp and uses the
+existing local-time checked VBA Date conversion shared with File.DateLastModified
+and FileDateTime. No creation-time approximation. Both getters reject arguments450;
+no writable metadata property is added. Native folder moves/renames continue to
+update the held path through the existing implementation.
+
+One existing core_tests bundle passed5.56s; app/core built. Real nested/hidden
+files total10bytes, a sparse file lifts the total past2GiB without allocating its
+logical size, symlinks refuse, deletion invalidates reads, and actual Date values
+match a deliberately set filesystem time. Typed native VBA reads both properties.
+No new CTest/catalog IDs; F091 remains open,456/386/70 unchanged.
+
+Public contracts (not an Access2003/Windows FSO execution oracle):
+https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/size-property-filesystemobject-object
+https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/datelastmodified-property

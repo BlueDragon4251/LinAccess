@@ -194,6 +194,30 @@ public:
 };
 class VbaFolderObject final : public VbaObject {
     std::filesystem::path path_;
+    static void metadataFailure(const std::error_code& error) {
+        if(error==std::errc::permission_denied) throw VbaRuntimeError(70,"Folder metadata permission denied");
+        if(error) throw VbaRuntimeError(75,"Folder metadata changed or is unavailable");
+    }
+    VbaValue size() const {
+        (void)nativeFolderReference(path_);
+        std::error_code error;
+        std::filesystem::recursive_directory_iterator entry(path_,error),end;
+        metadataFailure(error);
+        std::uintmax_t total=0;std::size_t inspected=0;
+        constexpr std::uintmax_t maximum=9007199254740991ULL;
+        for(;entry!=end;entry.increment(error),metadataFailure(error)) {
+            if(++inspected>1000000 || entry.depth()>256) throw VbaRuntimeError(3251,"Folder.Size traversal limit exceeded");
+            const auto status=entry->symlink_status(error);metadataFailure(error);
+            if(std::filesystem::is_symlink(status)) throw VbaRuntimeError(3251,"Folder.Size link semantics require reference validation");
+            if(std::filesystem::is_directory(status)) continue;
+            if(!std::filesystem::is_regular_file(status)) throw VbaRuntimeError(3251,"Folder.Size requires regular native files");
+            const auto bytes=entry->file_size(error);metadataFailure(error);
+            if(bytes>maximum-total) throw VbaRuntimeError(6,"Folder.Size exceeds exact numeric range");
+            total+=bytes;
+        }
+        return VbaValue::numeric(static_cast<double>(total));
+    }
+
 public:
     explicit VbaFolderObject(std::filesystem::path path) : path_(std::move(path)) {
         if(path_.filename().empty() && path_!=path_.root_path()) path_=path_.parent_path();
@@ -233,8 +257,14 @@ public:
             auto collection=std::make_shared<VbaFilesObject>(path_,method=="subfolders");
             return args.empty() ? VbaValue::reference(collection) : collection->member("Item",args);
         }
-        if(method!="path" && method!="name" && method!="parentfolder") throw VbaRuntimeError(3251,"Native Folder member is not implemented");
+        if(method!="path" && method!="name" && method!="parentfolder" && method!="size" && method!="datelastmodified") throw VbaRuntimeError(3251,"Native Folder member is not implemented");
         if(!args.empty()) throw VbaRuntimeError(450,"Folder property takes no arguments");
+        if(method=="size") return size();
+        if(method=="datelastmodified") {
+            (void)nativeFolderReference(path_);
+            std::error_code error;const auto modified=std::filesystem::last_write_time(path_,error);metadataFailure(error);
+            return nativeFileDate(modified);
+        }
         if(method=="path") return scalarValue();
         if(method=="name") return VbaValue::string(path_.filename().string());
         if(method=="parentfolder") {

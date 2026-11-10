@@ -3552,6 +3552,41 @@ End Sub)VBA","ProbeFs",host);
         assert(host.fields["FsoFileObject"]=="File:8" && host.fields["FsoFileTyped"]=="True" && host.fields["FsoFileDefault"]==file.string());
         assert(host.fields["FsoFileMetadata"]==file.string()+"|"+file.filename().string()+"|3:3");
         assert(host.fields["FsoWrongKinds"]=="False:False" && host.fields["FsoMissing"]=="False" && host.fields["FsoAbsolute"]==fs::current_path().string());
+        const auto metadataRoot=directory/"folder-metadata-probe";
+        assert(fs::create_directories(metadataRoot/"nested"/"deep"));
+        {std::ofstream out(metadataRoot/"root.dat",std::ios::binary);out<<"123";}
+        {std::ofstream out(metadataRoot/"nested"/"deep"/"data.dat",std::ios::binary);out<<"12345";}
+        {std::ofstream out(metadataRoot/".hidden",std::ios::binary);out<<"12";}
+        const auto fso=evaluate("CreateObject(\"Scripting.FileSystemObject\")").object;
+        const auto metadataFolder=fso->member("GetFolder",{VbaValue::string(metadataRoot.string())}).object;
+        assert(metadataFolder->member("Size",{}).asNumber()==10);
+        const auto metadataError=[](auto operation,int expected) {int number=0;try {operation();}catch(const VbaRuntimeError& error) {number=error.number;}assert(number==expected);};
+        metadataError([&] {metadataFolder->member("Size",{VbaValue::integer(1)});},450);
+        fs::create_symlink(metadataRoot/"root.dat",metadataRoot/"link");
+        metadataError([&] {metadataFolder->member("Size",{});},3251);assert(fs::remove(metadataRoot/"link"));
+        {std::ofstream out(metadataRoot/"large.dat",std::ios::binary);}
+        fs::resize_file(metadataRoot/"large.dat",(std::uintmax_t(1)<<31)+2);
+        assert(metadataFolder->member("Size",{}).asNumber()==2147483660.0);
+        assert(fs::remove(metadataRoot/"large.dat"));
+        std::tm metadataTime{};metadataTime.tm_year=103;metadataTime.tm_mon=1;metadataTime.tm_mday=3;
+        metadataTime.tm_hour=4;metadataTime.tm_min=5;metadataTime.tm_sec=6;metadataTime.tm_isdst=-1;
+        const auto metadataStamp=std::mktime(&metadataTime);assert(metadataStamp!=-1);
+        fs::last_write_time(metadataRoot,fs::file_time_type::clock::from_sys(std::chrono::system_clock::from_time_t(metadataStamp)));
+        const auto modifiedFolder=metadataFolder->member("DateLastModified",{});
+        assert(modifiedFolder.kind==VbaValue::Kind::Date && std::abs(modifiedFolder.number-evaluate("CDate(\"2003-02-03 04:05:06\")").number)<1e-9);
+        host.fields["FolderMetadataRoot"]=metadataRoot.string();
+        const auto folderMetadata=executeVbaProcedure(R"VBA(Sub ReadFolderMetadata()
+Dim fs As Scripting.FileSystemObject, folder As Scripting.Folder, stamp As Date
+Set fs=New Scripting.FileSystemObject
+Set folder=fs.GetFolder(Me!FolderMetadataRoot)
+stamp=folder.DateLastModified
+Me!FolderMetadataSize=CStr(folder.Size)
+Me!FolderMetadataDate=CStr(Year(stamp)) & ":" & CStr(Month(stamp)) & ":" & CStr(Day(stamp))
+End Sub)VBA","ReadFolderMetadata",host);
+        assert(folderMetadata.status==VbaExecutionStatus::Completed && host.fields["FolderMetadataSize"]=="10" && host.fields["FolderMetadataDate"]=="2003:2:3");
+        assert(fs::remove_all(metadataRoot)==6);
+        metadataError([&] {metadataFolder->member("Size",{});},76);
+        metadataError([&] {metadataFolder->member("DateLastModified",{});},76);
         const auto renameRoot=directory/"folder-rename-probe";assert(fs::create_directory(renameRoot));
         host.fields["FolderRenameRoot"]=renameRoot.string();
         const auto renameFolder=executeVbaProcedure(R"VBA(Sub RenameFolder()
