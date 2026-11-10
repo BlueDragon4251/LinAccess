@@ -6285,3 +6285,16 @@ neuen Tests/IDs; F041/F067/F068/F071/F121/F122/456/386/70 unverändert. Vorstufe
 privat remote/Baum geprüft. Geprüftes DEBcc19000 liegt vor späteren Umfängen.
 Danach ohne Zwischenabschluss aktuellen Paket-/Original-/Inventarlauf ausführen
 und weitere native Zahlentyp-/Operatorschritte fortsetzen. Kein Abschlussanruf.
+
+
+Tatsächliche Report-RunningSum-Ausgabe: REPORT_RUNNING_SUM.md dokumentiert
+Over-All-Detailpräfixe aus tatsächlichen geordneten numerischen Feldern und =1,
+Currency-/Decimal-Summenpfad, Formatierung, berechnete Abhängigkeiten, Mehrseiten-
+PDF und wiederholte Ausgabe ohne Doppelzählung. Steuerelement-/Datensatzwerte
+werden wiederhergestellt; Null/Gruppen/andere Ausdrücke/Running-CanGrow bleiben
+explizit gesperrt. Vorhandene Druck-/Ereignisgrenzen gelten. App/Layout gebaut,
+ein bestehender gebündelter access_2003_layouts-Lauf13,23s bestanden, echte PDF-
+Texte verglichen und atomarer Zielschutz geprüft. Keine neuen Test-/Katalog-IDs;
+456/386/70 unverändert. Vorstufe2db95826 privat remote/Baum geprüft. Geprüftes
+DEB8fd1d50 liegt vor nativen Operatoren und RunningSum. Ohne Zwischenabschluss
+native Berichtsentwurfsbedienung für laufende Feldsummen fortsetzen.

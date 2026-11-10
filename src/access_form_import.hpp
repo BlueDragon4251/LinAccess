@@ -81,6 +81,7 @@ struct AccessVisualControl {
     bool defaultButton{};
     bool cancelButton{};
     bool canGrow{};
+    int runningSum{};
     bool tabStop{true};
     int tabIndex{};
 };

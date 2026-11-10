@@ -319,6 +319,12 @@ public:
         }
         if (key == "name") return linaccess::VbaValue::string(bytes(name_));
         if (key == "eventprocprefix") return linaccess::VbaValue::string(bytes(preview.controlEventPrefix(name_)));
+        if(key=="runningsum") {
+            for(const auto& control:preview.layout_.controls)
+                if(control.name.compare(name_,Qt::CaseInsensitive)==0 && control.type=="TextBox" && preview.layout_.kind==linaccess::AccessDocumentKind::Report)
+                    return linaccess::VbaValue::byte(static_cast<unsigned char>(control.runningSum));
+            throw linaccess::VbaRuntimeError(438,"RunningSum requires a report textbox");
+        }
         if (key=="cangrow") {
             for (const auto& control:preview.layout_.controls)
                 if(control.name.compare(name_,Qt::CaseInsensitive)==0 && control.type=="TextBox")
@@ -616,6 +622,7 @@ public:
                 return;
             }
         }
+        if(key=="runningsum") throw linaccess::VbaRuntimeError(3251,"RunningSum mutation during runtime is unsupported");
         if (key=="cangrow") throw linaccess::VbaRuntimeError(3251,"CanGrow can only be changed in design view");
         if (key=="tag") {
             if (value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null Tag");

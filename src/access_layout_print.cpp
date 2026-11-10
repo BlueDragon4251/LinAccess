@@ -1,6 +1,8 @@
 #include "access_form_preview.hpp"
 #include "access_format.hpp"
 #include "native_report_text_layout.hpp"
+#include "native_report_aggregate.hpp"
+#include "vba_qt_value.hpp"
 #include <QAction>
 #include <QFileDialog>
 #include <QFile>
@@ -317,6 +319,8 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
     for (const auto& control:layout_.controls) {
         if (control.type!="Label" && control.type!="TextBox" && control.type!="Rectangle"
             && control.type!="Line") return false;
+        if(control.runningSum && (control.runningSum!=2 || control.type!="TextBox" || control.section!="Section" ||
+            control.canGrow || (control.controlSource.trimmed().startsWith('=') && control.controlSource.trimmed()!="=1"))) return false;
         if (control.canGrow) {
             if(control.type!="TextBox" || control.section!="Section" || control.controlSource.trimmed().startsWith('=')) return false;
             growers.append(control.name.toCaseFolded());
@@ -375,9 +379,31 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
     const auto restore=qScopeGuard([&] {
         resetControls(); canvas->setFixedSize(canvasSize);
         canvas->setProperty("la_print_band_rect",oldBand); canvas->setProperty("la_print_band_color",oldColor);
+        reportRunningValues_.clear();
         currentRecordIndex_=savedRecord; reportPrintPage_=savedPage; reportPrintPages_=savedPages;
         loadRecord();
     });
+    // Build each record prefix once. Pagination and repeated preview paints only
+    // read these values, so split sections never accumulate the same row twice.
+    try {
+        for(const auto& control:layout_.controls) {
+            if(!control.runningSum) continue;
+            auto field=control.controlSource.trimmed();
+            const bool counter=field=="=1";
+            if(field.startsWith('[') && field.endsWith(']')) field=field.mid(1,field.size()-2);
+            int column=-1;
+            for(int i=0;i<dataColumns_.size();++i) if(dataColumns_[i].compare(field,Qt::CaseInsensitive)==0) {column=i;break;}
+            if(!counter && column<0) return false;
+            auto& values=reportRunningValues_[control.name.toCaseFolded()];
+            linaccess::NativeReportAggregate sum("sum");
+            for(const auto& row:recordRows_) {
+                const auto value=counter ? linaccess::VbaValue::integer(1) :
+                    linaccess::qtFieldValue(row[column],dataTypes_.value(dataColumns_[column].toCaseFolded()));
+                if(value.kind!=linaccess::VbaValue::Kind::Number && value.kind!=linaccess::VbaValue::Kind::Currency && value.kind!=linaccess::VbaValue::Kind::Decimal) return false;
+                sum.add(value);values.append(std::make_shared<linaccess::VbaValue>(sum.result()));
+            }
+        }
+    } catch(const std::exception&) { return false; }
     struct Growth { QString name; int delta; };
     struct GrowthGroup { int top,bottom,delta; };
     QVector<int> detailHeights(recordRows_.size(),detail);

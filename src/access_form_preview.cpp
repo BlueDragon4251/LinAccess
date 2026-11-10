@@ -2340,6 +2340,12 @@ void AccessFormPreview::loadRecord() {
         if(control.type=="TextBox" && (!control.format.isEmpty() || widget->property("la_format_owned_value").toBool())) displayFormattedControl(widget,control.name,linaccess::qtFieldValue(value,type),linaccess::qtFieldText(value,type));
         widget->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Text));
     }
+    for(auto it=reportRunningValues_.cbegin();it!=reportRunningValues_.cend();++it) {
+        const int row=currentRecordIndex_-1;
+        if(row<0 || row>=it.value().size()) continue;
+        auto* widget=controls_.value(it.key()).data();const auto& value=*it.value()[row];
+        displayFormattedControl(widget,it.key(),value,QString::fromStdString(value.asText()));
+    }
     dirty_ = false; insertionStarted_=false; pendingControls_.clear(); editOriginals_.clear();
     initializeControlDefaults(false);
     applyControlStates(); refreshCalculatedControls();
@@ -2708,6 +2714,10 @@ void AccessFormPreview::setField(std::string_view name, std::optional<std::strin
 
 linaccess::VbaValue AccessFormPreview::getFieldValue(std::string_view name) const {
     const auto key=QString::fromUtf8(name.data(),name.size());
+    if(const auto found=reportRunningValues_.constFind(key.toCaseFolded());found!=reportRunningValues_.cend()) {
+        const int row=currentRecordIndex_-1;
+        if(row>=0 && row<found->size()) return *(*found)[row];
+    }
     for (const auto& buffered:bufferedTextControls_)
         if (buffered.compare(key,Qt::CaseInsensitive)==0 && validatingControl_.compare(buffered,Qt::CaseInsensitive)!=0)
             if (const auto original=editOriginals_.value(buffered)) return *original;
@@ -2844,7 +2854,7 @@ linaccess::VbaValue AccessFormPreview::calculatedControlValue(const QString& nam
 }
 void AccessFormPreview::refreshCalculatedControls() {
     for (const auto& control : layout_.controls)
-        if (control.controlSource.trimmed().startsWith('=')) {
+        if (control.controlSource.trimmed().startsWith('=') && !reportRunningValues_.contains(control.name.toCaseFolded())) {
             try { (void)calculatedControlValue(control.name); } catch (const std::exception&) { /* Error is visible on the control. */ }
         }
     refreshTextAlignments();

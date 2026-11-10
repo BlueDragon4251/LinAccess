@@ -125,6 +125,7 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
     QHash<QString,qint32> templateBackColors;
     QHash<QString,int> templateBackStyles;
     QHash<QString,bool> templateCanGrow;
+    QHash<QString,int> templateRunningSum;
     QHash<QString,int> templateMultiSelect;
     QHash<QString,bool> templateColumnHeads;
     QHash<QString,int> templateListRows;
@@ -166,6 +167,7 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
                 if (templateBackColors.contains(type)) item.backColor=templateBackColors.value(type);
                 item.backStyle=templateBackStyles.value(type,type=="OptionGroup" ? 0 : 1);
                 item.canGrow=templateCanGrow.value(type,false);
+                item.runningSum=templateRunningSum.value(type,0);
                 for (auto it=stack.crbegin();it!=stack.crend();++it)
                     if (it->type=="OptionGroup" && it->control>=0) { item.optionGroupIndex=it->control; break; }
                 if (type=="Label")
@@ -191,7 +193,8 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
                   || key=="HideDuplicates" || key=="Vertical") && accessBoolean(value,false))
                 || (key=="CanGrow" && accessBoolean(value,false) && current.type!="Section"
                     && !(current.type=="TextBox" && (current.controlTemplate || current.control>=0)))
-                || ((key=="RunningSum" || (key=="ForceNewPage" && current.type!="Section" && current.type!="FormHeader" && current.type!="FormFooter")) && value!="0")
+                || ((key=="RunningSum" && !(current.type=="TextBox" && (current.controlTemplate || current.control>=0))) && value!="0")
+                || ((key=="ForceNewPage" && current.type!="Section" && current.type!="FormHeader" && current.type!="FormFooter") && value!="0")
                 || ((key=="OnFormat" || key=="OnPrint" || key=="OnPage") && !value.isEmpty())
                 || (key=="Columns" && value!="1"))
                 form.reportPrintLimitations.append(key);
@@ -206,6 +209,13 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
             continue;
         }
         const auto integer = [&] { bool ok = false; const int result = value.toInt(&ok); return ok ? result : 0; };
+        if(key=="RunningSum" && current.type=="TextBox" && (current.controlTemplate || current.control>=0)) {
+            bool valid=false;const auto setting=value.toInt(&valid);
+            if(!valid || setting<0 || setting>2) throw std::runtime_error("Invalid imported RunningSum");
+            if(current.controlTemplate) templateRunningSum[current.type]=setting;
+            else form.controls[current.control].runningSum=setting;
+            continue;
+        }
         if(key=="CanGrow" && (current.controlTemplate || current.control>=0)) {
             const bool enabled=accessBoolean(value,false);
             if(current.controlTemplate) templateCanGrow[current.type]=enabled;

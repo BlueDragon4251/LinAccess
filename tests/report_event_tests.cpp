@@ -461,6 +461,69 @@ End
         AccessFormPreview invalid("invalid expression report",invalidSource,{},db);
         assert(!invalid.exportReportPdf(document));
         assert(invalid.close());
+        assert(query.exec("CREATE TABLE native_running_values(id INTEGER PRIMARY KEY, amount CURRENCY_REAL)"));
+        assert(query.exec("INSERT INTO native_running_values VALUES(1,10.0001),(2,20.0002),(3,40.0004)"));
+        const QByteArray runningSource=R"RUNNING(Begin Report
+RecordSource ="SELECT id,amount FROM native_running_values ORDER BY id"
+Width =6000
+Begin Section
+Height =9000
+Begin TextBox
+Name ="RunningValue"
+ControlSource ="amount"
+RunningSum =2
+Format ="0.0000"
+Width =2000
+Height =300
+End
+Begin TextBox
+Name ="Ordinal"
+ControlSource ="=1"
+RunningSum =2
+Left =2100
+Width =1000
+Height =300
+End
+Begin TextBox
+Name ="Dependent"
+ControlSource ="=[RunningValue]+1000"
+Format ="0.0000"
+Left =3200
+Width =2000
+Height =300
+End
+End
+End)RUNNING";
+        const auto runningLayout=linaccess::parseAccessFormLayout(QString::fromUtf8(runningSource));
+        assert(runningLayout.reportPrintLimitations.isEmpty() && runningLayout.controls.front().runningSum==2);
+        AccessFormPreview running("native running sum",runningSource,{},db);
+        const auto runningObject=makePreviewControlsObject(running)->member("Item",{linaccess::VbaValue::string("RunningValue")}).object;
+        assert(runningObject->member("RunningSum",{}).kind==linaccess::VbaValue::Kind::Number && runningObject->member("RunningSum",{}).asNumber()==2);
+        auto* runningField=running.findChild<QLineEdit*>("access-control-RunningValue");assert(runningField);
+        const auto savedRunning=runningField->text();
+        auto* runningPages=running.findChild<QPrintPreviewWidget*>("access-report-pages");
+        assert(runningPages && runningPages->pageCount()>=2);
+        const auto runningPdf=output.filePath("running.pdf");assert(running.exportReportPdf(runningPdf));
+        assert(runningField->text()==savedRunning);
+        if(!reader.isEmpty()) {
+            const auto readRunning=[&] {
+                QProcess process;process.start(reader,{"-layout",runningPdf,"-"});assert(process.waitForFinished(10000) && process.exitCode()==0);
+                return QString::fromUtf8(process.readAllStandardOutput()).normalized(QString::NormalizationForm_KC);
+            };
+            const auto extracted=readRunning();
+            for(const auto& value:{"10.0001","30.0003","70.0007","1010.0001","1030.0003","1070.0007"}) assert(extracted.contains(value));
+            assert(running.exportReportPdf(runningPdf) && readRunning()==extracted);
+        }
+        QFile runningProtected(runningPdf);assert(runningProtected.open(QIODevice::ReadOnly));const auto runningBytes=runningProtected.readAll();runningProtected.close();
+        assert(query.exec("UPDATE native_running_values SET amount=NULL WHERE id=2"));
+        (void)makePreviewFormObject(running)->member("Requery",{});
+        assert(!running.exportReportPdf(runningPdf));
+        assert(runningProtected.open(QIODevice::ReadOnly) && runningProtected.readAll()==runningBytes);runningProtected.close();
+        assert(running.close());
+        auto groupRunningSource=runningSource;groupRunningSource.replace("RunningSum =2","RunningSum =1");
+        AccessFormPreview groupRunning("unsupported group running sum",groupRunningSource,{},db);
+        assert(!groupRunning.exportReportPdf(runningPdf) && groupRunning.close());
+        assert(query.exec("DROP TABLE native_running_values"));query.finish();
         auto shrinkingSource=pagedSource; shrinkingSource.replace("Name =\"Name\"","Name =\"Name\"\nCanShrink =-1");
         AccessFormPreview shrinking("shrinking report",shrinkingSource,{},db);
         assert(shrinking.findChild<QTabWidget*>("access-report-view-tabs")->currentIndex()==1);

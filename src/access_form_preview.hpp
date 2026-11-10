@@ -216,6 +216,7 @@ private:
     mutable QMap<QString,std::shared_ptr<linaccess::VbaValue>> calculatedValues_;
     mutable QMap<QString,std::shared_ptr<linaccess::VbaValue>> formattedControlValues_;
     QMap<QString,std::shared_ptr<linaccess::VbaValue>> reportAggregateValues_;
+    QMap<QString,QVector<std::shared_ptr<linaccess::VbaValue>>> reportRunningValues_;
     bool reportAggregateCaching_{};
     int reportPrintPage_{},reportPrintPages_{};
     QPointer<QWidget> reportPageView_;
