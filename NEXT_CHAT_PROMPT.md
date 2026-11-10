@@ -3557,3 +3557,18 @@ Katalog-IDs;456/386/70. Vorstufec77bdf6a privat remote/Baum geprüft. Geprüftes
 weiterhin4ebc3f6c vor Feldherkunft/AddNew. Ohne Zwischenabschluss weitere echte
 DAO-Zustands-/Sprach-/Datenbankanforderungen implementieren; keine AddNew-ADO-
 FieldList/Values-Signatur in DAO erfinden (DAO-AddNew ist parameterlos).
+
+
+DAO Entwürfe bei tatsächlicher Navigation: DAO_PENDING_NAVIGATION.md dokumentiert
+Verwerfen von Edit-/AddNew-Wert-/Chunkpuffern erst nach erfolgreicher Zielprüfung
+für tatsächliche Positionswechsel in Move/Positions-/Bookmark-/Find-/Seek-Pfaden.
+Keine SQL-Speicherung, Klonentwürfe getrennt; Reentranz-/Versionsprüfungen erhalten.
+Ungültige Ziele/Suchkriterien erhalten Entwürfe. No-op-Navigation bleibt3219;
+Clone/Index/Requery/GetRows und vollständige Windows-Fehlerpriorität weiter offen.
+Formular-UI-Speicher-/Cancelereignisse unverändert. App/DAO gebaut; einmaliges
+bestehendes DAO-Bündel1/1 in3,67s bestanden, echte Tabellen/Dynaset Edit-/AddNew-
+Bewegungsmatrix und unabhängiger SQL-Nichtschreibbeleg. Keine neuen CTest- oder
+Katalog-IDs;456/386/70. Vorstufec0dc87a9 privat remote/Baum geprüft. Letztes
+geprüftes DEB4ebc3f6c liegt vor Feldherkunft/DAO-Zustandsänderungen. Kein neuer
+GUI-/Original-/Paketbeleg für diese Etappe. Ohne Zwischenabschluss weitere
+allgemeine offene Anforderungen fortlaufend implementieren.

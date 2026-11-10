@@ -82,9 +82,11 @@ void testDaoCursors() {
     expect(3159,[&] { source->assign("Bookmark",second); });
     source->assign("Bookmark",third); sibling->member("Edit",{});
     assert(sibling->member("EditMode",{}).asNumber()==1 && source->member("EditMode",{}).asNumber()==0);
-    expect(3219,[&] { sibling->assign("AbsolutePosition",VbaValue::longInteger(0)); });
     expect(3219,[&] { sibling->member("Clone",{}); });
-    expect(3219,[&] { find(sibling,"FindFirst","id=1"); });
+    sibling->assign("AbsolutePosition",VbaValue::longInteger(0));assert(sibling->member("EditMode",{}).asNumber()==0 && sibling->item("id").asNumber()==1);
+    sibling->assign("Bookmark",third);sibling->member("Edit",{});
+    find(sibling,"FindFirst","id=1");assert(sibling->member("EditMode",{}).asNumber()==0 && sibling->item("id").asNumber()==1);
+    sibling->assign("Bookmark",third);sibling->member("Edit",{});
     expect(3219,[&] { sibling->assign("Bookmark",third); });
     sibling->assignItem("label",VbaValue::string("updated")); sibling->member("Update",{});
     assert(sibling->member("EditMode",{}).asNumber()==0);
@@ -127,6 +129,33 @@ void testDaoCursors() {
         assert(rows->item("id").asNumber()==0 && rows->member("LastModified",{}).bytes!=added.bytes);
         rows->assign("Bookmark",rows->member("LastModified",{}));assert(rows->item("id").asNumber()==9);
         assert(query.exec("SELECT COUNT(*) FROM "+tableName) && query.next() && query.value(0).toInt()==5);query.finish();
+        // Every supported successful movement to another row discards the
+        // pending Edit/AddNew buffer without inserting/updating SQL rows.
+        const auto discard=[&](const std::function<void()>& movement,int target) {
+            rows->member("MoveFirst",{});rows->member("MoveNext",{}); // id1
+            rows->member("Edit",{});rows->assignItem("value",VbaValue::longInteger(999));movement();
+            assert(rows->member("EditMode",{}).asNumber()==0 && rows->item("id").asNumber()==target);
+            rows->member("MoveFirst",{});rows->member("MoveNext",{});
+            rows->member("AddNew",{});rows->assignItem("id",VbaValue::longInteger(99));rows->assignItem("value",VbaValue::longInteger(999));movement();
+            assert(rows->member("EditMode",{}).asNumber()==0 && rows->item("id").asNumber()==target);
+        };
+        rows->member("MoveLast",{});const auto last=rows->member("Bookmark",{});
+        discard([&] {rows->member("MoveFirst",{});},0);
+        discard([&] {rows->member("MoveLast",{});},9);
+        discard([&] {rows->member("MoveNext",{});},2);
+        discard([&] {rows->member("MovePrevious",{});},0);
+        discard([&] {rows->member("Move",{VbaValue::longInteger(1)});},2);
+        discard([&] {rows->assign("AbsolutePosition",VbaValue::longInteger(4));},9);
+        discard([&] {rows->assign("Bookmark",last);},9);
+        discard([&] {find(rows,"FindFirst","id=9");},9);
+        if(mode==1) {rows->assign("Index",VbaValue::string(""));} // No guessed physical index name.
+        rows->member("MoveFirst",{});rows->member("Edit",{});rows->assignItem("value",VbaValue::longInteger(777));
+        expect(3021,[&] {rows->assign("AbsolutePosition",VbaValue::longInteger(100));});
+        expect(3070,[&] {find(rows,"FindFirst","missing_field=1");});
+        expect(3159,[&] {rows->assign("Bookmark",VbaValue::byteArray({}));});
+        assert(rows->member("EditMode",{}).asNumber()==1 && rows->item("value").asNumber()==777);
+        rows->member("CancelUpdate",{});
+        assert(query.exec("SELECT COUNT(*),SUM(CASE WHEN value=999 OR value=777 THEN 1 ELSE 0 END) FROM "+tableName) && query.next() && query.value(0).toInt()==5 && query.value(1).toInt()==0);query.finish();
         peer->member("Close",{});rows->member("Close",{});
     }
 

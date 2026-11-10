@@ -661,15 +661,17 @@ public:
         }
         if (key=="move") {
             if (args.empty() || args.size()>2) throw VbaRuntimeError(450,"DAO: Move requires Rows and optional Start");
-            if (mode_!=Mode::Browse) throw VbaRuntimeError(3219,"DAO: Pending edit");
+            const auto pendingMode=mode_;const auto revision=data_->revision;
             if (args[0].kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Invalid Null movement");
             const auto distance=sqlFieldValue(args[0],"INTEGER4").toLongLong();
             const auto origin=args.size()==2 ? bookmarkPosition(args[1]) : position_;
+            checkTransaction();if(closed_) throw VbaRuntimeError(3420,"DAO: Recordset closed during movement evaluation");
+            if(mode_!=pendingMode || data_->revision!=revision) throw VbaRuntimeError(3219,"DAO: Recordset changed during movement evaluation");
             if (data_->rows.empty() || (origin<0 && distance<=0) ||
                 (origin>=data_->rows.size() && distance>=0))
                 throw VbaRuntimeError(3021,"DAO: No current record");
             const auto destination=static_cast<qlonglong>(origin)+distance;
-            position_=static_cast<qsizetype>(std::clamp<qlonglong>(destination,-1,data_->rows.size()));
+            navigate(static_cast<qsizetype>(std::clamp<qlonglong>(destination,-1,data_->rows.size())));
             noMatch_=false;
             return {};
         }
@@ -749,11 +751,12 @@ public:
         if (key == "recordcount") return longCount(data_->rows.size());
         if (key=="absoluteposition") return longCount(position_<0 || position_>=data_->rows.size() ? -1 : position_);
         if (key == "movefirst" || key == "movelast" || key == "movenext" || key == "moveprevious") {
-            require(mode_ == Mode::Browse, "DAO: Update or CancelUpdate before navigation");
-            if (key == "movefirst") position_ = 0;
-            if (key == "movelast") position_ = data_->rows.empty() ? 0 : data_->rows.size() - 1;
-            if (key == "movenext") { require(position_ < data_->rows.size(), "DAO: Already at EOF"); ++position_; }
-            if (key == "moveprevious") { require(position_ >= 0 && !data_->rows.empty(), "DAO: Already at BOF"); --position_; }
+            auto target=position_;
+            if (key == "movefirst") target=0;
+            if (key == "movelast") target=data_->rows.empty() ? 0 : data_->rows.size()-1;
+            if (key == "movenext") {require(position_<data_->rows.size(),"DAO: Already at EOF");++target;}
+            if (key == "moveprevious") {require(position_>=0 && !data_->rows.empty(),"DAO: Already at BOF");--target;}
+            navigate(target);
             noMatch_=false;
             return {};
         }
@@ -829,19 +832,20 @@ public:
         if(lower(name)=="absoluteposition") {
             checkTransaction();
             if(closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");
-            if(mode_!=Mode::Browse) throw VbaRuntimeError(3219,"DAO: Pending edit");
+            const auto pendingMode=mode_;const auto revision=data_->revision;
             const auto scalar=scalarVbaValue(value);
+            checkTransaction();if(closed_) throw VbaRuntimeError(3420,"DAO: Recordset closed during position evaluation");
+            if(mode_!=pendingMode || revision!=data_->revision) throw VbaRuntimeError(3219,"DAO: Recordset changed during position evaluation");
             if(scalar.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Invalid Null position");
             const auto position=sqlFieldValue(scalar,"INTEGER4").toLongLong();
             if(position<0 || position>=data_->rows.size()) throw VbaRuntimeError(3021,"DAO: Position outside populated recordset");
-            position_=static_cast<qsizetype>(position); noMatch_=false; return;
+            navigate(static_cast<qsizetype>(position)); noMatch_=false; return;
         }
         if (lower(name)=="editmode" || lower(name)=="updatable" || lower(name)=="lastmodified")
             throw VbaRuntimeError(438,"DAO: Recordset metadata is read-only");
         if (lower(name)=="bookmark") {
             if (closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");
-            if (mode_!=Mode::Browse) throw VbaRuntimeError(3219,"DAO: Pending edit");
-            position_=bookmarkPosition(value); noMatch_=false; return;
+            const auto target=bookmarkPosition(value);navigate(target);noMatch_=false;return;
         }
         set(text(name), value);
     }
@@ -1006,18 +1010,27 @@ private:
         throw std::runtime_error("DAO: Unknown field");
     }
     void current() const { if (position_<0 || position_>=data_->rows.size()) throw VbaRuntimeError(3021,"DAO: No current record"); }
+    void navigate(qsizetype target) {
+        checkTransaction();if(closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");
+        if(mode_!=Mode::Browse) {
+            if(target==position_) throw VbaRuntimeError(3219,"DAO: Pending no-op navigation remains unvalidated");
+            pending_.clear();changed_.clear();chunkFields_.clear();mode_=Mode::Browse;
+        }
+        position_=target;
+    }
+
     void seek(const std::vector<VbaValue>& arguments) {
-        if(!table_ || recordsetType_!=1) throw VbaRuntimeError(3251,"DAO: Seek requires a table-type Recordset");if(mode_!=Mode::Browse) throw VbaRuntimeError(3219,"DAO: Pending edit");if(arguments.size()<2 || arguments.size()>11) throw VbaRuntimeError(450,"DAO: Seek requires comparison and complete keys");if(indexName_.isEmpty()) throw VbaRuntimeError(3251,"DAO: Set Index before Seek");
+        if(!table_ || recordsetType_!=1) throw VbaRuntimeError(3251,"DAO: Seek requires a table-type Recordset");const auto pendingMode=mode_;if(arguments.size()<2 || arguments.size()>11) throw VbaRuntimeError(450,"DAO: Seek requires comparison and complete keys");if(indexName_.isEmpty()) throw VbaRuntimeError(3251,"DAO: Set Index before Seek");
         const auto index=checkedRecordsetIndex(db_,source_,indexName_);if(!data_->selectedIndex || index!=*data_->selectedIndex) throw VbaRuntimeError(3251,"DAO: Index changed; Requery is required");if(arguments.size()>static_cast<std::size_t>(index.fields.size()+1)) throw VbaRuntimeError(3251,"DAO: Too many Seek keys for selected index");const auto revision=data_->revision;const auto comparison=text(scalarVbaValue(arguments[0]).asText());if(comparison!="=" && comparison!="<" && comparison!="<=" && comparison!=">" && comparison!=">=") throw VbaRuntimeError(3251,"DAO: Seek comparison unsupported");if(comparison!="=" && index.descending.contains(true)) throw VbaRuntimeError(3251,"DAO: Descending range Seek requires Access reference validation");
         QVector<QVariant> keys;QVector<int> positions;bool suffix=false;for(int field=0;field<index.fields.size();++field) {const auto value=field+1<arguments.size() ? scalarVbaValue(arguments[field+1]) : VbaValue::missing();if(value.kind==VbaValue::Kind::Missing) {if(field==0) throw VbaRuntimeError(3251,"DAO: Seek requires the first index key");suffix=true;keys.append(QVariant{});positions.append(column(index.fields[field]));continue;}if(suffix || value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(3251,"DAO: Only omitted trailing Seek keys are supported, not explicit Null or holes");const bool date=index.types[field].contains("DATE",Qt::CaseInsensitive);if(date ? value.kind!=VbaValue::Kind::Date : (value.kind!=VbaValue::Kind::Number && value.kind!=VbaValue::Kind::Boolean)) throw VbaRuntimeError(13,"DAO: Seek requires a matching numeric or Date key");keys.append(sqlFieldValue(value,index.types[field]));positions.append(column(index.fields[field]));}
-        checkTransaction();if(closed_) throw VbaRuntimeError(3420,"DAO: Recordset closed during Seek evaluation");if(mode_!=Mode::Browse || revision!=data_->revision) throw VbaRuntimeError(3219,"DAO: Recordset changed during Seek evaluation");const bool backwards=comparison=="<" || comparison=="<=";QElapsedTimer clock;clock.start();
+        checkTransaction();if(closed_) throw VbaRuntimeError(3420,"DAO: Recordset closed during Seek evaluation");if(mode_!=pendingMode || revision!=data_->revision) throw VbaRuntimeError(3219,"DAO: Recordset changed during Seek evaluation");const bool backwards=comparison=="<" || comparison=="<=";QElapsedTimer clock;clock.start();
         for(qsizetype row=backwards ? data_->rows.size()-1 : 0;row>=0 && row<data_->rows.size();row+=backwards ? -1 : 1) {if(clock.hasExpired(5000)) throw VbaRuntimeError(3035,"DAO: Seek execution budget exceeded");int order=0;for(int field=0;field<positions.size();++field) {const auto& value=data_->rows[row][positions[field]];if(value.isNull()) throw VbaRuntimeError(3251,"DAO: Nullable Seek index is not supported");if(keys[field].isNull()) {order=1;break;}if(index.types[field].contains("DATE",Qt::CaseInsensitive)) order=QString::compare(value.toString(),keys[field].toString(),Qt::CaseSensitive);else {const auto number=value.toDouble(),key=keys[field].toDouble();order=number<key ? -1 : number>key ? 1 : 0;}if(order) break;}
-            const bool matches=comparison=="=" ? order==0 : comparison=="<" ? order<0 : comparison=="<=" ? order<=0 : comparison==">" ? order>0 : order>=0;if(matches) {position_=row;noMatch_=false;return;}}
-        position_=data_->rows.size();noMatch_=true;
+            const bool matches=comparison=="=" ? order==0 : comparison=="<" ? order<0 : comparison=="<=" ? order<=0 : comparison==">" ? order>0 : order>=0;if(matches) {navigate(row);noMatch_=false;return;}}
+        navigate(data_->rows.size());noMatch_=true;
     }
     void find(const std::string& kind,const QString& criteria) {
         if(data_->types.values().contains("CURRENCY_TICKS")) throw VbaRuntimeError(3251,"DAO: Textual Find criteria on exact Currency projections are not implemented");
-        if (mode_!=Mode::Browse) throw VbaRuntimeError(3219,"DAO: Pending edit");
+        const auto pendingMode=mode_;
         if (criteria.trimmed().isEmpty()) throw VbaRuntimeError(3075,"DAO: Empty find criterion");
         auto plan=compileAccessQuery("SELECT IIf(("+criteria+"),1,0) FROM [__la_find_scope]");
         if (!plan.parameters.empty()) throw VbaRuntimeError(3061,"DAO: Unbound find parameter");
@@ -1048,12 +1061,12 @@ private:
             const auto& row=data_->rows[candidate];
             for (qsizetype column=0;column<row.size();++column) query.bindValue(static_cast<int>(column),row[column]);
             const bool fetched=query.exec() && query.next();
-            if (data_->revision!=revision) throw VbaRuntimeError(3219,"DAO: Recordset changed during find");
+            if (mode_!=pendingMode || data_->revision!=revision) throw VbaRuntimeError(3219,"DAO: Recordset changed during find");
             if (!fetched) fail();
             const bool match=query.value(0).toInt()!=0; query.finish();
-            if (match) { position_=candidate; noMatch_=false; return; }
+            if (match) { navigate(candidate); noMatch_=false; return; }
         }
-        position_=backwards ? -1 : data_->rows.size(); noMatch_=true;
+        navigate(backwards ? -1 : data_->rows.size()); noMatch_=true;
     }
     void reload(bool invalidate=true) {
         if (frozen_) throw VbaRuntimeError(3251,"DAO: Form snapshot requires form Requery");
