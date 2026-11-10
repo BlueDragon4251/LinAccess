@@ -1852,8 +1852,22 @@ End Function
         assert(sql.exec()); sql.finish();
     };
     store("NativeMath",module);
+    store("NativeTypedCallee",R"VBA(Public Function NativeTypedBump%(ByRef value%)
+value%=value%+1
+NativeTypedBump%=value%
+End Function
+)VBA");
     store("NativeOther",R"VBA(Public Function NativeNested(ByVal value As Long) As Long
-NativeNested=NativeScale(value)+1
+NativeNested=NativeScale&(value)+1
+End Function
+Public Function NativeTypedCaller%(ByVal value%)
+Dim scratch%
+scratch%=value%
+Call NativeTypedBump%(scratch%)
+NativeTypedCaller%=NativeTypedBump%(value%)+value%+scratch%
+End Function
+Public Function NativeTypedWrong%(ByVal value%)
+NativeTypedWrong%=NativeScale%(value%)
 End Function
 )VBA");
     store("Form_PrivateContext","VERSION 1.0 CLASS\nPublic Function ClassOnly() As Long\nClassOnly=42\nEnd Function\n");
@@ -1884,6 +1898,12 @@ End Function
     for(int expected:{2,4,6}) assert(rows.next() && rows.value(0).toInt()==expected); assert(!rows.next()); rows.finish();
     assert(rows.exec("SELECT NativeCalls(),NativeNested(3),NativeFlag(2),abs(-2)")); assert(rows.next());
     assert(rows.value(0).toInt()==3 && rows.value(1).toInt()==7 && rows.value(2).toInt()==-1 && rows.value(3).toInt()==2); rows.finish();
+    const auto typedCrossModule=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT NativeTypedCaller(3) AS result"),{});
+    assert(typedCrossModule.rows.size()==1 && typedCrossModule.rows[0][0].toInt()==12 && typedCrossModule.columnTypes.value(0)=="INTEGER2");
+    assert(linaccess::nativeVbaSqlFunctionResultTypes(db).value("nativetypedcaller")=="integer");
+    assert(!rows.exec("SELECT NativeTypedWrong(3)"));
+    assert(linaccess::jetSqlFunctionErrorNumber(rows.lastError().text().toCaseFolded().toStdString())==13);rows.finish();
+    assert(rows.exec("SELECT NativeCalls()") && rows.next() && rows.value(0).toInt()==4);rows.finish();
     assert(rows.exec("SELECT NativeSequence() FROM inputs ORDER BY value"));
     for(int expected:{1,2,3}) assert(rows.next() && rows.value(0).toInt()==expected); assert(!rows.next()); rows.finish();
     assert(rows.exec("SELECT NativeSequence()") && rows.next() && rows.value(0).toInt()==4); rows.finish();

@@ -7199,3 +7199,15 @@ gezielte Fixes für Property-Inventarfilter und Syntax von Name&() enthalten.
 Keine neue CTest-/Katalog-ID;456/386/70. F040/F042/F043/F122 bleiben breit offen.
 Paketbeleg bleibt53e91932 (Original115,97/Inventar46,72s;2/2 in162,70s,7Hash gleich).
 Weiter mit deklarationsbasierter Typbindung zwischen Standardmodulen.
+
+
+Typisierte fremde Standardmodulfunktionen (2026-11-10): VBA_IDENTIFIER_TYPES.md.
+Kanonische Hostauflösung, deklarationsbasierter Typabgleich, Ausdruck/Call und
+ByRef-/Objektargumentmetadaten über tatsächliche Projektquelle; lokale/Instanz-
+Priorität und Sichtbarkeits-/Mehrdeutigkeits-/SQL-Wachen bleiben. Fremde Properties
+weiter3251. Statisches Inventar: threadlokal128/16MiB geschätzt, voller Quelltext
+als Identität, kein Host-/Katalogzustand im Cache. App/Kern/DAO gebaut; bestehendes
+Bündel2/2 in3,42s (0,42/3,00), echte getrennte SQL-Module/Integer2/ByRef/Call und
+Verweigerung vor Zustandsänderung belegt.456/386/70, keine neuen IDs.
+Vorstand89088dd8402cc62741d30fc1ae7a367f97015eac/Baum24a0fe404fa6fde6c1a7cae13ff38986bcb02b4e
+privat verifiziert. Paketbeleg bleibt53e91932. Weiter mit Eval-/Event-Referenzen.

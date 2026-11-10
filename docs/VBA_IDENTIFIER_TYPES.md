@@ -119,3 +119,27 @@ der Syntaxprüfung parameterloser Long-Aufrufe1/1 in0,54s bestanden. Es wurden
 keine CTest-/Katalog-IDs ergänzt. Der Paket-/Original-/Inventarbeleg des vorherigen
 veröffentlichten Stands53e91932 ist in CODEX_HANDOFF.md dokumentiert; er liegt
 vor dieser Konstanten-/Property-Erweiterung.
+
+
+## Öffentliche Funktionen anderer Standardmodule
+
+Unqualifizierte modulübergreifende Funktionsreferenzen verwenden den kanonischen
+Namen für die echte Host-/Projektauflösung. Das gewünschte Typzeichen wird gegen
+die Signatur der tatsächlich gelieferten Quelle geprüft. Direkte Call-Aufrufe,
+Ausdrucksaufrufe und die Objekt-/ByRef-Argumentbindung verwenden diese Signatur.
+Der Instanz-/lokale Namensraum behält Vorrang; bestehende Sichtbarkeits-, Mehrdeutigkeits-
+und SQL-Kontextwachen bleiben erhalten. Unqualifizierte fremde Properties bleiben
+bewusst verweigert. Das ist keine vollständige Projekt-/Library-Bindung.
+
+Die reine statische Quellinventarisierung wird threadlokal nach vollständigem
+Quelltext wiederverwendet: höchstens128 Einträge/16MiB geschätzte Quell-/Metadatenkosten,
+Hash plus vollständiger Textvergleich, Werte werden als Kopie zurückgegeben.
+Projektkatalog, Sichtbarkeit, aktuelle Quellen und Host-/Objektzustand werden nicht
+in diesem Cache gespeichert; vorhandene Änderungen an Modulquelle und Signatur
+bleiben durch ihren tatsächlichen Inhalt getrennt.
+
+Anwendung/Kern/DAO gebaut. Bestehendes Bündel2/2 in3,42s (Kern0,42/DAO3,00s)
+bestanden. Der echte native SQL-/VBA-Pfad verwendet getrennte Standardmodule,
+belegt Integer-Metadaten/ByRef/Call und verweigert ein falsches Integer-Typzeichen
+an einer Long-Funktion vor deren Zustandsänderung. Vorhandene Quellenänderungs- und
+Mehrdeutigkeitsprüfungen bleiben im DAO-Bündel. Keine neuen CTest-/Katalog-IDs.

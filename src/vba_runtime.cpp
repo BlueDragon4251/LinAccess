@@ -2199,7 +2199,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
             if (instruction.type != Statement::Type::Call) continue;
             auto declaration = validateVbaProcedure(module, instruction.argument);
             if (declaration.status == VbaExecutionStatus::ProcedureMissing) {
-                const auto external = host.moduleForProcedure(instruction.argument);
+                const auto external = host.moduleForProcedure(vbaIdentifierName(instruction.argument));
                 if (external) declaration = validateVbaProcedure(*external, instruction.argument);
             }
             if(declaration.status==VbaExecutionStatus::ProcedureMissing
@@ -2546,9 +2546,14 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
     };
     std::size_t implicitLocals=0;
     const auto externalProcedure=[&](std::string_view name) -> std::optional<VbaArgumentSignature> {
-        const auto source=host.moduleForProcedure(name);
+        const auto key=vbaIdentifierName(name);
+        const auto source=host.moduleForProcedure(key);
         if(!source) return {};
-        if(auto signature=nativeVbaProcedureSignature(*source,name)) return signature;
+        if(auto signature=nativeVbaProcedureSignature(*source,key)) {
+            const auto suffix=vbaIdentifierType(name);
+            if(!suffix.empty() && (!signature->function || signature->resultType!=suffix)) throw VbaRuntimeError(13,"External function type character does not match its declaration");
+            return signature;
+        }
         if(nativeVbaPropertySignature(*source,name,VbaPropertyAccess::Get,true))
             throw VbaRuntimeError(3251,"Unqualified cross-module properties are not implemented");
         return {};
@@ -2651,9 +2656,11 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         if(locals.contains(key)) declared=variableType(key);
         else {
             const auto& owner=stateOwners.front();
-            if(owner->procedureInventoryComplete && !owner->procedures.contains(key)) return {};
-            auto signature=localProcedureSignature(module,key);
-            if(!signature) signature=nativeVbaPropertySignature(module,key,VbaPropertyAccess::Get,false);
+            std::optional<VbaArgumentSignature> signature;
+            if(!owner->procedureInventoryComplete || owner->procedures.contains(key)) {
+                signature=localProcedureSignature(module,key);
+                if(!signature) signature=nativeVbaPropertySignature(module,key,VbaPropertyAccess::Get,false);
+            } else if(!host.hasInstanceIdentifier(key)) signature=externalProcedure(name);
             if(!signature) return {};
             if(!signature->function) throw VbaRuntimeError(13,"Sub cannot have a type character");
             declared=signature->resultType;
@@ -2681,8 +2688,9 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                             const VbaArgumentReferences& referenceInfo, bool needsValue) -> VbaValue {
         std::string canonicalProcedure;
         if(!vbaIdentifierType(name).empty()) {
-            const auto declaration=localProcedureSignature(module,name);
-            if(!declaration || !declaration->function) throw VbaRuntimeError(13,"Typed call does not match a local function declaration");
+            auto declaration=localProcedureSignature(module,name);
+            if(!declaration) declaration=externalProcedure(name);
+            if(!declaration || !declaration->function) throw VbaRuntimeError(13,"Typed call does not match a function declaration");
             canonicalProcedure=vbaIdentifierName(name);name=canonicalProcedure;
         }
         storeAliases();
@@ -2870,7 +2878,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         const auto& state=stateOwners.front();
         if(!state->procedureInventoryComplete && !fallbackProcedures) fallbackProcedures=moduleProcedureNames(module);
         const auto& names=state->procedureInventoryComplete ? state->procedures : *fallbackProcedures;
-        if(!names.contains(key)) return {};
+        if(!names.contains(key)) return host.hasInstanceIdentifier(key) ? std::optional<VbaArgumentSignature>{} : externalProcedure(name);
         if(!vbaIdentifierType(name).empty()) {
             auto typed=localProcedureSignature(module,name);
             if(!typed) typed=nativeVbaPropertySignature(module,name,VbaPropertyAccess::Get,false);

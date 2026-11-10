@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <cctype>
 #include <regex>
+#include <list>
+#include <functional>
 #include <sstream>
 
 namespace linaccess {
@@ -13,7 +15,7 @@ std::string vbaProcedureExecutionName(const VbaProcedure& procedure) {
     if(first=="property" && (second=="get" || second=="let" || second=="set")) return "property "+second+" "+procedure.name;
     return procedure.name;
 }
-VbaAnalysis analyzeVba(std::string_view source) {
+static VbaAnalysis analyzeVbaUncached(std::string_view source) {
     VbaAnalysis analysis;
     std::istringstream input{std::string(source)};
     std::string line;
@@ -81,4 +83,23 @@ VbaAnalysis analyzeVba(std::string_view source) {
     }
     return analysis;
 }
+VbaAnalysis analyzeVba(std::string_view source) {
+    constexpr std::size_t budget=16*1024*1024,limit=128;
+    struct Entry {std::string source;VbaAnalysis result;std::size_t hash,cost;};
+    static thread_local std::list<Entry> entries;
+    static thread_local std::size_t used=0;
+    const auto hash=std::hash<std::string_view>{}(source);
+    const auto found=std::find_if(entries.begin(),entries.end(),[&](const Entry& entry) {return entry.hash==hash && entry.source==source;});
+    if(found!=entries.end()) {auto result=found->result;entries.splice(entries.begin(),entries,found);return result;}
+    auto result=analyzeVbaUncached(source);
+    auto cost=sizeof(Entry)+source.size()+result.procedures.size()*sizeof(VbaProcedure)+result.compatibilityFlags.size()*sizeof(std::string);
+    for(const auto& procedure:result.procedures) cost+=procedure.kind.size()+procedure.name.size();
+    for(const auto& flag:result.compatibilityFlags) cost+=flag.size();
+    if(cost<=budget) {
+        while(!entries.empty() && (entries.size()>=limit || used>budget-cost)) {used-=entries.back().cost;entries.pop_back();}
+        entries.push_front({std::string(source),result,hash,cost});used+=cost;
+    }
+    return result;
+}
+
 }
