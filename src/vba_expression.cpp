@@ -1219,6 +1219,15 @@ private:
         if (tok.type != Token::Type::Word)
             throw error("Ungültiger VBA-Ausdruck: " + tok.value);
         auto word = lower(tok.value);
+        // A Long function call is distinguishable from adjacent string concatenation
+        // only after its declaration is known. Keep tokenization independent of frames.
+        if(host_ && !accessExpression_ && nextSymbol("&") && tokens_[index_].offset==tok.offset+tok.value.size()
+            && index_+1<tokens_.size() && tokens_[index_+1].value=="(" && resolver_.argumentSignature) {
+            const auto signature=resolver_.argumentSignature(word);
+            if(signature && signature->localProcedure && signature->function && signature->resultType=="long") {
+                consume();word+='&';tok.value+='&';
+            }
+        }
         if(host_ && !accessExpression_ && resolver_.typedIdentifier && !vbaIdentifierType(word).empty()) {
             if(auto canonical=resolver_.typedIdentifier(word)) {word=*canonical;tok.value=*canonical;}
         }

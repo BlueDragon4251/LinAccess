@@ -763,10 +763,10 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
     catch(const VbaRuntimeError& error) { VbaExecutionResult result{VbaExecutionStatus::Unsupported,"Module constant declaration unsupported",0}; result.errorNumber=error.number; return result; }
     std::unordered_set<std::string> localConstants;
     static const std::regex begin(
-        R"(^\s*(?:(?:Public|Private|Friend)\s+)?(?:Static\s+)?(Sub|Function)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*(?:\(\s*(.*?)\s*\))?\s*(?:As\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s*(\(\s*\))?)?\s*$)",
+        R"(^\s*(?:(?:Public|Private|Friend)\s+)?(?:Static\s+)?(Sub|Function)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?)\s*(?:\(\s*(.*?)\s*\))?\s*(?:As\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s*(\(\s*\))?)?\s*$)",
         std::regex::icase);
     static const std::regex anyBegin(
-        R"(^\s*(?:(?:Public|Private|Friend)\s+)?(?:Static\s+)?(?:Sub|Function)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s*\(.*\))?.*$)",
+        R"(^\s*(?:(?:Public|Private|Friend)\s+)?(?:Static\s+)?(?:Sub|Function)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?)(?:\s*\(.*\))?.*$)",
         std::regex::icase);
     static const std::regex end(R"(^\s*End\s+(Sub|Function)\s*$)", std::regex::icase);
     static const std::regex selectStart(R"(^Select\s+Case\b\s*(.+)$)",std::regex::icase);
@@ -920,7 +920,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
         }
         if (!within) {
             if (std::regex_match(source, match, begin) &&
-                lower(match[2].str()) == lower(requestedName)) {
+                lower(vbaIdentifierName(match[2].str())) == lower(vbaIdentifierName(requestedName))) {
                 if(duplicateStatic) return {VbaExecutionStatus::Unsupported,"A procedure cannot specify Static twice",line};
                 staticProcedure=headerStatic;
                 const auto params = trim(match[3].str());
@@ -987,8 +987,14 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                 if(!accessor.empty() && accessor!="get" && parameters && !parameters->empty()) parameters->back().byReference=false;
                 within = true;
                 isFunction = lower(match[1].str()) == "function";
-                auto declaredResult=bindModuleDeclaredType(nativeDeclaredType(lower(match[4].str())),enumTypes);
+                const auto resultSuffix=vbaIdentifierType(match[2].str());
+                if(!resultSuffix.empty() && (!isFunction || match[4].matched)) return {VbaExecutionStatus::Unsupported,"Function type character requires no As clause",line};
+                auto declaredResult=resultSuffix.empty() ? bindModuleDeclaredType(nativeDeclaredType(lower(match[4].str())),enumTypes) : std::string(resultSuffix);
                 if(isFunction && declaredResult.empty()) declaredResult=implicitTypes.forName(match[2].str());
+                const auto requestedType=vbaIdentifierType(requestedName);
+                if(!requestedType.empty() && (!isFunction || declaredResult!=requestedType)) {
+                    VbaExecutionResult invalid{VbaExecutionStatus::Unsupported,"Function identifier type does not match its declaration",line};invalid.errorNumber=13;return invalid;
+                }
                 const bool arrayResult=match[5].matched;
                 if(arrayResult) {
                     static const std::unordered_set<std::string> elementTypes{"variant","byte","integer","long","single","double","currency","date","boolean","string","object"};
@@ -2208,7 +2214,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
     std::vector<Frame> faultFrames;
     std::vector<LoopFrame> faultLoops;
     bool faultActive = true;
-    auto returnBinding=lower(std::string(procedure));
+    auto returnBinding=lower(vbaIdentifierName(procedure));
     if(returnBinding.starts_with("property get ")) returnBinding.erase(0,13);
     if (isFunction) {
         const auto name=returnBinding;
@@ -2591,8 +2597,14 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         const auto type=vbaIdentifierType(name);
         if(type.empty()) return {};
         const auto key=lower(vbaIdentifierName(name));
-        if(!locals.contains(key)) return {};
-        auto declared=variableType(key);
+        std::string declared;
+        if(locals.contains(key)) declared=variableType(key);
+        else {
+            const auto signature=localProcedureSignature(module,key);
+            if(!signature) return {};
+            if(!signature->function) throw VbaRuntimeError(13,"Sub cannot have a type character");
+            declared=signature->resultType;
+        }
         if(declared.ends_with("()")) declared.resize(declared.size()-2);
         if(declared.starts_with("string*")) declared="string";
         if(declared!=type) throw VbaRuntimeError(13,"Identifier type character does not match its declaration");

@@ -5521,6 +5521,25 @@ End Sub
     assert(mismatchedName.status==VbaExecutionStatus::Error && mismatchedName.errorNumber==13);
     const auto invalidTypedDeclaration=executeVbaProcedure("Sub InvalidTyped()\nDim value% As Integer\nEnd Sub","InvalidTyped",host);
     assert(invalidTypedDeclaration.status!=VbaExecutionStatus::Completed);
+    const std::string typedFunctions=R"VBA(
+Function TypedText$(ByVal value%)
+TypedText$="v=" & CStr(value%)
+End Function
+Function TypedLong&(ByVal value%)
+TypedLong&=value%+10
+End Function
+Function TypedResult()
+TypedResult=TypedText$(2) & ":" & CStr(TypedLong&(3)) & ":" & TypedText(4)
+End Function
+)VBA";
+    const auto typedFunctionResult=executeVbaProcedure(typedFunctions,"TypedResult",host);
+    assert(typedFunctionResult.status==VbaExecutionStatus::Completed && typedFunctionResult.returnValue=="v=2:13:v=4");
+    const auto typedDirect=executeVbaProcedure("Function Direct%()\nDirect%=7\nEnd Function","Direct%",host);
+    assert(typedDirect.status==VbaExecutionStatus::Completed && typedDirect.returnValue=="7");
+    const auto wrongDirect=executeVbaProcedure("Function Direct%()\nDirect%=7\nEnd Function","Direct$",host);
+    assert(wrongDirect.status!=VbaExecutionStatus::Completed && wrongDirect.errorNumber==13);
+    const auto typedAnalysis=analyzeVba(typedFunctions);
+    assert(typedAnalysis.procedures.size()==3 && typedAnalysis.procedures[0].name=="TypedText" && typedAnalysis.procedures[1].name=="TypedLong");
     testVbaDebugger();
     testVbaDebugOutput();
     testVbaProperties();

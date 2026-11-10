@@ -7147,3 +7147,14 @@ Korrektur der Konstantensyntax/ByRef-Bindung1/1 in0,53s bestanden. Funktionsname
 Array-/ReDim-Deklarationen, Schleifen, implizite Typzeichen und qualifizierte
 Projektmember bleiben offen. Keine neue CTest-/Katalog-ID;456/386/70 unverändert.
 Nächste Implementierung: Typzeichen an Funktionsnamen samt Signatur-/Rückgabebindung.
+
+
+Typisierte lokale Funktionsnamen (2026-11-10): VBA_IDENTIFIER_TYPES.md ergänzt.
+Function-Suffix/kanonischer Name/Rückgabevariable/Signatur-Typprüfung; direkte
+Ausführung mit Typzeichen wird validiert, Metadateninventar behält kanonische
+Namen und Quellzeilen. Long-Aufruf vor Klammer erst anhand lokaler Signatur als
+Typzeichen gebunden; kein globales Entfernen von &. Vorhandenes core_tests1/1
+in0,57s bestanden. Property-/Projekt-/Library-Gesamtnamensräume bleiben offen.
+Privater skalarer Vorstand4aa7885f74844d3e41e95c0a2b28bb320f9a14f2,
+Baum2cb0d4f0f474adce57e6595b59e3b24ab0fb7831 verifiziert.456/386/70 unverändert.
+Weiter mit impliziten skalaren Typzeichen, danach Arrays/ReDim; kein Zwischenabschluss.
