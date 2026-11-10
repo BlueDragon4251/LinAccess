@@ -6230,3 +6230,14 @@ Datums-/Objekt-/Decimal-Transport, CStr und vollständige Regionalsemantik bleib
 offen.456/386/70 unverändert. Vorstufebc7cbf9 privat remote/Baum geprüft. Ohne
 Zwischenabschluss nachgewiesene Count-Ergebnistypen in DAO/SQL ergänzen und danach
 aktuelles Debianpaket bauen; geprüftes DEBc8bd82b liegt noch vor späteren Umfängen.
+
+
+Count-Ergebnistypen: COUNT_RESULT_TYPES.md dokumentiert nachgewiesene Long/
+INTEGER4-Metadaten tatsächlicher Count-Ausdrücke, QueryDef.Fields und echter DAO-
+Felder (Typ4/Size4/Long-Variante). Gesamt-/Null-/Feld-/Gruppen-/Parameter-/leere
+Counts und metadatenreine Projektzustandserhaltung im ersten bestehenden Bündel
+2/2 in3,12s (DAO2,99/Abfragemodell0,13) geprüft; App gebaut. Keine neuen Tests/IDs,
+keine Ableitung aus beliebigen Integerwerten; F068/F121/F122/456/386/70 unverändert.
+Vorstufe3fa14b9 privat remote/Baum geprüft. Anschließend ohne Zwischenabschluss
+aktuelles Debianpaket bauen und prüfen, GUI/Originalpfad nach zusammenhängenden
+SQL-/DAO-Änderungen einmal integrieren; geprüftes DEBc8bd82b bleibt bis dahin älter.

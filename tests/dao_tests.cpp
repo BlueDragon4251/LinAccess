@@ -1572,6 +1572,14 @@ End Function
         assert(sql.exec("SELECT SUM(value) FROM inputs") && sql.next() && sql.value(0).toInt()==12); sql.finish();
         assert(metadataFrame->values.at("calls").asNumber()==beforeMetadata);
     }
+    const auto countDefinition=database->member("CreateQueryDef",{linaccess::VbaValue::string(""),linaccess::VbaValue::string("SELECT Count(*) AS n FROM inputs")}).object;
+    const auto countField=countDefinition->member("Fields",{linaccess::VbaValue::string("n")}).object;
+    assert(countField->member("Type",{}).asNumber()==4 && countField->member("Size",{}).asNumber()==4 && metadataFrame->values.at("calls").asNumber()==beforeMetadata);
+    const auto countRows=countDefinition->member("OpenRecordset",{}).object;
+    assert(countRows->member("Fields",{linaccess::VbaValue::string("n")}).object->member("Type",{}).asNumber()==4);
+    assert(countRows->item("n").numericType==linaccess::VbaValue::NumericType::Long && countRows->item("n").asNumber()==3);countRows->member("Close",{});
+    const auto emptyCount=database->member("OpenRecordset",{linaccess::VbaValue::string("SELECT Count(*) AS n FROM inputs WHERE 1=0")}).object;
+    assert(emptyCount->item("n").numericType==linaccess::VbaValue::NumericType::Long && emptyCount->item("n").asNumber()==0);emptyCount->member("Close",{});
     const auto converted=database->member("OpenRecordset",{linaccess::VbaValue::string("SELECT CByte(2.5) AS b,CInt(-2.5) AS i,CLng(3.5) AS l,CSng(16777217) AS s,CDbl('1.25') AS d,CBool(2) AS flag")}).object;
     const std::vector<int> conversionCodes{2,3,4,6,7,1},conversionSizes{1,2,4,4,8,1};
     for(int column=0;column<6;++column) {const auto field=converted->member("Fields",{linaccess::VbaValue::integer(column)}).object;assert(field->member("Type",{}).asNumber()==conversionCodes[column] && field->member("Size",{}).asNumber()==conversionSizes[column]);}

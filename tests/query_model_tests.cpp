@@ -344,6 +344,13 @@ int main(int argc, char** argv) {
     catch(const linaccess::VbaRuntimeError&) { rejected = true; }
     assert(rejected);
 
+    model.execute(db,"SELECT Count(*) AS all_rows,Count(label) AS named_rows,Count(NULL) AS null_rows FROM samples");
+    assert(model.rowCount()==1 && model.index(0,0).data().toInt()==4 && model.index(0,1).data().toInt()==3 && model.index(0,2).data().toInt()==0);
+    for(int column=0;column<3;++column) assert(model.fieldSqlType(column)=="INTEGER4");
+    model.execute(db,"SELECT score,Count(*) AS n FROM samples GROUP BY score ORDER BY score");
+    assert(model.rowCount()==3 && model.fieldSqlType(1)=="INTEGER4" && model.index(0,1).data().toInt()==1 && model.index(1,1).data().toInt()==2 && model.index(2,1).data().toInt()==1);
+    model.execute(db,"PARAMETERS floor LONG; SELECT Count(*) AS n FROM samples WHERE score>=[floor]",{{"floor",20}});assert(model.fieldSqlType(0)=="INTEGER4" && model.index(0,0).data().toInt()==3);
+    model.execute(db,"SELECT Count(*) AS n FROM samples WHERE 1=0");assert(model.rowCount()==1 && model.index(0,0).data().toInt()==0 && model.fieldSqlType(0)=="INTEGER4");
     model.execute(db,"SELECT CByte(2.5) AS b,CInt(-2.5) AS i,CLng(2147483647.49) AS l,CSng(16777217) AS s,CDbl('1.25') AS d,CBool(2) AS yes,CBool(0) AS no,CInt(CBool(2)) AS nested");
     const QVector<double> converted{2,-2,2147483647,16777216,1.25,-1,0,-1};
     const QStringList convertedTypes{"INTEGER1","INTEGER2","INTEGER4","SINGLE_REAL","DOUBLE","BOOLEAN","BOOLEAN","INTEGER2"};

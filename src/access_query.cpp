@@ -508,14 +508,15 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
         const auto conversionType=conversionTypes.value(function);
         const bool statistic=function=="var" || function=="stdev" || function=="varp" || function=="stdevp" || function=="linaccess_jet_var" || function=="linaccess_jet_stdev" || function=="linaccess_jet_varp" || function=="linaccess_jet_stdevp";
         const bool fileLength=function=="filelen" || function=="linaccess_jet_filelen";
-        if(!conversionType.isEmpty() || statistic || dates.contains(expression.front().value.toCaseFolded()) || fileLength || function=="filedatetime" || function=="linaccess_jet_filedatetime") {
+        const bool countAggregate=function=="count";
+        if(countAggregate || !conversionType.isEmpty() || statistic || dates.contains(expression.front().value.toCaseFolded()) || fileLength || function=="filedatetime" || function=="linaccess_jet_filedatetime") {
             if((function=="date" || function=="time" || function=="now") && expression.size()!=3) throw VbaRuntimeError(450,"Clock SQL function requires no arguments");
             int depth=0;
             for(qsizetype index=1;index<expression.size();++index) {
                 if(symbol(expression[index],"(")) ++depth;
                 else if(symbol(expression[index],")")) { if(--depth==0 && index!=expression.size()-1) return unknown; }
             }
-            if(depth==0) return {!conversionType.isEmpty() ? conversionType : statistic ? "DOUBLE" : fileLength ? "INTEGER4" : expression.front().value.compare("linaccess_jet_date_subtract_3",Qt::CaseInsensitive)==0 ? "DOUBLE" : "DATETIME",expression};
+            if(depth==0) return {countAggregate ? "INTEGER4" : !conversionType.isEmpty() ? conversionType : statistic ? "DOUBLE" : fileLength ? "INTEGER4" : expression.front().value.compare("linaccess_jet_date_subtract_3",Qt::CaseInsensitive)==0 ? "DOUBLE" : "DATETIME",expression};
             return unknown;
         }
         const bool currency=expression.front().value.compare("CCur",Qt::CaseInsensitive)==0,sum=expression.front().value.compare("Sum",Qt::CaseInsensitive)==0;
