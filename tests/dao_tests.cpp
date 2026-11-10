@@ -1474,6 +1474,13 @@ Public Function NativeMoney() As Currency
 calls=calls+1
 NativeMoney=CCur("0.1")
 End Function
+Public Function NativeTypedLiterals(Optional ByVal count As Long=2&) As Currency
+If VarType(1!)<>vbSingle Then Err.Raise 5
+If VarType(1#)<>vbDouble Then Err.Raise 5
+If VarType(1%)<>vbInteger Then Err.Raise 5
+If VarType(1&)<>vbLong Then Err.Raise 5
+NativeTypedLiterals=0.0001@*count+2@
+End Function
 Public Function NativeMixedMoney(ByVal count As Long) As Currency
 Dim result As Variant
 result=CCur("0.0001")*count
@@ -1651,6 +1658,12 @@ End Function
     assert(mixedAmount->member("Type",{}).asNumber()==5 && mixedAmount->member("Size",{}).asNumber()==8);
     const auto mixedValue=mixedAmount->member("Value",{});assert(mixedValue.kind==linaccess::VbaValue::Kind::Currency && mixedValue.currencyUnits==20003);
     mixedMoneyRows->member("Close",{});
+    const auto literalRows=database->member("OpenRecordset",{linaccess::VbaValue::string("SELECT NativeTypedLiterals() AS amount")}).object;
+    const auto literalAmount=literalRows->member("Fields",{linaccess::VbaValue::string("amount")}).object;
+    assert(literalAmount->member("Type",{}).asNumber()==5 && literalAmount->member("Size",{}).asNumber()==8);
+    const auto literalValue=literalAmount->member("Value",{});assert(literalValue.kind==linaccess::VbaValue::Kind::Currency && literalValue.currencyUnits==20002);
+    literalRows->member("Close",{});
+
 
 
 

@@ -6408,3 +6408,17 @@ Type3/Size2/Integer256 geprüft. Keine neuen CTest-/Katalog-IDs;456/386/70 unver
 Vorstufe04db5776 privat remote/Baum geprüft. Letztes geprüftes DEB4cd0f848 liegt vor
 späteren Umfängen. Ohne Zwischenabschluss typisierte native Zahlenliterale mit
 Suffices und weitere offene Anforderungen fortlaufend implementieren.
+
+
+Native Zahlenliteral-Typzeichen: NATIVE_NUMERIC_SUFFIXES.md dokumentiert%Integer,
+&Long,!Single,#Double,@Currency im expliziten VBA-Lexermodus. Currency direkt
+Dezimaltext→exaktesFestkomma, Single direktfrom_chars→float ohneDouble-Rundung;
+32Bit-Ranges, Exponenten, Präzedenz, Dates und bisherige angrenzende Konkatenation
+bleiben. Metadaten-Klassentypescanner verwenden denselben nativen Lexermodus.
+Keine Identifier-Typzeichen-/signedMinimum-Faltung-/Vollcompiler-/SQL-/Eval-
+Behauptung. App/Core/DAO gebaut; erstes bestehendes Bündel2/2 in8,61s
+(5,38/3,23) bestanden. Tatsächliche VBA-Funktion verwendet alle5Zeichen samt
+OptionalLong=2& und liefertüberSQL/DAO Type5/Size8/exakt20002Currencyeinheiten.
+Keine neuen CTest-/Katalog-IDs;456/386/70 unverändert. Vorstufe56f0e012 privat
+remote/Baum geprüft. Letztes geprüftes DEB4cd0f848 liegt vor späteren Umfängen.
+Ohne Zwischenabschluss weitere tatsächliche DAO-/Datenbankfunktionen fortsetzen.

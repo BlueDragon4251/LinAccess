@@ -300,7 +300,7 @@ struct Token {
     std::size_t offset{};
 };
 
-std::vector<Token> tokenize(std::string_view input,bool accessExpression=false) {
+std::vector<Token> tokenize(std::string_view input,bool accessExpression=false,bool numericSuffixes=false) {
     std::vector<Token> tokens;
     for (std::size_t pos = 0; pos < input.size();) {
         const char ch = input[pos];
@@ -330,6 +330,21 @@ std::vector<Token> tokenize(std::string_view input,bool accessExpression=false) 
                 const auto exponent=pos;
                 while(pos<input.size() && std::isdigit(static_cast<unsigned char>(input[pos]))) ++pos;
                 if(pos==exponent) throw error("Numeric exponent requires digits",5);
+            }
+            if(numericSuffixes && pos<input.size() && std::string_view("%&!#@").find(input[pos])!=std::string_view::npos) {
+                bool suffix=true;
+                if(input[pos]=='&') {
+                    auto next=pos+1;while(next<input.size() && std::isspace(static_cast<unsigned char>(input[next]))) ++next;
+                    if(next<input.size()) {
+                        const auto ch=static_cast<unsigned char>(input[next]);
+                        if(std::isalnum(ch) || ch=='_' || ch>=128 || ch=='"' || ch=='(' || ch=='.') {
+                            auto end=next;while(end<input.size() && std::isalpha(static_cast<unsigned char>(input[end]))) ++end;
+                            const auto word=lower(std::string(input.substr(next,end-next)));
+                            suffix=word=="and" || word=="or" || word=="xor" || word=="eqv" || word=="imp" || word=="mod" || word=="is" || word=="like";
+                        }
+                    }
+                }
+                if(suffix) ++pos; // Retain the prior adjacent numeric concatenation path.
             }
             tokens.push_back({Token::Type::Number,std::string(input.substr(start,pos-start))});
         } else if(ch=='#') {
@@ -818,7 +833,7 @@ class ExpressionParser {
 public:
     ExpressionParser(std::string_view source, VbaHost* host, const VbaVariables& locals,
                      const VbaFunctionResolver& resolver = {},bool objectContext=false,bool accessExpression=false,const VbaValue* withContext=nullptr,bool allowWith=false,VbaCompareMode compareMode=VbaCompareMode::Binary,int arrayBase=0,bool jetEval=false,bool statementContext=false)
-        : source_(source),tokens_(tokenize(source,accessExpression)), host_(host), locals_(locals), resolver_(resolver),objectContext_(objectContext),accessExpression_(accessExpression),jetEval_(jetEval),statementContext_(statementContext),withContext_(withContext),allowWith_(allowWith || withContext),compareMode_(compareMode),arrayBase_(arrayBase),executionEpoch_(vbaExecutionEpoch()) {}
+        : source_(source),tokens_(tokenize(source,accessExpression,!accessExpression && !jetEval)), host_(host), locals_(locals), resolver_(resolver),objectContext_(objectContext),accessExpression_(accessExpression),jetEval_(jetEval),statementContext_(statementContext),withContext_(withContext),allowWith_(allowWith || withContext),compareMode_(compareMode),arrayBase_(arrayBase),executionEpoch_(vbaExecutionEpoch()) {}
 
     VbaValue parse() {
         std::optional<VbaLexicalScope> external;
@@ -1151,15 +1166,33 @@ private:
                 return literalValue(VbaValue::longInteger(static_cast<std::int32_t>(signedValue)));
             }
             if(jetEval_ && tok.value.find_first_of(".eE")!=std::string::npos && tok.value.find_first_of("eE")==std::string::npos) return decimalLiteral(tok.value);
-            std::size_t consumed = 0;
-            double number;
-            auto literal=tok.value;
+            auto literal=tok.value;char suffix=0;
+            if(!accessExpression_ && !jetEval_ && std::string_view("%&!#@").find(literal.back())!=std::string_view::npos) {suffix=literal.back();literal.pop_back();}
             if(!jetEval_) for(auto& character:literal) if(character=='d' || character=='D') character='E';
-            try { number=std::stod(literal,&consumed); }
-            catch(const std::out_of_range&) { throw error("Numeric literal overflow",6); }
-            catch(const std::invalid_argument&) { throw error("Invalid numeric literal",5); }
-            if (consumed!=tok.value.size()) throw error("Ungültige VBA-Zahl");
-            if (!std::isfinite(number)) throw error("Numeric literal overflow",6);
+            if((suffix=='%' || suffix=='&') && literal.find_first_of(".eE")!=std::string::npos) throw error("Integer literal suffix requires integer digits",5);
+            if(suffix=='@') return literalValue(convertCurrency(VbaValue::string(literal)));
+            std::size_t consumed=0;double number{};
+            if(suffix) {
+                const auto parsed=std::from_chars(literal.data(),literal.data()+literal.size(),number);
+                if(parsed.ec==std::errc::result_out_of_range) throw error("Numeric literal overflow",6);
+                if(parsed.ec!=std::errc{} || parsed.ptr!=literal.data()+literal.size()) throw error("Invalid numeric literal",5);
+            } else {
+                try {number=std::stod(literal,&consumed);}
+                catch(const std::out_of_range&) {throw error("Numeric literal overflow",6);}
+                catch(const std::invalid_argument&) {throw error("Invalid numeric literal",5);}
+                if(consumed!=literal.size()) throw error("Invalid numeric literal",5);
+            }
+            if(!std::isfinite(number)) throw error("Numeric literal overflow",6);
+            if(suffix=='%' || suffix=='&') return literalValue(coerceVbaModuleValue(VbaValue::numeric(number),suffix=='%' ? "integer" : "long"));
+            if(suffix=='#') return literalValue(VbaValue::numeric(number));
+            if(suffix=='!') {
+                if(std::abs(number)>std::numeric_limits<float>::max()) throw error("Single literal overflow",6);
+                if(number!=0 && std::abs(number)<std::numeric_limits<float>::denorm_min()) throw error("Single literal underflow is not validated",3251);
+                float value{};
+                const auto parsed=std::from_chars(literal.data(),literal.data()+literal.size(),value);
+                if(parsed.ec!=std::errc{} || parsed.ptr!=literal.data()+literal.size() || !std::isfinite(value)) throw error("Single literal conversion unavailable",3251);
+                return literalValue(VbaValue::single(value));
+            }
             if(jetEval_ && tok.value.find_first_of(".eE")==std::string::npos && number>=0 && number<=2147483647.0) return literalValue(VbaValue::longInteger(static_cast<std::int32_t>(number)));
             if(!jetEval_ && tok.value.find_first_of(".eEdD")==std::string::npos) {
                 if(number<=32767) return literalValue(VbaValue::integer(static_cast<std::int16_t>(number)));
@@ -2810,7 +2843,7 @@ VbaValue evaluateAccessExpression(std::string_view text,VbaHost& host) {
 std::vector<std::string> vbaConstructedClasses(std::string_view expression) {
     constexpr std::string_view keyword="new";
     if(std::search(expression.begin(),expression.end(),keyword.begin(),keyword.end(),[](unsigned char a,unsigned char b){return std::tolower(a)==b;})==expression.end()) return {};
-    const auto tokens=tokenize(expression,false);std::vector<std::string> names;
+    const auto tokens=tokenize(expression,false,true);std::vector<std::string> names;
     for(std::size_t i=0;i+1<tokens.size();++i) if(tokens[i].type==Token::Type::Word && lower(tokens[i].value)=="new" && tokens[i+1].type==Token::Type::Word) {
         const auto name=lower(tokens[++i].value);
         if(name!="collection" && name!="vba" && name!="scripting") names.push_back(name);
@@ -2821,7 +2854,7 @@ std::vector<std::string> vbaConstructedClasses(std::string_view expression) {
 std::vector<std::string> vbaExpressionClassTypes(std::string_view expression) {
     constexpr std::string_view keyword="typeof";
     if(std::search(expression.begin(),expression.end(),keyword.begin(),keyword.end(),[](unsigned char a,unsigned char b){return std::tolower(a)==b;})==expression.end()) return {};
-    const auto tokens=tokenize(expression,false);std::vector<std::string> names;
+    const auto tokens=tokenize(expression,false,true);std::vector<std::string> names;
     for(std::size_t i=0;i+1<tokens.size();++i) if(tokens[i].type==Token::Type::Word && lower(tokens[i].value)=="typeof") {
         int depth=0;
         for(std::size_t j=i+1;j+1<tokens.size();++j) {

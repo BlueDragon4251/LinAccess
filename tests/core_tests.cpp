@@ -473,6 +473,23 @@ End Function)BOUND";
     for(const auto& expression:{"CByte(255)+CByte(1)","CByte(0)-CByte(1)","CByte(255)*CByte(255)"}) {
         int code=0;try {(void)eval(expression);}catch(const VbaRuntimeError& error){code=error.number;}assert(code==6);
     }
+    for(const auto& expression:std::vector<std::string>{
+        "VarType(1%)=vbInteger And VarType(1&)=vbLong",
+        "VarType(1!)=vbSingle And VarType(1#)=vbDouble And VarType(1@)=vbCurrency",
+        "VarType(32767%)=vbInteger And VarType(2147483647&)=vbLong",
+        "1.25!=1.25 And 1.25#=1.25 And 1D2!=100",
+        "1E2@=CCur(100) And VarType(1&+2)=vbLong",
+        "VarType(1& And 3&)=vbLong",
+        R"(1&2="12")", R"(1& "x"="1x")",
+        "-2%^2=-4 And (-2%)^2=4",
+        "VarType(#12/31/2003#)=vbDate"})
+        assert(eval(expression).truthy());
+    const auto preciseSingle=eval("1.00000005960464477539062500000001!");
+    assert(preciseSingle.numericType==VbaValue::NumericType::Single && preciseSingle.number==static_cast<double>(std::nextafter(1.0f,2.0f)));
+    for(const auto& [expression,expected]:std::vector<std::pair<std::string,int>>{
+        {"32768%",6},{"2147483648&",6},{"1.5%",5},{"1e100!",6},{"1e-50!",3251}}) {
+        int code=0;try {(void)eval(expression);}catch(const VbaRuntimeError& error){code=error.number;}assert(code==expected);
+    }
     assert(eval("Choose(2.5,10,20,30)").asNumber()==20 && eval("Choose(0,10)").kind==VbaValue::Kind::Null);
     assert(eval("Choose(2,10,Null)").kind==VbaValue::Kind::Null);
     assert(eval("Switch(False,10,True,CCur(\"1.25\"),True,30)").kind==VbaValue::Kind::Currency);
@@ -3041,6 +3058,10 @@ End Function
     for(const auto& expression:{R"(CCur("922337203685477.5807")+CDbl(1))",R"(CCur(0)+CDbl(1e100))"}) {
         int code=0;try {(void)evaluate(expression);}catch(const VbaRuntimeError& error){code=error.number;}assert(code==6);
     }
+    currencyCheck("922337203685477.5807@","922337203685477.5807");
+    currencyCheck("1.23445@","1.2344");
+    currencyCheck("-1.23455@","-1.2346");
+    currencyCheck("0.0001@*3&+2@","2.0003");
     currencyCheck("CCur(True)","-1");
     currencyCheck("CCur(Empty)","0");
     currencyCheck("CCur(1.25)","1.25");
