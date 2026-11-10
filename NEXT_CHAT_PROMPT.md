@@ -3605,3 +3605,19 @@ wiederholt; tatsächlicher letzter Inventarbeleg4ebc3f6c100/78/22. Dieses DEB li
 vor physischer Quellbindung. Danach weitere allgemeine offene Anforderungen ohne
 Zwischenabschluss fortsetzen; keine umfassende roheSQL-/Provider-/Crossconnection-
 Schattierungs-/Generationsparität behaupten.
+
+
+DAO Restartable/Origin-Properties: DAO_RESTARTABLE_PROPERTIES.md dokumentiert
+Boolean-Capability für unterstützte Query/Dynaset/Snapshot-Cursor, dokumentiertes
+False für Tabellen-Cursor sowie False für eigenständig nicht-requeryfähige Frozen-
+Adapter. Stale Query nach Rollback kannFlag lesen und anschließend echtRequery
+aufrufen; native bisherige Tabellen-Requery-Erweiterung bleibt getrennt. Native
+SourceField/SourceTable über echte schreibgeschützte Properties-Objekte/dbText10,
+Quelle/Getterschutz unverändert. App/DAO gebaut; einmaliges DAO-Bündel1/1 in3,37s
+bestanden inklusive echtem VBA und tatsächlicher Rollback-Wiederabfrage. Keine
+neuen CTest-/Katalog-IDs;456/386/70. Vorstufe718ca355 privat remote/Baum geprüft;
+letztes DEBa4bbf4a4 vor Quellbindung/Metadaten. Moderne veröffentlichte DAO-PIA
+15.0.4420.1018 nur als Vertrag inspiziert: GetRows.NumRows istoptional OHNE
+Metadaten-Standardwert, AddNew parameterlos. Keine Default1-Behauptung aus
+ADO/Optionalität ableiten; keine PIA inGit oder Original-Ausführung.
+Ohne Zwischenabschluss weitere echte DAO-/Datenbankanforderungen implementieren.

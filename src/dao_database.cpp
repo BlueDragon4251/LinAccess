@@ -639,6 +639,11 @@ public:
     VbaValue member(std::string_view name, const std::vector<VbaValue>& args) override {
         if (closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");
         const auto key = lower(name);
+        if(key=="restartable") {
+            if(!args.empty()) throw VbaRuntimeError(450,"DAO: Restartable takes no arguments");
+            checkTableGeneration();
+            return VbaValue::logical(!frozen_ && recordsetType_ && (*recordsetType_==2 || *recordsetType_==4));
+        }
         if (key!="close" && key!="requery") checkTransaction();
         if((key=="edit" || key=="addnew" || key=="update" || key=="delete") && !connectionUpdatable(db_)) throw VbaRuntimeError(3027,"DAO: Database or object is read-only");
         if (key=="transactions" && args.empty()) return VbaValue::logical(true);
@@ -834,6 +839,10 @@ public:
         if(lower(name)=="index") {
             if(closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");checkTransaction();if(!table_ || recordsetType_!=1) throw VbaRuntimeError(3251,"DAO: Index requires a table-type Recordset");if(mode_!=Mode::Browse) throw VbaRuntimeError(3219,"DAO: Pending edit");const auto revision=data_->revision;const auto scalar=scalarVbaValue(value);checkTransaction();if(closed_) throw VbaRuntimeError(3420,"DAO: Recordset closed during index evaluation");if(mode_!=Mode::Browse || revision!=data_->revision) throw VbaRuntimeError(3219,"DAO: Recordset changed during index evaluation");if(scalar.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null index name");
             const auto requested=text(scalar.asText());std::optional<NativeRecordsetIndex> next;if(!requested.isEmpty()) next=checkedRecordsetIndex(db_,source_,requested);const auto name=next ? next->name : QString{};if(name==indexName_ && next==data_->selectedIndex) return;if(data_->cursors.size()!=1) throw VbaRuntimeError(3251,"DAO: Change Index before creating clones or after closing them");const auto old=indexName_;const auto id=position_>=0 && position_<data_->ids.size() ? data_->ids[position_] : QVariant{};indexName_=name;try {reload(false);if(!id.isNull()) position_=data_->ids.indexOf(id);}catch(...) {indexName_=old;throw;}return;
+        }
+        if(lower(name)=="restartable") {
+            if(closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");
+            checkTableGeneration();throw VbaRuntimeError(383,"DAO: Restartable is read-only");
         }
         if(lower(name)=="type") {
             if(closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");
@@ -1783,7 +1792,7 @@ public:
     void assign(std::string_view name,const VbaValue& value) override {if(identity_.isEmpty()) bindIdentity();if(identity_!=state_->identity(key_)) throw VbaRuntimeError(3420,"DAO: Property identity replaced");if(!state_->value(key_)) throw VbaRuntimeError(3270,"DAO: Property not found");if(lower(name)!="value") throw VbaRuntimeError(383,"DAO: Property metadata is readonly");const auto text=nativeTextPropertyValue(key_,value);state_->store(key_,VbaValue::string(text.toStdString()));}
 private:std::shared_ptr<NativeFieldPropertyState> state_;QString key_,identity_;
 };
-const QMap<QString,QPair<QString,int>>& nativeIntrinsicFieldProperties() {static const QMap<QString,QPair<QString,int>> properties{{"name",{"Name",10}},{"type",{"Type",3}},{"size",{"Size",4}},{"attributes",{"Attributes",4}},{"dataupdatable",{"DataUpdatable",1}},{"ordinalposition",{"OrdinalPosition",3}},{"required",{"Required",1}},{"allowzerolength",{"AllowZeroLength",1}},{"defaultvalue",{"DefaultValue",10}},{"validationrule",{"ValidationRule",10}},{"validationtext",{"ValidationText",10}}};return properties;}
+const QMap<QString,QPair<QString,int>>& nativeIntrinsicFieldProperties() {static const QMap<QString,QPair<QString,int>> properties{{"sourcefield",{"SourceField",10}},{"sourcetable",{"SourceTable",10}},{"name",{"Name",10}},{"type",{"Type",3}},{"size",{"Size",4}},{"attributes",{"Attributes",4}},{"dataupdatable",{"DataUpdatable",1}},{"ordinalposition",{"OrdinalPosition",3}},{"required",{"Required",1}},{"allowzerolength",{"AllowZeroLength",1}},{"defaultvalue",{"DefaultValue",10}},{"validationrule",{"ValidationRule",10}},{"validationtext",{"ValidationText",10}}};return properties;}
 class NativeIntrinsicFieldProperty final : public VbaObject {
 public:
     NativeIntrinsicFieldProperty(std::shared_ptr<NativeFieldPropertyState> state,QString key):state_(std::move(state)),key_(std::move(key)) {}
