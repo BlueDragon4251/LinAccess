@@ -344,6 +344,19 @@ int main(int argc, char** argv) {
     catch(const linaccess::VbaRuntimeError&) { rejected = true; }
     assert(rejected);
 
+    model.execute(db,"SELECT 2^3^2 AS chain,2^(3^2) AS nested,-2^2 AS negative,(-2)^2 AS grouped,2^-2 AS inverse,3^-2^3 AS signed_chain,2*3^2+1 AS mixed,Abs(-2)^3 AS called,CLng(3.5)^2 AS converted,NULL^2 AS empty,'2^3' AS literal");
+    const QVector<double> powers{64,512,-4,4,0.25,1.0/729,19,8,16};
+    for(int column=0;column<powers.size();++column) assert(qAbs(model.index(0,column).data().toDouble()-powers[column])<1e-12);
+    for(int column:{0,1,2,3,4,5,7,8,9}) assert(model.fieldSqlType(column)=="DOUBLE");
+    assert(model.index(0,9).data().isNull() && model.index(0,10).data().toString()=="2^3");
+    model.execute(db,"SELECT id FROM samples WHERE score^2>=400 ORDER BY id");assert(model.rowCount()==3 && model.index(0,0).data().toInt()==2 && model.index(2,0).data().toInt()==4);
+    model.execute(db,"PARAMETERS base DOUBLE,exponent DOUBLE; SELECT [base]^[exponent] AS result",{{"base",9},{"exponent",0.5}});assert(model.fieldSqlType(0)=="DOUBLE" && model.index(0,0).data().toDouble()==3);
+    assert(query.exec("CREATE TEMP TABLE power_atoms([x^y] REAL)"));assert(query.exec("INSERT INTO power_atoms VALUES(3)"));query.finish();
+    model.execute(db,"SELECT [x^y]^2 AS result FROM power_atoms");assert(model.index(0,0).data().toDouble()==9);assert(query.exec("DROP TABLE temp.power_atoms"));query.finish();
+    model.execute(db,"SELECT 2^3");assert(model.headerData(0,Qt::Horizontal).toString().contains('^') && !model.headerData(0,Qt::Horizontal).toString().contains("linaccess_"));
+    for(const auto& bad:std::vector<std::pair<QString,int>>{{"SELECT (-2)^0.5",5},{"SELECT 10^400",6},{"SELECT 'invalid'^2",13},{"SELECT 0^-1",3251},{"SELECT 10^-400",3251},{"SELECT 2^",3075},{"SELECT 1e999^0",6}}) {
+        int error=0;try{model.execute(db,bad.first);}catch(const linaccess::VbaRuntimeError& failure){error=failure.number;}assert(error==bad.second);
+    }
     struct DeclaredProjection {QString declaration,type;QVariant value;};
     for(const auto& declared:QVector<DeclaredProjection>{{"TINYINT","INTEGER1",255},{"SMALLINT","INTEGER2",-32768},{"INTEGER","INTEGER4",2147483647},{"REAL","SINGLE_REAL",0.1},{"FLOAT8","DOUBLE",0.1},{"BIT","BOOLEAN",true},{"YESNO","BOOLEAN",false}}) {
         model.execute(db,"PARAMETERS p "+declared.declaration+"; SELECT [p] AS projected,(([p])) AS parenthesized",{{"p",declared.value}});

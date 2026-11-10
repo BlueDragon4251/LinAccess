@@ -207,13 +207,13 @@ public:
     void message(std::string_view) override { throw VbaRuntimeError(3251,"SQL scalar has no UI context"); }
     void saveRecord() override { throw VbaRuntimeError(3251,"SQL scalar cannot save forms"); }
 };
-void scalarBuiltinFunction(sqlite3_context* context,int count,sqlite3_value** args,std::string_view name,int minimum,int maximum,unsigned dateArguments=0) noexcept {
+void scalarBuiltinFunction(sqlite3_context* context,int count,sqlite3_value** args,std::string_view name,int minimum,int maximum,unsigned dateArguments=0,bool infix=false) noexcept {
     auto& native=api();
     try {
         if(count<minimum || count>maximum) throw VbaRuntimeError(450,"Invalid scalar SQL arity");
         const bool numericFormat=name=="FormatNumber" || name=="FormatCurrency" || name=="FormatPercent";
         VbaVariables values;
-        std::string expression=dateArguments ? std::string{} : std::string(name)+"(";
+        std::string expression=(dateArguments || infix) ? std::string{} : std::string(name)+"(";
         for(int index=0;index<count;++index) {
             const auto name="_la_arg"+std::to_string(index);
             VbaValue value;
@@ -226,11 +226,12 @@ void scalarBuiltinFunction(sqlite3_context* context,int count,sqlite3_value** ar
                 value=VbaValue::string(bytes ? std::string(reinterpret_cast<const char*>(bytes),size) : std::string{});
             } else if(type!=5) throw VbaRuntimeError(13,"Binary scalar string input is unsupported");
             if(dateArguments && (dateArguments & (1U<<index)) && value.kind!=VbaValue::Kind::Null) value=vbaDateValue(value);
+            if(infix && value.kind==VbaValue::Kind::Number && !std::isfinite(value.number)) throw VbaRuntimeError(6,"Nonfinite power operand");
             values.emplace(name,std::move(value));
             if(index) expression+=',';
             expression+=name;
         }
-        if(dateArguments) expression="_la_arg0"+std::string(name)+"_la_arg1";
+        if(dateArguments || infix) expression="_la_arg0"+std::string(name)+"_la_arg1";
         else expression+=')';
         ScalarStringHost host;
         const auto result=evaluateVbaExpression(expression,host,values);
@@ -254,6 +255,7 @@ void scalarBuiltinFunction(sqlite3_context* context,int count,sqlite3_value** ar
     } catch(const VbaRuntimeError& failure) { functionError(context,failure); }
       catch(...) { native.error(context,"SQL scalar evaluation failed",-1); }
 }
+void numericPower(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"^",2,2,0,true);}
 void convert_cbool(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"CBool",1,1);}
 void convert_cbyte(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"CByte",1,1);}
 void convert_cint(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"CInt",1,1);}
@@ -724,6 +726,7 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_log",-1,&mathLog,nullptr,nullptr);
     ensure("linaccess_jet_sin",-1,&mathSin,nullptr,nullptr);
     ensure("linaccess_jet_cos",-1,&mathCos,nullptr,nullptr);
+    ensure("linaccess_jet_power",2,&numericPower,nullptr,nullptr);
     ensure("linaccess_jet_cbool",-1,&convert_cbool,nullptr,nullptr);
     ensure("linaccess_jet_cbyte",-1,&convert_cbyte,nullptr,nullptr);
     ensure("linaccess_jet_cint",-1,&convert_cint,nullptr,nullptr);

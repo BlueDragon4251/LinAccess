@@ -5499,3 +5499,16 @@ nestedJOIN/NULL/counter/Rechte/Desktop/keine-Fixtures-Prüfung; danach GUI19,32s
 Original119,69s,2/2 in139,02s, alle sieben Hashes unverändert. Bekannte Makrogrenze
 bleibt. Paket und Integration liegen vor dieser Parameterannotation. Ohne
 Zwischenabschluss native SQL-Potenzoperatoren mit echter VBA-Präzedenz fortsetzen.
+
+
+Nativer SQL-Potenzoperator: SQL_POWER_OPERATOR.md dokumentiert tatsächliche
+^→VBA-Auswertung mit strukturellen Atomen, Linksassoziativität/Vorzeichen nach
+MS-VBAL5.6.9.1, Klammern/Funktionen/Parametern/Feldern/WHERE, Double-/DAO-Typen und
+Null. Quotierte/literale ^ bleiben intakt, Originalüberschriften bleiben sichtbar.
+App gebaut; erstes bestehendes DAO-/Abfragemodell-Bündel2/2 in3,17s (3,02/0,15).
+Vorhandene Zero-negativ-/Unterlaufgrenze3251 beibehalten; kein Windows-/voller SQL-
+AST-/Datum-/Decimal-Anspruch. Keine neuen Tests/Katalogpunkte;456/386/70 unverändert.
+Vorstufeca0ebc0 privat remote/Baum geprüft. Geprüftes DEBcc19000 unter
+/workspace/work/count-result-types/package/linaccess-0.7.0-Linux.deb und GUI19,32/
+Original119,69/7Hashes liegen vor Parameterannotation/Potenz. Ohne Zwischenabschluss
+weiter echte typisierte numerische SQL-Arithmetik und Divisionsfehler umsetzen.

@@ -1572,6 +1572,9 @@ End Function
         assert(sql.exec("SELECT SUM(value) FROM inputs") && sql.next() && sql.value(0).toInt()==12); sql.finish();
         assert(metadataFrame->values.at("calls").asNumber()==beforeMetadata);
     }
+    const auto powerRows=database->member("OpenRecordset",{linaccess::VbaValue::string("SELECT CLng(3.5)^2 AS square,NULL^2 AS empty")}).object;
+    assert(powerRows->member("Fields",{linaccess::VbaValue::string("square")}).object->member("Type",{}).asNumber()==7);
+    assert(powerRows->item("square").numericType==linaccess::VbaValue::NumericType::Double && powerRows->item("square").asNumber()==16 && powerRows->item("empty").kind==linaccess::VbaValue::Kind::Null);powerRows->member("Close",{});
     struct NumericProjection {const char* declaration;int type,size;linaccess::VbaValue value;linaccess::VbaValue::NumericType subtype;};
     for(const auto& projected:std::vector<NumericProjection>{{"TINYINT",2,1,linaccess::VbaValue::numeric(255),linaccess::VbaValue::NumericType::Byte},{"SMALLINT",3,2,linaccess::VbaValue::numeric(-32768),linaccess::VbaValue::NumericType::Integer},{"INTEGER",4,4,linaccess::VbaValue::numeric(2147483647),linaccess::VbaValue::NumericType::Long},{"REAL",6,4,linaccess::VbaValue::numeric(0.1),linaccess::VbaValue::NumericType::Single},{"FLOAT8",7,8,linaccess::VbaValue::numeric(0.1),linaccess::VbaValue::NumericType::Double},{"BIT",1,1,linaccess::VbaValue::logical(true),linaccess::VbaValue::NumericType::Double}}) {
         const auto query=database->member("CreateQueryDef",{linaccess::VbaValue::string(""),linaccess::VbaValue::string(std::string("PARAMETERS p ")+projected.declaration+"; SELECT [p] AS projected")}).object;
