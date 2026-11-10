@@ -188,7 +188,7 @@ private:
     bool renderReport(QPrinter& printer);
     void buildReportPageView(QVBoxLayout* layout,QWidget* layoutView);
     void refreshReportPageView();
-    bool writePdf(const QString& path,bool report);
+    bool writePdf(const QString& path,bool report,const QPrinter* settings=nullptr);
     QMap<QString,linaccess::VbaExecutionResult> eventResults_;
     QString formName_;
     std::optional<QString> openArgs_;

@@ -26,6 +26,7 @@
 #include <QStandardPaths>
 #include <QPrintPreviewDialog>
 #include <QPrintDialog>
+#include <QMessageBox>
 #include <QPageLayout>
 #include <QDialogButtonBox>
 #include <QPrinter>
@@ -233,12 +234,36 @@ Height =1500)BANDS");
             bool printChecked=false;
             QTimer::singleShot(0,&paged,[&] {
                 auto* dialog=qobject_cast<QPrintDialog*>(QApplication::activeModalWidget());
-                assert(dialog && !dialog->testOption(QAbstractPrintDialog::PrintPageRange));
+                assert(dialog && dialog->testOption(QAbstractPrintDialog::PrintPageRange));
                 printChecked=true; dialog->reject();
             });
             QTest::keyClick(surface,Qt::Key_P,modifiers);
             assert(printChecked && paged.findChild<QLineEdit*>("access-control-Name")->text()=="first");
         }
+        const auto activateReport=[&] {QApplication::setActiveWindow(&paged);QApplication::processEvents();assert(paged.isActiveWindow());};
+        // The real print dialog drives ranges/reverse/copies into atomic PDF output.
+        for(const bool collated:{true,false}) {
+            const auto path=output.filePath(collated ? "report-collated.pdf" : "report-uncollated.pdf");
+            activateReport();
+            QTimer::singleShot(0,&paged,[&,path,collated] {
+                auto* dialog=qobject_cast<QPrintDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->testOption(QAbstractPrintDialog::PrintPageRange));
+                auto* printer=dialog->printer();printer->setOutputFormat(QPrinter::PdfFormat);printer->setOutputFileName(path);printer->setPrintRange(QPrinter::PageRange);printer->setFromTo(1,2);printer->setCopyCount(2);printer->setCollateCopies(collated);printer->setPageOrder(QPrinter::LastPageFirst);dialog->QDialog::done(QDialog::Accepted);
+            });
+            paged.findChild<QAction*>("access-report-print")->trigger();
+            QFile printed(path);assert(printed.open(QIODevice::ReadOnly));auto matches=pagePattern.globalMatch(QString::fromLatin1(printed.readAll()));int count=0;while(matches.hasNext()) {matches.next();++count;}assert(count==4);
+            if(!reader.isEmpty()) {QProcess textReader;textReader.start(reader,{"-layout",path,"-"});assert(textReader.waitForFinished(10000) && textReader.exitCode()==0);const auto text=QString::fromUtf8(textReader.readAllStandardOutput()).normalized(QString::NormalizationForm_KC);QStringList order;for(const auto& page:text.split(QChar(12))) {if(page.contains("first")) order.append("first");else if(page.contains("second")) order.append("second");}assert(order==(collated ? QStringList{"second","first","second","first"} : QStringList{"second","second","first","first"}));assert(text.count("1/2")==2 && text.count("2/2")==2);}
+            assert(paged.findChild<QLineEdit*>("access-control-Name")->text()=="first");
+        }
+        const auto rangedPdf=output.filePath("report-second-only.pdf");
+        activateReport();
+        QTimer::singleShot(0,&paged,[&] {auto* dialog=qobject_cast<QPrintDialog*>(QApplication::activeModalWidget());assert(dialog);auto* printer=dialog->printer();printer->setOutputFormat(QPrinter::PdfFormat);printer->setOutputFileName(rangedPdf);printer->setFromTo(2,2);printer->setPrintRange(QPrinter::PageRange);dialog->QDialog::done(QDialog::Accepted);});
+        paged.findChild<QAction*>("access-report-print")->trigger();
+        QFile ranged(rangedPdf);assert(ranged.open(QIODevice::ReadOnly));const auto retained=ranged.readAll();auto rangePages=pagePattern.globalMatch(QString::fromLatin1(retained));int rangeCount=0;while(rangePages.hasNext()) {rangePages.next();++rangeCount;}assert(rangeCount==1);ranged.close();
+        if(!reader.isEmpty()) {QProcess textReader;textReader.start(reader,{"-layout",rangedPdf,"-"});assert(textReader.waitForFinished(10000) && textReader.exitCode()==0);const auto text=QString::fromUtf8(textReader.readAllStandardOutput()).normalized(QString::NormalizationForm_KC);assert(text.contains("second") && !text.contains("first") && text.contains("2/2"));}
+        // A range beyond the actual source pages must not replace an earlier PDF.
+        activateReport();
+        QTimer::singleShot(0,&paged,[&] {auto* dialog=qobject_cast<QPrintDialog*>(QApplication::activeModalWidget());assert(dialog);auto* printer=dialog->printer();printer->setOutputFormat(QPrinter::PdfFormat);printer->setOutputFileName(rangedPdf);printer->setFromTo(3,3);printer->setPrintRange(QPrinter::PageRange);QTimer::singleShot(0,&paged,[] {auto* warning=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(warning);warning->accept();});dialog->QDialog::done(QDialog::Accepted);});
+        paged.findChild<QAction*>("access-report-print")->trigger();assert(ranged.open(QIODevice::ReadOnly) && ranged.readAll()==retained);ranged.close();
         auto* setupAction=paged.findChild<QAction*>("access-report-page-setup"); assert(setupAction);
         QApplication::setActiveWindow(&paged);
         auto* setupSurface=reportPages->findChild<QGraphicsView*>(); assert(setupSurface);

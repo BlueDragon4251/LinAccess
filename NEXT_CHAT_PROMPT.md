@@ -3894,3 +3894,24 @@ App/GUI/DAO gebaut; ein bestehendes Bündel2/2 in14,37s bestanden:
 GUI11,91s (20s unverändert), DAO2,46s. Keine neue CTest-/Katalog-ID;456/386/70.
 Vorstufe8a198ce2 privat/Baum geprüft; letztes DEB/Original/Inventar bleibt da72e727.
 Keine volle Jet-/Windows-Parität; ohne Zwischenabschluss weiterentwickeln.
+
+
+Berichtsdruckoptionen: REPORT_PRINT_OPTIONS.md. Tatsächlicher Druckdialog bietet
+nun Seitenbereich; Renderer berücksichtigt Originalseitennummern, Vorwärts- /
+Rückwärtsfolge,1-100 Exemplare und Sortierung. Aufgezeichnete Quellseiten werden
+wiederverwendet, keine erneute Berechnung/Eventausführung je Exemplar.
+PDF aus dem Druckdialog übernimmt echte Seiteneinrichtung/Optionen und verwendet
+nun temporäres Rendern plus atomaren QSaveFile-Commit. Ungültige Bereiche/Render-
+fehler erhalten vorherige Datei; Symlink-/NUL-/aktuelle DB-Ziele abgewiesen.
+Native Treiberkopien bleiben Treiberaufgabe, sonst kontrollierte manuelle Kopien;
+PDF immer explizit. Mehrfache Ausgabe auf10000 Seiten begrenzt. Selection/current
+page weiterhin deaktiviert. Gruppierte/andere nicht unterstützte Berichte bleiben
+bewusst gesperrt; kein Original-/Hardware-/Windows-Ausgabenachweis.
+App/Layout gebaut; bestehendes access_2003_layouts1/1 in10,79s bestanden. Echter
+Dialog/PDF/Text beweist beide Kopiensortierungen rückwärts, nurSeite2 mit2/2,
+aktuellen Datensatz wiederhergestellt und Bestandsschutz bei ungültigem Bereich.
+Erste Fixturefehler waren fehlende Reaktivierung vor geschütztem Druckbefehl und
+fehlende NFKC-Normalisierung der PDF-fi-Ligatur; nur betroffenen vorhandenen Check
+wiederholt. Keine neue CTest-/Katalog-ID;456/386/70. Vorstufe009be44e privat/Baum
+geprüft. DEB/Original/Inventar nochda72e727; gebündelte Aktualisierung folgt.
+Ohne Zwischenabschluss weitere allgemeine Anforderungen fortsetzen.

@@ -283,10 +283,15 @@ void AccessFormPreview::showDocumentPrintDialog() {
     QPrintDialog dialog(&printer,this);
     dialog.setObjectName(report ? "access-report-print-dialog" : "access-layout-print-dialog");
     dialog.setWindowTitle(report ? "Bericht drucken" : "Aktuelles Formularlayout drucken");
-    dialog.setOption(QAbstractPrintDialog::PrintPageRange,false);
+    dialog.setOption(QAbstractPrintDialog::PrintPageRange,report);
+    dialog.setOption(QAbstractPrintDialog::PrintCurrentPage,false);
+    if(report) if(const auto* pages=findChild<QPrintPreviewWidget*>("access-report-pages")) dialog.setMinMax(1,qMax(1,pages->pageCount()));
     dialog.setOption(QAbstractPrintDialog::PrintSelection,false);
     if(dialog.exec()!=QDialog::Accepted || closed_ || openCancelled_) return;
-    if(!(report ? renderReport(printer) : renderLayout(printer)))
+    const bool printed=printer.outputFormat()==QPrinter::PdfFormat
+        ? writePdf(printer.outputFileName(),report,&printer)
+        : (printer.outputFileName().isEmpty() && (report ? renderReport(printer) : renderLayout(printer)));
+    if(!printed || printer.printerState()==QPrinter::Error)
         QMessageBox::warning(this,"Drucken","Dieses Dokument konnte nicht vollständig ausgegeben werden.");
 }
 bool AccessFormPreview::renderLayout(QPrinter& printer) {
@@ -563,36 +568,53 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
         if (!recording.end()) return false;
     }
 
+    if(printer.printRange()!=QPrinter::AllPages && printer.printRange()!=QPrinter::PageRange) return false;
+    const int first=printer.printRange()==QPrinter::PageRange ? printer.fromPage() : 1;
+    const int requestedLast=printer.printRange()==QPrinter::PageRange ? printer.toPage() : pageNumber;
+    const int last=qMin(pageNumber,requestedLast);
+    const int requestedCopies=printer.copyCount();
+    if(first<1 || requestedLast<first || first>last || requestedCopies<1 || requestedCopies>100) return false;
+    const int copies=printer.outputFormat()==QPrinter::PdfFormat || !printer.supportsMultipleCopies() ? requestedCopies : 1;
+    if(copies>1 && static_cast<qint64>(last-first+1)*copies>10000) return false;
+    const bool collated=printer.collateCopies(),reverse=printer.pageOrder()==QPrinter::LastPageFirst;
+    // Record each source page once; copies never rerun calculations or events.
+    QVector<QVector<int>> pageBands(pageNumber+1);
+    for(int i=0;i<bands.size();++i) pageBands[bands[i].page].append(i);
+    if(copies>1) printer.setCopyCount(1);
+    const auto restoreCopies=qScopeGuard([&] {if(copies>1) printer.setCopyCount(requestedCopies);});
     QPainter painter;
     if (!painter.begin(&printer)) return false;
     painter.scale(scaleX,scaleY);
-    int outputPage=1;
-    for (auto& band:bands) {
-        while (outputPage<band.page) {
-            if (!printer.newPage()) { painter.end(); return false; }
-            ++outputPage;
+    int printed=0;
+    const auto draw=[&](int sourcePage) {
+        if(printed++ && !printer.newPage()) return false;
+        for(const int index:pageBands[sourcePage]) {
+            auto& band=bands[index];
+            painter.save(); painter.translate(0,band.y);
+            painter.setClipRect(QRect(0,0,canvas->width(),band.height));
+            painter.scale(double(band.commands.logicalDpiX())/printer.logicalDpiX(),
+                          double(band.commands.logicalDpiY())/printer.logicalDpiY());
+            const bool painted=band.commands.play(&painter);painter.restore();if(!painted) return false;
         }
-        painter.save(); painter.translate(0,band.y);
-        painter.setClipRect(QRect(0,0,canvas->width(),band.height));
-        // QPicture playback also converts device DPI; the physical TWIP scale
-        // is already active and must not be applied a second time.
-        painter.scale(double(band.commands.logicalDpiX())/printer.logicalDpiX(),
-                      double(band.commands.logicalDpiY())/printer.logicalDpiY());
-        if (!band.commands.play(&painter)) { painter.restore(); painter.end(); return false; }
-        painter.restore();
-    }
-    while (outputPage<pageNumber) {
-        if (!printer.newPage()) { painter.end(); return false; }
-        ++outputPage;
+        return true;
+    };
+    if(collated) {
+        for(int copy=0;copy<copies;++copy) for(int offset=0;offset<=last-first;++offset)
+            if(!draw(reverse ? last-offset : first+offset)) {painter.end();return false;}
+    } else {
+        for(int offset=0;offset<=last-first;++offset) for(int copy=0;copy<copies;++copy)
+            if(!draw(reverse ? last-offset : first+offset)) {painter.end();return false;}
     }
     return painter.end();
 }
 
 bool AccessFormPreview::exportLayoutPdf(const QString& path) { return writePdf(path,false); }
 bool AccessFormPreview::exportReportPdf(const QString& path) { return writePdf(path,true); }
-bool AccessFormPreview::writePdf(const QString& path,bool report) {
+bool AccessFormPreview::writePdf(const QString& path,bool report,const QPrinter* settings) {
     if(openCancelled_ || closed_) return false;
-    if (QFileInfo(path).suffix().compare("pdf",Qt::CaseInsensitive)!=0) return false;
+    if(path.contains(QChar(0)) || QFileInfo(path).isSymLink() || QFileInfo(path).suffix().compare("pdf",Qt::CaseInsensitive)!=0) return false;
+    const auto destination=QFileInfo(path).canonicalFilePath(),database=QFileInfo(db_.databaseName()).canonicalFilePath();
+    if(!destination.isEmpty() && !database.isEmpty() && destination==database) return false;
     QTemporaryDir temporary;
     if (!temporary.isValid()) return false;
     const auto generated = temporary.filePath("layout.pdf");
@@ -600,11 +622,16 @@ bool AccessFormPreview::writePdf(const QString& path,bool report) {
         QPrinter printer(QPrinter::HighResolution);
         printer.setOutputFormat(QPrinter::PdfFormat);
         printer.setOutputFileName(generated);
-        if(report && !applyReportPageLayout(reportPageView_.data(),printer)) return false;
+        if(settings) {
+            if(!printer.setPageLayout(settings->pageLayout())) return false;
+            printer.setFromTo(settings->fromPage(),settings->toPage());printer.setPrintRange(settings->printRange());
+            printer.setPageOrder(settings->pageOrder());printer.setCopyCount(settings->copyCount());printer.setCollateCopies(settings->collateCopies());
+        } else if(report && !applyReportPageLayout(reportPageView_.data(),printer)) return false;
         if (!(report ? renderReport(printer) : renderLayout(printer))) return false;
+        if(printer.printerState()==QPrinter::Error) return false;
     }
     QFile source(generated);
-    QSaveFile target(path);
+    QSaveFile target(path); target.setDirectWriteFallback(false);
     if (!source.open(QIODevice::ReadOnly) || !target.open(QIODevice::WriteOnly)) return false;
     while (!source.atEnd()) {
         const auto bytes = source.read(65536);
