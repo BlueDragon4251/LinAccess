@@ -6779,3 +6779,19 @@ neue Defaults nach Umbenennungen. Keine neuen CTest-/Katalog-IDs;456/386/70.
 Vorstufe90f672b9 privat remote/Baum geprüft. Currency-Typkonversion/Seek/FK-Schlüssel/
 voller Tickbereich/Originalschema-/Windows-Parität bleiben offen. Letztes DEB/
 Originala23c7009 vor Folgeänderungen; ohne Zwischenabschluss weiterentwickeln.
+
+
+Currency-Feldeditor/-Typwechsel: CURRENCY_FIELD_DESIGNER.md dokumentiert echte
+Currency-Auswahl/Anzeige/Anlage und geprüfte numerische Typwechsel. Vorhandene
+Werte und Defaults müssen Ziel-Speicher bitgenau numerisch durchlaufen, Currency-
+Defaults erst danach kanonisch normalisiert. Rundung/Bereich/Ziel-Currency mit
+Regeln/Meldungen verweigert; DAO Field.Type weiterhin readonly383. GUI zeigt
+unterstützten Betragsbereich, Currency-Regelbearbeitung bleibt begrenzt. App/DAO/
+GUI gebaut; einmaliges bestehendes Bündel2/2 in22,84s bestanden (GUI19,25s bei
+unverändert20s-Watchdog, DAO3,59s). Echte GUI-Anlage/Double-Rückwechsel/Default/
+SQL-Werte/Löschen und Backend-Matrix mit NULL/Integralen/Präzisions-/Bereichs- /
+Regelrefusal belegt; keine neuen CTest-/Katalog-IDs;456/386/70. Vorstufe6786526d
+privat remote/Baum geprüft; letzter Paket-/Originalbelega23c7009 vor Folgeänderungen.
+Nach Sicherung gesammelten Stand paketieren/Original/Inventar gebündelt prüfen;
+keine vollständige Jet-/Currency-/Windows-/Distributions-Parität behaupten.
+Ohne Zwischenabschluss weitere allgemeine Anforderungen umsetzen.

@@ -1316,7 +1316,7 @@ void testNativeCurrencyCreation() {
     database->member("Execute",{VbaValue::string("INSERT INTO NativeMoney(ID,Amount) VALUES(3,NULL)")});int requiredError=0;try {moneyField()->assign("Required",VbaValue::logical(true));}catch(const VbaRuntimeError& failure) {requiredError=failure.number;}assert(requiredError!=0 && !moneyField()->member("Required",{}).truthy());
     assert(sql.exec("SELECT COUNT(*) FROM NativeMoney WHERE ID=3 AND Amount IS NULL") && sql.next() && sql.value(0).toInt()==1);sql.finish();database->member("Execute",{VbaValue::string("DELETE FROM NativeMoney WHERE ID=3")});assert(snapshotMoney()==originalMoney);
     int conversionError=0;try {moneyField()->assign("Type",VbaValue::integer(7));}catch(const VbaRuntimeError& failure) {conversionError=failure.number;}assert(conversionError==383 && moneyField()->member("Type",{}).asNumber()==5 && snapshotMoney()==originalMoney);
-    conversionError=0;try {changeNativeNumericFieldType(db,"NativeMoney","Amount",7);}catch(const VbaRuntimeError& failure) {conversionError=failure.number;}assert(conversionError==3251 && snapshotMoney()==originalMoney);
+    changeNativeNumericFieldType(db,"NativeMoney","Amount",7);assert(moneyField()->member("Type",{}).asNumber()==7 && snapshotMoney()==originalMoney);changeNativeNumericFieldType(db,"NativeMoney","Amount",5);assert(moneyField()->member("Type",{}).asNumber()==5 && snapshotMoney()==originalMoney);
     moneyField()->assign("Name",VbaValue::string("RenamedAmount"));assert(sql.exec("SELECT RenamedAmount,Extra FROM main.NativeMoney WHERE ID=1") && sql.next() && currencyFromRealStorage(sql.value(0).toDouble()).currencyUnits==123456 && currencyFromRealStorage(sql.value(1).toDouble()).currencyUnits==-1);sql.finish();
     moneyTable()->assign("Name",VbaValue::string("RenamedMoney"));database->member("Execute",{VbaValue::string("INSERT INTO RenamedMoney(ID) VALUES(3)")});assert(sql.exec("SELECT RenamedAmount,Extra FROM RenamedMoney WHERE ID=3") && sql.next() && currencyFromRealStorage(sql.value(0).toDouble()).currencyUnits==20001 && currencyFromRealStorage(sql.value(1).toDouble()).currencyUnits==-1);sql.finish();
     auto rejected=database->member("CreateTableDef",{VbaValue::string("RejectedMoney")}).object->member("CreateField",{VbaValue::string("Amount"),VbaValue::integer(5)}).object;
@@ -1337,10 +1337,26 @@ End Function)VBA","MakeMoney",host);
     if(result.status!=VbaExecutionStatus::Completed) std::cerr<<"Currency create error="<<result.errorNumber<<" line="<<result.line<<'\n';assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->currencyUnits==12500);
 }
 
+void testLosslessCurrencyTypeChanges() {
+    using namespace linaccess;auto db=QSqlDatabase::addDatabase("QSQLITE","currency-type-changes");db.setDatabaseName(":memory:");assert(db.open());QSqlQuery sql(db);auto database=makeDaoDatabase(db);
+    const auto make=[&](const char* name,int code,const char* initial) {
+        auto table=database->member("CreateTableDef",{VbaValue::string(name)}).object;auto field=table->member("CreateField",{VbaValue::string("Value"),VbaValue::integer(code)}).object;field->assign("DefaultValue",VbaValue::string(initial));table->member("Fields",{}).object->member("Append",{VbaValue::reference(field)});database->member("TableDefs",{}).object->member("Append",{VbaValue::reference(table)});return table;
+    };
+    const auto kind=[&](const char* name) {return database->member("TableDefs",{VbaValue::string(name)}).object->member("Fields",{VbaValue::string("Value")}).object->member("Type",{}).asNumber();};
+    make("IntegralMoney",4,"3");database->member("Execute",{VbaValue::string("INSERT INTO IntegralMoney VALUES(3),(NULL)")});changeNativeNumericFieldType(db,"IntegralMoney","Value",5);assert(kind("IntegralMoney")==5);changeNativeNumericFieldType(db,"IntegralMoney","Value",4);assert(kind("IntegralMoney")==4);assert(sql.exec("SELECT Value FROM IntegralMoney ORDER BY rowid") && sql.next() && sql.value(0).toInt()==3 && sql.next() && sql.value(0).isNull());sql.finish();
+    auto good=make("ExactMoney",7,"1.25");database->member("Execute",{VbaValue::string("INSERT INTO ExactMoney VALUES(1.25),(0.0001)")});good->member("Fields",{VbaValue::string("Value")}).object->assign("DefaultValue",VbaValue::string("2.0001"));changeNativeNumericFieldType(db,"ExactMoney","Value",5);assert(kind("ExactMoney")==5);
+    assert(sql.exec("SELECT Value FROM ExactMoney ORDER BY rowid") && sql.next() && currencyFromRealStorage(sql.value(0).toDouble()).currencyUnits==12500 && sql.next() && currencyFromRealStorage(sql.value(0).toDouble()).currencyUnits==1);sql.finish();
+    database->member("Execute",{VbaValue::string("INSERT INTO ExactMoney DEFAULT VALUES")});assert(sql.exec("SELECT Value FROM ExactMoney ORDER BY rowid DESC LIMIT 1") && sql.next() && currencyFromRealStorage(sql.value(0).toDouble()).currencyUnits==20001);sql.finish();
+    const auto refused=[&](const char* name,const char* value) {make(name,7,"1.25");database->member("Execute",{VbaValue::string(std::string("INSERT INTO ")+name+" VALUES("+value+")")});assert(sql.exec(QString("SELECT Value FROM ")+name) && sql.next());const auto bits=std::bit_cast<quint64>(sql.value(0).toDouble());sql.finish();int error=0;try {changeNativeNumericFieldType(db,name,"Value",5);}catch(const VbaRuntimeError& failure) {error=failure.number;}assert(error!=0 && kind(name)==7);assert(sql.exec(QString("SELECT Value FROM ")+name) && sql.next() && std::bit_cast<quint64>(sql.value(0).toDouble())==bits);sql.finish();};
+    refused("RoundedMoney","1.23456");refused("LargeMoney","549755813888");
+    auto ruled=make("RuledMoney",7,"1.25");ruled->member("Fields",{VbaValue::string("Value")}).object->assign("ValidationRule",VbaValue::string(">0"));int ruleError=0;try {changeNativeNumericFieldType(db,"RuledMoney","Value",5);}catch(const VbaRuntimeError& failure) {ruleError=failure.number;}assert(ruleError==3251 && kind("RuledMoney")==7);
+}
+
 void testOwnedQueryDefs() {
     testEditableStarQueryDynasets();
     testEditableTypedAliases();
     testNativeCurrencyCreation();
+    testLosslessCurrencyTypeChanges();
     testRecordsetCopyQueryDef();
     auto db=QSqlDatabase::addDatabase("QSQLITE","owned-querydef-sql"); db.setDatabaseName(":memory:"); assert(db.open());
     QSqlQuery sql(db);

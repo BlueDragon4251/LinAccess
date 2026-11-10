@@ -12,9 +12,9 @@ columns during DefaultValue/Required changes, ordinal reordering, index append/
 delete and table rename. Field rename keeps its checked SQLite path. All native
 schema equivalence, exact value/rowid digests, savepoints, constraint enforcement,
 index metadata and connection restoration checks remain. Unsupported original/
-custom schemas, full-range Currency storage, numeric type conversion involving
-Currency and Currency relationship-key/Seek semantics remain bounded. Attached
-DAO Field.Type remains read-only383; designer conversion remains separately3251.
+custom schemas, full-range Currency storage, Currency relationship-key/Seek semantics remain bounded. Attached DAO Field.Type
+remains read-only383; subsequent bounded designer conversion is documented in
+CURRENCY_FIELD_DESIGNER.md.
 
 App/DAO built. The first existing DAO bundle reached a fixture error-code
 assumption after the actual schema operations: attached Type correctly refuses
