@@ -49,6 +49,11 @@ inline NativeStoredReport nativeStoredReport(QString name,const QJsonObject& def
         while (used.contains(result.toCaseFolded())) result=base+QString::number(suffix++);
         used.insert(result.toCaseFolded()); return result;
     };
+    const auto pageMode=[&](const QString& key) {
+        const auto value=definition.value(key);if(value.isUndefined()) return 0;
+        const int mode=value.toInt(-1);if(!value.isDouble() || mode<0 || mode>3 || value.toDouble()!=mode) throw VbaRuntimeError(5,"Invalid native report page header/footer setting");return mode;
+    };
+    const int pageHeader=pageMode("page_header"),pageFooter=pageMode("page_footer");
     const auto forceValue=definition.value("detail_force_new_page");
     const int force=forceValue.toInt(-1);
     if(!forceValue.isUndefined() && (!forceValue.isDouble() || force<0 || force>3 || forceValue.toDouble()!=force))
@@ -74,6 +79,7 @@ inline NativeStoredReport nativeStoredReport(QString name,const QJsonObject& def
     for (const auto& procedure:analysis.procedures) procedures.insert(QString::fromStdString(procedure.name).toCaseFolded());
     const int width=qMax(900,9000/int(columns.size())),reportWidth=width*columns.size();
     QStringList lines{"Begin Report","Caption ="+quoted(definition.value("title").toString(name)),"Width ="+QString::number(reportWidth)};
+    lines<<"PageHeader ="+QString::number(pageHeader)<<"PageFooter ="+QString::number(pageFooter);
     for (const auto& event:{QString("Open"),QString("Load"),QString("NoData"),QString("Close")})
         if (procedures.contains(("Report_"+event).toCaseFolded())) lines<<"On"+event+" =\"[Event Procedure]\"";
     lines<<"Begin FormHeader"<<"Height =600";

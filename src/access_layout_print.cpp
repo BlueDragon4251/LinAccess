@@ -352,14 +352,21 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
     const auto height=[&](const QString& section) {
         return qRound(layout_.sectionHeights.value(section)/15.0);
     };
-    const int header=height("PageHeader"),footer=height("PageFooter"),detail=height("Section");
+    const int detail=height("Section");
+    const bool hasReportHeader=height("FormHeader")>0,hasReportFooter=height("FormFooter")>0;
+    const bool separateFooter=hasReportFooter && ((layout_.reportPageHeader|layout_.reportPageFooter)&2);
+    const bool footerOnlyFirst=separateFooter && !hasReportHeader && recordRows_.isEmpty();
+    const auto pageBandHeight=[&](const QString& section,int setting,bool first,bool reportFooter) {
+        return ((first && hasReportHeader && (setting&1)) || (reportFooter && (setting&2))) ? 0 : height(section);
+    };
+    int header=pageBandHeight("PageHeader",layout_.reportPageHeader,true,footerOnlyFirst);
+    int footer=pageBandHeight("PageFooter",layout_.reportPageFooter,true,footerOnlyFirst);
     const double scaleX=printer.logicalDpiX()/96.0,scaleY=printer.logicalDpiY()/96.0;
     const auto page=printer.pageRect(QPrinter::DevicePixel);
     const int pageHeight=qFloor(page.height()/scaleY);
     if (layout_.width/15.0>page.width()/scaleX || pageHeight<=header+footer
         || (!recordRows_.isEmpty() && (detail<=0 || detail>3500))
-        || height("FormHeader")>pageHeight-header-footer
-        || height("FormFooter")>pageHeight-header-footer) return false;
+        || height("FormHeader")>pageHeight-header-footer) return false;
     if((layout_.reportHeaderForceNewPage && height("FormHeader")==0)
         || (layout_.reportFooterForceNewPage && height("FormFooter")==0)) return false;
     if (!growers.isEmpty() && layout_.sectionCanGrow.contains("Section") && !layout_.sectionCanGrow.value("Section")) return false;
@@ -473,11 +480,14 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
         if (size) bands.append({section,y,row,pageNumber,size,0,{}});
     };
     append("FormHeader",0,record);
-    append("PageHeader",height("FormHeader"),record);
+    if(header) append("PageHeader",height("FormHeader"),record);
     int y=height("FormHeader")+header;
-    const auto finishPage=[&] { append("PageFooter",pageHeight-footer,record); };
-    const auto startPage=[&](int row) {
-        ++pageNumber; record=row; append("PageHeader",0,record); y=header;
+    const auto finishPage=[&] {if(footer) append("PageFooter",pageHeight-footer,record);};
+    const auto startPage=[&](int row,bool reportFooter=false) {
+        ++pageNumber;record=row;
+        header=pageBandHeight("PageHeader",layout_.reportPageHeader,false,reportFooter);
+        footer=pageBandHeight("PageFooter",layout_.reportPageFooter,false,reportFooter);
+        if(header) append("PageHeader",0,record);y=header;
     };
     bool pendingBodyBreak=(layout_.reportHeaderForceNewPage&2)!=0;
     for (int row=0;row<recordRows_.size();++row) {
@@ -485,8 +495,10 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
             finishPage(); startPage(row+1);
         }
         const int size=detailHeights[row];
+        if(pageHeight<=header+footer) return false;
         if (size<=pageHeight-header-footer && y+size>pageHeight-footer) { finishPage(); startPage(row+1); }
         record=row+1;
+        if(pageHeight<=header+footer) return false;
         if(size<=pageHeight-header-footer) {
             append("Section",y,record); y+=size;
             pendingBodyBreak=(layout_.detailForceNewPage&2)!=0; continue;
@@ -510,6 +522,7 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
         }
         int slice=0;
         while(slice<size) {
+            if(pageHeight<=header+footer) return false;
             const int available=pageHeight-footer-y;
             int end=qMin(size,slice+available);
             // Moving a cut upward can enter another column's line. Iterate
@@ -531,9 +544,10 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
         }
         pendingBodyBreak=(layout_.detailForceNewPage&2)!=0;
     }
-    if((pendingBodyBreak || (layout_.reportFooterForceNewPage&1)) && height("FormFooter")>0 && y>header) { finishPage(); startPage(record); }
-    if (y+height("FormFooter")>pageHeight-footer) { finishPage(); startPage(record); }
-    append("FormFooter",y,record); finishPage();
+    if((pendingBodyBreak || (layout_.reportFooterForceNewPage&1) || separateFooter) && hasReportFooter && y>header) {finishPage();startPage(record,true);}
+    if (y+height("FormFooter")>pageHeight-footer) {finishPage();startPage(record,true);}
+    if(pageHeight<=header+footer || y+height("FormFooter")>pageHeight-footer) return false;
+    append("FormFooter",y,record);finishPage();
     if (pageNumber>32767) return false;
     reportPrintPages_=pageNumber;
     for (auto& band:bands) {

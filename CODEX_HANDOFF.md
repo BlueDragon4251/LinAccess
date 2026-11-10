@@ -6244,3 +6244,22 @@ Keine neuen CTest-/Katalog-IDs;456/386/70. Vorstufecde2c756 privat/Baum geprüft
 Letztes DEB/Original/Inventar ist299b946f, vor StrConv/RNG (47,60/120,62s, sieben
 Hashes unverändert). Ohne Zwischenabschluss weiter; nächste Berichtsseitenkopf- /
 Seitenfußoptionen anhand dokumentierter tatsächlicher Semantik implementieren.
+
+
+Berichtsseitenkopf/-fuß: REPORT_PAGE_BANDS.md. Tatsächliche Report-Einstellungen
+PageHeader/PageFooter0-3 werden streng gelesen, nativ erstellt und im echten
+Berichtsentwurf gespeichert/wieder geöffnet. Dokumentierter Default AllPages0.
+Bit1 unterdrückt jeweiligen Bereich bei Berichtskopf, Bit2 bei Berichtsfuß und
+erzwingt für diesen eine eigene Seite (dokumentierte Access-Regel). Gemischte
+Einstellungen bleiben unabhängig; ohne Berichtsfuß keine künstliche Fußseite.
+Pagination/Detailteilung nutzen tatsächliche aktive Bereichshöhen, ursprünglicher
+Datensatz/Layout werden restauriert; Ranges/Kopien nutzen weiter Quellseiten.
+Keine neue Gruppierungs-/Format-/Print-Event-/VBA-Property-Mutation-Parität.
+App/GUI/Layout gebaut. Bestehendes Layout1/1 in10,72s bestanden, tatsächliche PDF-
+Texte für alle4 Modi und gemischte Kombinationen, Seitenzahlen/Inhaltsgrenzen/
+Restaurierung und ungültige Quellen. GUI hatte alte ForceNewPage1-Erwartung,
+Fixture verwendet bewusst0 und neue Fußseitenregel. Vorhandenen Wiederöffnungs-
+Check angepasst statt zweiten neuen Dialoglauf; nur GUI wiederholt1/1 in12,07s,
+20s-Watchdog unverändert. Keine neuen CTest-/Katalog-IDs;456/386/70.
+Vorstufeace05fb7 privat/Baum geprüft. DEB/Original/Inventar noch299b946f, vorStrConv/
+RNG/Seitenbereichen. Ohne Zwischenabschluss nächste allgemeine Gruppierung umsetzen.

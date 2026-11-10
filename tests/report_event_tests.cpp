@@ -167,6 +167,34 @@ Height =1500)BANDS");
         pagedSource.replace("Name =\"ReportSummary\"\nTop", "Name =\"ReportSummary\"\nControlSource =\"=Sum([id])\"\nTop");
         pagedSource.replace("Name =\"PageNumber\"\nTop", "Name =\"PageNumber\"\nControlSource =\"=CStr([Page]) & Chr(47) & CStr([Pages])\"\nTop");
         AccessFormPreview paged("paged report",pagedSource,{},db);
+        // PageHeader/PageFooter masks suppress real bands and force a footer page.
+        auto bandOptionsSource=pagedSource;
+        bandOptionsSource.replace("Begin FormHeader\nHeight =600",R"BAND(Begin FormHeader
+Height =600
+Begin Label
+Name ="ReportHeaderMarker"
+Caption ="RPT_HEAD"
+Width =3000
+Height =300
+End)BAND");
+        bandOptionsSource.replace("Name =\"PageTitle\"\nTop", "Name =\"PageTitle\"\nControlSource =\"=\"\"PAGE_HEAD\"\"\"\nTop");
+        bandOptionsSource.replace("ControlSource =\"=Sum([id])\"", "ControlSource =\"=\"\"RPT_FOOT\"\"\"");
+        bandOptionsSource.replace("ControlSource =\"=CStr([Page]) & Chr(47) & CStr([Pages])\"", "ControlSource =\"=\"\"PAGE_FOOT\"\" & CStr([Page]) & Chr(47) & CStr([Pages])\"");
+        for(const auto& modes:std::vector<std::pair<int,int>>{{0,0},{1,1},{2,2},{3,3},{1,2},{2,1}}) {
+            auto configured=bandOptionsSource;configured.replace("Begin Report\n","Begin Report\nPageHeader ="+QByteArray::number(modes.first)+"\nPageFooter ="+QByteArray::number(modes.second)+"\n");
+            const auto parsed=linaccess::parseAccessFormLayout(QString::fromUtf8(configured));assert(parsed.reportPageHeader==modes.first && parsed.reportPageFooter==modes.second);
+            AccessFormPreview bands("page band options",configured,{},db);const int expectedPages=((modes.first|modes.second)&2) ? 3 : 2;
+            assert(bands.findChild<QPrintPreviewWidget*>("access-report-pages")->pageCount()==expectedPages);
+            const auto bandPdf=output.filePath("page-bands.pdf");assert(bands.exportReportPdf(bandPdf));
+            const auto textTool=QStandardPaths::findExecutable("pdftotext");
+            if(!textTool.isEmpty()) {QProcess textReader;textReader.start(textTool,{"-layout",bandPdf,"-"});assert(textReader.waitForFinished(10000) && textReader.exitCode()==0);const auto text=QString::fromUtf8(textReader.readAllStandardOutput()).normalized(QString::NormalizationForm_KC);QStringList pages;for(const auto& page:text.split(QChar(12))) if(!page.trimmed().isEmpty()) pages.append(page);assert(pages.size()==expectedPages && pages.front().contains("RPT_HEAD") && pages.back().contains("RPT_FOOT"));
+                assert(pages.front().contains("PAGE_HEAD")==!(modes.first&1));assert(pages.front().contains("PAGE_FOOT")==!(modes.second&1));
+                assert(pages.back().contains("PAGE_HEAD")==!(modes.first&2));assert(pages.back().contains("PAGE_FOOT")==!(modes.second&2));
+                assert(text.count("first")==1 && text.count("second")==1 && text.count("RPT_HEAD")==1 && text.count("RPT_FOOT")==1);
+            }
+            assert(bands.findChild<QLineEdit*>("access-control-Name")->text()=="first" && bands.close());
+        }
+        for(const auto* mode:{"-1","4","1.5","invalid"}) {auto invalid=pagedSource;invalid.replace("Begin Report\n",QByteArray("Begin Report\nPageHeader =")+mode+"\n");bool refused=false;try {linaccess::parseAccessFormLayout(QString::fromUtf8(invalid));}catch(const std::exception&) {refused=true;}assert(refused);}
         auto* reportPages=paged.findChild<QPrintPreviewWidget*>("access-report-pages");
         auto* reportTabs=paged.findChild<QTabWidget*>("access-report-view-tabs");
         auto* pageNumber=paged.findChild<QSpinBox*>("access-report-page-number");

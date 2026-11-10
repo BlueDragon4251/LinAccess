@@ -2787,6 +2787,15 @@ void MainWindow::editReport(const QString& existingName) {
     runningField->setObjectName("native-report-running-field");runningField->setPlaceholderText("Optional: numerischer Feldname der Datenquelle");
     runningField->setToolTip("Dieses Detailfeld zeigt die laufende Summe über alle Datensätze. Für dieses Feld wird die Textvergrößerung deaktiviert. Nullwerte werden noch nicht unterstützt.");
     outer->addWidget(new QLabel("Laufende Summe über alle Datensätze (Feldname)",&dialog));outer->addWidget(runningField);
+    auto* pageHeaderMode=new QComboBox(&dialog);pageHeaderMode->setObjectName("native-report-page-header-mode");
+    auto* pageFooterMode=new QComboBox(&dialog);pageFooterMode->setObjectName("native-report-page-footer-mode");
+    const QStringList pageModes{"Auf allen Seiten","Nicht mit Berichtskopf","Nicht mit Berichtsfuß","Nicht mit Berichtskopf oder Berichtsfuß"};
+    pageHeaderMode->addItems(pageModes);pageFooterMode->addItems(pageModes);
+    pageHeaderMode->setCurrentIndex(qBound(0,old.value("page_header").toInt(),3));pageFooterMode->setCurrentIndex(qBound(0,old.value("page_footer").toInt(),3));
+    auto* pageBandModes=new QHBoxLayout;
+    pageBandModes->addWidget(new QLabel("Seitenkopf",&dialog));pageBandModes->addWidget(pageHeaderMode,1);
+    pageBandModes->addWidget(new QLabel("Seitenfuß",&dialog));pageBandModes->addWidget(pageFooterMode,1);outer->addLayout(pageBandModes);
+    for(auto* mode:{pageHeaderMode,pageFooterMode}) mode->setToolTip("Bei ‚Nicht mit Berichtsfuß‘ beginnt der Berichtsfuß auf einer neuen Seite.");
     auto* headerBreak=new QComboBox(&dialog); headerBreak->setObjectName("native-report-header-break");
     headerBreak->addItems({"Kein erzwungener Seitenwechsel","Vor dem Berichtskopf","Nach dem Berichtskopf","Vor und nach dem Berichtskopf"});
     headerBreak->setCurrentIndex(qBound(0,old.value("header_force_new_page").toInt(),3));
@@ -2809,7 +2818,7 @@ void MainWindow::editReport(const QString& existingName) {
     auto* row=new QHBoxLayout; auto* preview=addButton(row,"Vorschau"); preview->setObjectName("native-report-preview");
     auto* pdf=addButton(row,"PDF exportieren"); auto* save=addButton(row,"Speichern"); save->setObjectName("native-report-save"); outer->addLayout(row);
     installDesignerSaveShortcut(dialog,save);
-    const auto definition=[this,&dialog,existingName,old,title,sql,vba,canGrow,runningField,pageBreak,headerBreak,footerExpression,footerBreak,visual,hash,checkProject] {
+    const auto definition=[this,&dialog,existingName,old,title,sql,vba,canGrow,runningField,pageBreak,headerBreak,footerExpression,footerBreak,pageHeaderMode,pageFooterMode,visual,hash,checkProject] {
         checkProject();auto content=old;
         auto savedName=dialog.property("la_editor_saved_name").toString();
         if(savedName.isEmpty()) savedName=existingName;
@@ -2832,6 +2841,7 @@ void MainWindow::editReport(const QString& existingName) {
         if(visual->value("sql_sha256").toString()==hash(sql->toPlainText()))content.insert("visual_query",*visual);else content.remove("visual_query");
         content.insert("vba",vba->toPlainText()); content.insert("can_grow",canGrow->isChecked());
         content.insert("running_sum_field",runningField->text().trimmed());
+        content.insert("page_header",pageHeaderMode->currentIndex());content.insert("page_footer",pageFooterMode->currentIndex());
         content.insert("detail_force_new_page",pageBreak->currentIndex());
         content.insert("header_force_new_page",headerBreak->currentIndex());
         content.insert("footer_expression",footerExpression->text());

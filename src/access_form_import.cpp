@@ -230,6 +230,13 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
             }
             continue;
         }
+        if(form.kind==AccessDocumentKind::Report && current.type.compare("Report",Qt::CaseInsensitive)==0
+            && (key.compare("PageHeader",Qt::CaseInsensitive)==0 || key.compare("PageFooter",Qt::CaseInsensitive)==0)) {
+            bool valid=false;const int setting=value.toInt(&valid);
+            if(!valid || setting<0 || setting>3) throw std::runtime_error("Invalid report page header/footer setting");
+            if(key.compare("PageHeader",Qt::CaseInsensitive)==0) form.reportPageHeader=setting;else form.reportPageFooter=setting;
+            continue;
+        }
         if(key=="RunningSum" && current.type=="TextBox" && (current.controlTemplate || current.control>=0)) {
             bool valid=false;const auto setting=value.toInt(&valid);
             if(!valid || setting<0 || setting>2) throw std::runtime_error("Invalid imported RunningSum");

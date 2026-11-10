@@ -118,6 +118,7 @@ struct AccessFormLayout {
     QMap<QString,qint32> sectionBackColors;
     QMap<QString,bool> sectionCanGrow;
     int detailForceNewPage{},reportHeaderForceNewPage{},reportFooterForceNewPage{};
+    int reportPageHeader{},reportPageFooter{};
     QStringList reportPrintLimitations;
     QVector<AccessReportGroup> reportGroups;
     QVector<AccessVisualControl> controls;
