@@ -4950,3 +4950,13 @@ Katalog-IDs;456/386/70. Gruppendruck/-sortierung/-intervalle/-events/-Mutationen
 Windows-Parität bleiben offen. Vorstufe29ed6fd5 privat remote/Baum geprüft;
 letztes DEBa23c7009/Original119,54s/sieben Hashes unverändert liegt vor späteren
 Feld-/Container-/Gruppenänderungen. Ohne Zwischenabschluss weiterentwickeln.
+
+
+Build-Abhängigkeit nativer Typnamen: Die unveränderten drei Lookup-Funktionskörper
+stehen jetzt in native_object_types.cpp statt inline im breit eingebundenen Header;
+CMake bindet diese Datei in dieselbe Laufzeitbibliothek ein. Künftige Vokabular-
+änderungen betreffen eine Übersetzungseinheit. Funktionskörper mechanisch gegen
+Vorstufe verglichen, App/Core gebaut, bestehendes Core-Bündel1/1 in5,57s bestanden.
+Keine neue Laufzeitfunktion/CTest-/Katalog-ID und keine Laufzeit-Benchmarkbehauptung;
+456/386/70. Vorstufee8f54673 privat remote/Baum geprüft. Weiterentwickeln ohne
+Zwischenabschluss; letztes geprüftes DEB/Original weiterhina23c7009 vor Folgeänderungen.
