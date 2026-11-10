@@ -115,7 +115,7 @@ bool isControl(const QString& type) {
 
 AccessFormLayout parseAccessFormLayout(const QString& source) {
     AccessFormLayout form;
-    struct Block { QString type; int control{-1}; QString section; bool controlTemplate{}; int group{-1}; };
+    struct Block { QString type; int control{-1}; QString section; bool controlTemplate{}; int group{-1}; int breakSection{-1}; };
     QVector<Block> stack;
     QHash<QString, int> sections;
     QHash<QString,AccessControlFont> templateFonts;
@@ -150,6 +150,12 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
                 if (!it->section.isEmpty()) { section = it->section; break; }
             if (type == "Section" || type == "FormHeader" || type == "FormFooter"
                 || type == "PageHeader" || type == "PageFooter") section = type;
+            int breakSection=-1;
+            if(form.kind==AccessDocumentKind::Report && (type=="BreakHeader" || type=="BreakFooter")) {
+                if(form.reportGroupSections.size()>=20) throw std::runtime_error("Report group sections exceed ten levels");
+                breakSection=form.reportGroupSections.size();section=type+"#"+QString::number(breakSection);
+                form.reportGroupSections.append({section,0,type=="BreakHeader"});
+            }
             int control = -1;
             // The first unnamed Begin inside Form defines the Access defaults
             // for control types; these are not actual instantiated controls.
@@ -183,7 +189,7 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
                 if(form.reportGroups.size()>=10) throw std::runtime_error("Report grouping exceeds ten levels");
                 group=form.reportGroups.size();form.reportGroups.append(AccessReportGroup{});
             }
-            stack.push_back({type, control, section, isControl(type) && section.isEmpty(),group});
+            stack.push_back({type, control, section, isControl(type) && section.isEmpty(),group,breakSection});
             continue;
         }
         if (line.compare("End", Qt::CaseInsensitive) == 0) {
@@ -236,6 +242,10 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
             if(!valid || setting<0 || setting>3) throw std::runtime_error("Invalid report page header/footer setting");
             if(key.compare("PageHeader",Qt::CaseInsensitive)==0) form.reportPageHeader=setting;else form.reportPageFooter=setting;
             continue;
+        }
+        if(current.breakSection>=0 && key=="BreakLevel") {
+            bool valid=false;const int level=value.toInt(&valid);if(!valid || level<0 || level>=10) throw std::runtime_error("Invalid group section level");
+            form.reportGroupSections[current.breakSection].level=level;form.reportGroupSections[current.breakSection].levelProven=true;continue;
         }
         if(key=="RunningSum" && current.type=="TextBox" && (current.controlTemplate || current.control>=0)) {
             bool valid=false;const auto setting=value.toInt(&valid);
@@ -382,15 +392,15 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
             else if (key == "Width") form.width = integer();
         } else if (current.type == "Section" || current.type == "FormHeader"
                    || current.type == "FormFooter" || current.type == "PageHeader"
-                   || current.type == "PageFooter") {
+                   || current.type == "PageFooter" || current.breakSection>=0) {
             if (key == "Height") {
                 bool valid=false;
                 const auto height=value.toLongLong(&valid);
                 if (!valid || height<0 || height>std::numeric_limits<int>::max())
                     throw std::runtime_error("Invalid imported section height");
-                sections[current.type]=static_cast<int>(height);
+                sections[current.section]=static_cast<int>(height);
             } else if(key=="Name") {
-                form.sectionNames.insert(current.type,value);
+                form.sectionNames.insert(current.section,value);
             } else if(key=="ForceNewPage" && (current.type=="Section" || current.type=="FormHeader" || current.type=="FormFooter")) {
                 bool valid=false; const int setting=value.toInt(&valid);
                 if(!valid || setting<0 || setting>3) throw std::runtime_error("Invalid report section ForceNewPage");
@@ -398,21 +408,26 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
                 else if(current.type=="FormHeader") form.reportHeaderForceNewPage=setting;
                 else form.reportFooterForceNewPage=setting;
             } else if (key=="CanGrow") {
-                form.sectionCanGrow.insert(current.type,accessBoolean(value,false));
+                form.sectionCanGrow.insert(current.section,accessBoolean(value,false));
             } else if (key=="BackColor") {
                 bool valid=false; const auto color=value.toLongLong(&valid);
                 if (!valid || color<std::numeric_limits<qint32>::min() || color>std::numeric_limits<qint32>::max())
                     throw std::runtime_error("Invalid imported section color Long");
-                form.sectionBackColors.insert(current.type,static_cast<qint32>(color));
+                form.sectionBackColors.insert(current.section,static_cast<qint32>(color));
             }
         }
     }
     for (auto it=sections.cbegin();it!=sections.cend();++it)
         form.sectionHeights.insert(it.key(),it.value());
     // Reports place the report footer before the final page footer in preview.
-    const QStringList order=form.kind==AccessDocumentKind::Report
-        ? QStringList{"FormHeader","PageHeader","Section","FormFooter","PageFooter"}
-        : QStringList{"FormHeader","Section","FormFooter"};
+    QStringList order;
+    if(form.kind==AccessDocumentKind::Report) {
+        order={"FormHeader","PageHeader"};
+        for(int level=0;level<10;++level) for(const auto& group:form.reportGroupSections) if(group.header && group.level==level) order.append(group.section);
+        order.append("Section");
+        for(int level=9;level>=0;--level) for(const auto& group:form.reportGroupSections) if(!group.header && group.level==level) order.append(group.section);
+        order<<"FormFooter"<<"PageFooter";
+    } else order={"FormHeader","Section","FormFooter"};
     qint64 total=0;
     for (const auto& section:order) {
         form.sectionOffsets.insert(section,static_cast<int>(total));

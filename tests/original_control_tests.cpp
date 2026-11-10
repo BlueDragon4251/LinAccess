@@ -35,7 +35,7 @@ void testOriginalControls(const QDir& directory,const QJsonArray& objects) {
         "57cac4e2bfa6762b8b5b9772ab65b45fbd1c003bbb32fc889e9bb54da019c789",
         "c7abb2cc7ce0a829df92d518cd463cc5cdb5bbcb7000fb88bbe72fda285006c3",
         "2c4d460b8f707760d720093274e4cdcf1f5403fcd33d47fe302e8742922ee57d"};
-    int executed = 0;
+    int executed = 0,layoutPdfs=0,layoutFormatRefusals=0;
     for (const auto& item : objects) {
         const auto module = item.toObject();
         if (module["kind"]!="vba") continue;
@@ -91,13 +91,24 @@ void testOriginalControls(const QDir& directory,const QJsonArray& objects) {
                 assert(actions[index]->isVisible()==expected && one[index]==expected);
             }
             QTemporaryDir output; assert(output.isValid());
-            const auto pdf = output.filePath("layout.pdf"); assert(preview.exportLayoutPdf(pdf));
-            QFile document(pdf); assert(document.open(QIODevice::ReadOnly));
-            const auto content = document.readAll();
-            assert(content.startsWith("%PDF-") && content.size()>500);
-            auto pages = QRegularExpression("/Type\\s*/Page(?!s)").globalMatch(QString::fromLatin1(content));
-            int pageCount = 0; while (pages.hasNext()) { pages.next(); ++pageCount; }
-            assert(pageCount==1);
+            const auto pdf = output.filePath("layout.pdf");QFile document(pdf);assert(document.open(QIODevice::WriteOnly));document.write("prior-layout-output");document.close();
+            const bool layoutPrinted=preview.exportLayoutPdf(pdf);
+            if(!layoutPrinted) {
+                // Real group controls reveal this previously omitted, unavailable
+                // source context. Do not turn its numeric-on-text errors into PDF.
+                assert(!preview.hasDataSource() && preview.dataSourceErrorNumber()>0);
+                const auto decoded=linaccess::parseAccessFormLayout(linaccess::decodeVbaSource(formBytes));int errors=0;
+                for(const auto& control:decoded.controls) {
+                    const auto* widget=preview.findChild<QWidget*>("access-control-"+control.name);if(!widget || !widget->property("la_format_error").toInt()) continue;
+                    ++errors;assert(widget->property("la_format_error").toInt()==13 && widget->property("la_vba_kind").toInt()==static_cast<int>(linaccess::VbaValue::Kind::Text));
+                    assert(control.controlSource.trimmed().startsWith('=') && QCryptographicHash::hash(control.format.toUtf8(),QCryptographicHash::Sha256).toHex()=="f95a5f24ba98e35187ed0f8d11909dd78ea5879b807b104b3d98809a5c6afb96");
+                }
+                assert(errors>0 && document.open(QIODevice::ReadOnly) && document.readAll()=="prior-layout-output");document.close();++layoutFormatRefusals;
+            } else {
+                assert(document.open(QIODevice::ReadOnly));const auto content=document.readAll();document.close();
+                assert(content.startsWith("%PDF-") && content.size()>500);
+                auto pages=QRegularExpression("/Type\\s*/Page(?!s)").globalMatch(QString::fromLatin1(content));int pageCount=0;while(pages.hasNext()) {pages.next();++pageCount;}assert(pageCount==1);++layoutPdfs;
+            }
             const auto protectedFile = output.filePath("original.mdb");
             QFile sentinel(protectedFile); assert(sentinel.open(QIODevice::WriteOnly)); sentinel.write("unchanged"); sentinel.close();
             assert(!preview.exportLayoutPdf(protectedFile));
@@ -109,6 +120,7 @@ void testOriginalControls(const QDir& directory,const QJsonArray& objects) {
         }
     }
     assert(executed==3);
+    assert(layoutPdfs+layoutFormatRefusals==executed);std::cout<<"Original layout outcomes: PDF="<<layoutPdfs<<", unavailable-source numeric-text refusals="<<layoutFormatRefusals<<'\n';
     std::cout << "Original report control handlers executed after resetting visibility: " << executed << '\n';
     int initialized=0,assignments=0;
     for (const auto& item : objects) {

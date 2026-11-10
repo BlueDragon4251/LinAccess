@@ -1,5 +1,6 @@
 #pragma once
 #include "access_query.hpp"
+#include "native_report_groups.hpp"
 #include "vba_analyzer.hpp"
 #include "vba_conditional.hpp"
 #include "vba_runtime.hpp"
@@ -34,6 +35,7 @@ inline NativeStoredReport nativeStoredReport(QString name,const QJsonObject& def
         if (column.isEmpty() || used.contains(column.toCaseFolded())) throw VbaRuntimeError(3251,"Native report columns are empty or ambiguous");
         (void)quoted(column); used.insert(column.toCaseFolded());
     }
+    const auto groups=nativeReportGroups(definition.value("groups"),columns,columnTypes);
     const auto runningValue=definition.value("running_sum_field");
     if(!runningValue.isUndefined() && !runningValue.isString()) throw VbaRuntimeError(5,"Invalid running sum field");
     const auto runningField=runningValue.toString().trimmed();
@@ -82,6 +84,9 @@ inline NativeStoredReport nativeStoredReport(QString name,const QJsonObject& def
     lines<<"PageHeader ="+QString::number(pageHeader)<<"PageFooter ="+QString::number(pageFooter);
     for (const auto& event:{QString("Open"),QString("Load"),QString("NoData"),QString("Close")})
         if (procedures.contains(("Report_"+event).toCaseFolded())) lines<<"On"+event+" =\"[Event Procedure]\"";
+    for(const auto& group:groups) lines<<"Begin BreakLevel"<<"ControlSource ="+quoted("["+group.field+"]")
+        <<"SortOrder ="+QString::number(group.descending ? -1 : 0)<<"GroupHeader ="+QString::number(group.header ? -1 : 0)
+        <<"GroupFooter ="+QString::number(group.footer.isEmpty() ? 0 : -1)<<"GroupOn =0"<<"GroupInterval =1"<<"KeepTogether =0"<<"End";
     lines<<"Begin FormHeader"<<"Height =600";
     if(!headerForceValue.isUndefined()) lines<<"ForceNewPage ="+QString::number(headerForce);
     lines<<"Begin Label"<<"Name ="+quoted(unique("native_report_title"))
@@ -90,7 +95,15 @@ inline NativeStoredReport nativeStoredReport(QString name,const QJsonObject& def
     for (int i=0;i<columns.size();++i)
         lines<<"Begin Label"<<"Name ="+quoted(unique("label_"+columns[i]))<<"Caption ="+quoted(captions.value(columns[i].toCaseFolded()).toString(columns[i]))
             <<"Left ="+QString::number(i*width+30)<<"Width ="+QString::number(width-60)<<"Height =300"<<"End";
-    lines<<"End"<<"Begin Section"<<"Height =360";
+    lines<<"End";
+    for(int level=0;level<groups.size();++level) if(groups[level].header) {
+        const auto& group=groups[level];lines<<"Begin BreakHeader"<<"BreakLevel ="+QString::number(level)<<"Height =450"<<"KeepTogether =-1"
+            <<"Begin TextBox"<<"Name ="+quoted(unique("native_group_header_"+QString::number(level)))<<"ControlSource ="+quoted("["+group.field+"]")
+            <<"Left =30"<<"Top =30"<<"Width ="+QString::number(reportWidth-60)<<"Height =300"<<"FontWeight =700";
+        if(const auto format=formats.value(group.field.toCaseFolded());!format.isUndefined()) {if(!format.isString()) throw VbaRuntimeError(5,"Invalid native report group Format");lines<<"Format ="+quoted(format.toString());}
+        lines<<"End"<<"End";
+    }
+    lines<<"Begin Section"<<"Height =360";
     if(!forceValue.isUndefined()) lines<<"ForceNewPage ="+QString::number(force);
     for (int i=0;i<columns.size();++i) {
         lines<<"Begin TextBox"<<"Name ="+quoted(columns[i])<<"ControlSource ="+quoted("["+columns[i]+"]");
@@ -100,6 +113,11 @@ inline NativeStoredReport nativeStoredReport(QString name,const QJsonObject& def
         lines<<"Left ="+QString::number(i*width+30)<<"Top =30"<<"Width ="+QString::number(width-60)<<"Height =270"<<"End";
     }
     lines<<"End";
+    for(int level=groups.size()-1;level>=0;--level) if(!groups[level].footer.isEmpty()) {
+        lines<<"Begin BreakFooter"<<"BreakLevel ="+QString::number(level)<<"Height =450"<<"KeepTogether =-1"
+            <<"Begin TextBox"<<"Name ="+quoted(unique("native_group_footer_"+QString::number(level)))<<"ControlSource ="+quoted(groups[level].footer)
+            <<"Left =30"<<"Top =30"<<"Width ="+QString::number(reportWidth-60)<<"Height =300"<<"FontWeight =700"<<"End"<<"End";
+    }
     if(!footerExpression.isEmpty())
         lines<<"Begin FormFooter"<<"Height =450"<<"ForceNewPage ="+QString::number(footerForce)
             <<"Begin TextBox"<<"Name ="+quoted(unique("native_report_summary"))<<"ControlSource ="+quoted(footerExpression)

@@ -2,6 +2,7 @@
 #include "access_format.hpp"
 #include "native_report_text_layout.hpp"
 #include "native_report_aggregate.hpp"
+#include "native_report_grouping.hpp"
 #include "vba_qt_value.hpp"
 #include <QAction>
 #include <QFileDialog>
@@ -315,7 +316,12 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
         if (const auto result=eventResult(event);result && (result->status==linaccess::VbaExecutionStatus::Error
             || result->status==linaccess::VbaExecutionStatus::Unsupported)) return false;
     if (reportAggregateCaching_ || layout_.kind!=linaccess::AccessDocumentKind::Report || !dataSourceAvailable_
-        || dataTruncated_ || !layout_.reportPrintLimitations.isEmpty()) return false;
+        || dataTruncated_) return false;
+    std::optional<linaccess::NativeReportGroupPlan> grouping;
+    try {grouping=linaccess::nativeReportGrouping(layout_,dataColumns_,dataTypes_,recordRows_);}catch(const std::exception&) {return false;}
+    if(!grouping) return false;
+    for(const auto& limitation:layout_.reportPrintLimitations)
+        if(grouping->levels.isEmpty() || (limitation!="GroupLevel" && limitation!="BreakLevel" && limitation!="BreakSection")) return false;
     auto* canvas=findChild<QWidget*>("access-form-canvas");
     if (!canvas || layout_.width<=0 || layout_.height<=0
         || layout_.width/15.0>canvas->width() || layout_.height/15.0>canvas->height()) return false;
@@ -386,15 +392,25 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
     reportAggregateValues_.clear();
     const auto clearAggregates=qScopeGuard([&] { reportAggregateValues_.clear(); });
     const int savedRecord=currentRecordIndex_,savedPage=reportPrintPage_,savedPages=reportPrintPages_;
+    const auto originalRows=recordRows_;const auto originalIds=rowIds_;const auto originalSnapshot=recordsetSnapshot_;
+    const auto originalGroupRange=reportGroupRange_;reportGroupRange_.reset();
     const auto canvasSize=canvas->size();
     const auto oldBand=canvas->property("la_print_band_rect"),oldColor=canvas->property("la_print_band_color");
     const auto restore=qScopeGuard([&] {
         resetControls(); canvas->setFixedSize(canvasSize);
         canvas->setProperty("la_print_band_rect",oldBand); canvas->setProperty("la_print_band_color",oldColor);
         reportRunningValues_.clear();
+        if(!grouping->levels.isEmpty()) {recordRows_=originalRows;rowIds_=originalIds;recordsetSnapshot_=originalSnapshot;}
+        reportGroupRange_=originalGroupRange;if(!grouping->levels.isEmpty()) reportAggregateValues_.clear();
         currentRecordIndex_=savedRecord; reportPrintPage_=savedPage; reportPrintPages_=savedPages;
         loadRecord();
     });
+    if(!grouping->levels.isEmpty()) {
+        if(!rowIds_.isEmpty() && rowIds_.size()!=recordRows_.size()) return false;
+        QVector<QVariantList> sorted;QVector<QVariant> identities;sorted.reserve(recordRows_.size());identities.reserve(rowIds_.size());
+        for(const int row:grouping->order) {sorted.append(recordRows_[row]);if(!rowIds_.isEmpty()) identities.append(rowIds_[row]);}
+        recordRows_=std::move(sorted);rowIds_=std::move(identities);recordsetSnapshot_.reset();
+    }
     // Build each record prefix once. Pagination and repeated preview paints only
     // read these values, so split sections never accumulate the same row twice.
     try {
@@ -471,13 +487,13 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
             state.widget->setGeometry(rectangle);
         }
     };
-    struct Band { QString section; int y,record,page,height,slice; QPicture commands; };
+    struct Band { QString section; int y,record,page,height,slice; QPicture commands;std::optional<QPair<int,int>> group; };
     QVector<Band> bands;
     int pageNumber=1;
     int record=recordRows_.isEmpty() ? 0 : 1;
-    const auto append=[&](const QString& section,int y,int row) {
+    const auto append=[&](const QString& section,int y,int row,std::optional<QPair<int,int>> scope={}) {
         const int size=section=="Section" && row>0 ? detailHeights[row-1] : height(section);
-        if (size) bands.append({section,y,row,pageNumber,size,0,{}});
+        if (size) bands.append({section,y,row,pageNumber,size,0,{},scope});
     };
     append("FormHeader",0,record);
     if(header) append("PageHeader",height("FormHeader"),record);
@@ -490,10 +506,24 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
         if(header) append("PageHeader",0,record);y=header;
     };
     bool pendingBodyBreak=(layout_.reportHeaderForceNewPage&2)!=0;
+    const auto appendGroup=[&](const QString& section,int row,QPair<int,int> scope) {
+        const int size=height(section);if(section.isEmpty() || size==0) return true;
+        if(pendingBodyBreak && y>header) {finishPage();startPage(row);}pendingBodyBreak=false;
+        if(size>pageHeight-header-footer) return false;
+        if(y+size>pageHeight-footer) {finishPage();startPage(row);}
+        if(pageHeight<=header+footer || size>pageHeight-header-footer) return false;
+        append(section,y,row,scope);y+=size;return true;
+    };
+    const auto closeGroups=[&](int row) {
+        for(int level=grouping->levels.size()-1;level>=0;--level)
+            if(grouping->ranges[level][row].second==row+1 && !appendGroup(grouping->levels[level].footer,row+1,grouping->ranges[level][row])) return false;
+        return true;
+    };
     for (int row=0;row<recordRows_.size();++row) {
-        if((pendingBodyBreak || (layout_.detailForceNewPage&1)) && y>header) {
-            finishPage(); startPage(row+1);
-        }
+        if(pendingBodyBreak && y>header) {finishPage();startPage(row+1);}pendingBodyBreak=false;
+        for(int level=0;level<grouping->levels.size();++level)
+            if(grouping->ranges[level][row].first==row && !appendGroup(grouping->levels[level].header,row+1,grouping->ranges[level][row])) return false;
+        if((layout_.detailForceNewPage&1) && y>header) {finishPage();startPage(row+1);}
         const int size=detailHeights[row];
         if(pageHeight<=header+footer) return false;
         if (size<=pageHeight-header-footer && y+size>pageHeight-footer) { finishPage(); startPage(row+1); }
@@ -501,7 +531,7 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
         if(pageHeight<=header+footer) return false;
         if(size<=pageHeight-header-footer) {
             append("Section",y,record); y+=size;
-            pendingBodyBreak=(layout_.detailForceNewPage&2)!=0; continue;
+            pendingBodyBreak=(layout_.detailForceNewPage&2)!=0;if(!closeGroups(row)) return false;continue;
         }
         resetControls(); applyGrowth(row); currentRecordIndex_=record; loadRecord();
         QVector<QPair<int,int>> forbidden;
@@ -542,7 +572,7 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
             y+=end-slice; slice=end;
             if(slice<size) { finishPage(); startPage(record); }
         }
-        pendingBodyBreak=(layout_.detailForceNewPage&2)!=0;
+        pendingBodyBreak=(layout_.detailForceNewPage&2)!=0;if(!closeGroups(row)) return false;
     }
     if((pendingBodyBreak || (layout_.reportFooterForceNewPage&1) || separateFooter) && hasReportFooter && y>header) {finishPage();startPage(record,true);}
     if (y+height("FormFooter")>pageHeight-footer) {finishPage();startPage(record,true);}
@@ -553,6 +583,7 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
     for (auto& band:bands) {
         resetControls();
         if(band.section=="Section" && band.record>0) applyGrowth(band.record-1);
+        reportGroupRange_=band.group;
         currentRecordIndex_=band.record; reportPrintPage_=band.page; loadRecord();
         for (const auto& name:calculated.value(band.section)) {
             const auto* widget=controls_.value(name.toCaseFolded()).data();

@@ -1,4 +1,7 @@
 #include "access_form_preview.hpp"
+#include "native_stored_report.hpp"
+#include "native_report_grouping.hpp"
+#include "vba_calendar.hpp"
 #include "original_bound_value.hpp"
 #include "access_form_objects.hpp"
 #include <QLineEdit>
@@ -195,6 +198,27 @@ End)BAND");
             assert(bands.findChild<QLineEdit*>("access-control-Name")->text()=="first" && bands.close());
         }
         for(const auto* mode:{"-1","4","1.5","invalid"}) {auto invalid=pagedSource;invalid.replace("Begin Report\n",QByteArray("Begin Report\nPageHeader =")+mode+"\n");bool refused=false;try {linaccess::parseAccessFormLayout(QString::fromUtf8(invalid));}catch(const std::exception&) {refused=true;}assert(refused);}
+        assert(query.exec("CREATE TABLE native_group_rows(outer_key TEXT,inner_key INTEGER,id INTEGER,value REAL)"));
+        assert(query.exec("INSERT INTO native_group_rows VALUES(NULL,1,11,0.0001),(NULL,1,12,0.0002),('A',1,21,0.1001),('A',1,22,0.2002),('A',2,23,0.3003),('B',1,31,0.4004),('B',2,32,0.5005),('B',2,33,0.6006)"));query.finish();
+        const QJsonObject groupedDefinition{{"sql","SELECT outer_key,inner_key,'ROW' & id AS row_marker,CCur(value) AS amount FROM native_group_rows ORDER BY id DESC"},
+            {"groups",QJsonArray{QJsonObject{{"field","outer_key"},{"descending",true},{"header",true},{"footer_expression",R"EXPR(="OUTER:" & CStr(Sum([amount])) & ":" & CStr(Count(*)))EXPR"}},
+                QJsonObject{{"field","inner_key"},{"descending",false},{"header",true},{"footer_expression",R"EXPR(="INNER:" & CStr(Sum([amount])) & ":" & CStr(Count(*)))EXPR"}}}},
+            {"footer_expression",R"EXPR(="REPORT:" & CStr(Sum([amount])) & ":" & CStr(Count(*)) & ":" & CStr(First([row_marker])) & ":" & CStr(Last([row_marker])))EXPR"}};
+        const auto earlyDate=linaccess::vbaDateValue(linaccess::VbaValue::string("1899-12-29 06:00:00")),lateDate=linaccess::vbaDateValue(linaccess::VbaValue::string("1899-12-29 18:00:00"));assert(linaccess::nativeReportGroupCompare(earlyDate,lateDate)<0);
+        const auto groupedPacket=linaccess::nativeStoredReport("Native nested grouping",groupedDefinition,db);
+        const auto groupedLayout=linaccess::parseAccessFormLayout(QString::fromUtf8(groupedPacket.layout));assert(groupedLayout.reportGroups.size()==2 && groupedLayout.reportGroupSections.size()==4);
+        AccessFormPreview grouped("Native nested grouping",groupedPacket.layout,{},db,nullptr,false,{},std::nullopt,0,-1,groupedPacket.recordSource);assert(grouped.hasDataSource());assert(grouped.findChild<QWidget*>("access-report-page-view")->property("la_report_pages_valid").toBool());
+        auto* originalRow=grouped.findChild<QLineEdit*>("access-control-row_marker");assert(originalRow && originalRow->text()=="ROW33");
+        const auto groupedPdf=output.filePath("nested-groups.pdf");assert(grouped.exportReportPdf(groupedPdf) && originalRow->text()=="ROW33");
+        QFile groupedBytes(groupedPdf);assert(groupedBytes.open(QIODevice::ReadOnly));const auto previousGrouped=groupedBytes.readAll();groupedBytes.close();
+        const auto groupTextTool=QStandardPaths::findExecutable("pdftotext");
+        if(!groupTextTool.isEmpty()) {QProcess textReader;textReader.start(groupTextTool,{"-layout",groupedPdf,"-"});assert(textReader.waitForFinished(10000) && textReader.exitCode()==0);const auto text=QString::fromUtf8(textReader.readAllStandardOutput()).normalized(QString::NormalizationForm_KC);
+            for(const auto* total:{"INNER:0.0003:2","INNER:0.3003:2","INNER:0.3003:1","INNER:0.4004:1","INNER:1.1011:2","OUTER:1.5015:3","OUTER:0.6006:3","OUTER:0.0003:2","REPORT:2.1024:8:ROW31:ROW11"}) assert(text.contains(total));
+            const QRegularExpression marker("ROW[0-9]+");auto matches=marker.globalMatch(text);QStringList rows;while(matches.hasNext()) rows.append(matches.next().captured());assert(rows.mid(0,8)==QStringList({"ROW31","ROW33","ROW32","ROW22","ROW21","ROW23","ROW12","ROW11"}));
+        }
+        const auto restoredSummary=makePreviewControlsObject(grouped)->member("Item",{linaccess::VbaValue::string("native_report_summary")}).object->member("Value",{});assert(restoredSummary.asText()=="REPORT:2.1024:8:ROW33:ROW11");assert(grouped.close());
+        auto unsupportedGrouped=groupedPacket.layout;unsupportedGrouped.replace("GroupOn =0","GroupOn =1");AccessFormPreview intervalGroup("Unsupported group interval",unsupportedGrouped,{},db,nullptr,false,{},std::nullopt,0,-1,groupedPacket.recordSource);assert(intervalGroup.hasDataSource());assert(!intervalGroup.exportReportPdf(groupedPdf));assert(groupedBytes.open(QIODevice::ReadOnly) && groupedBytes.readAll()==previousGrouped);groupedBytes.close();assert(intervalGroup.close());
+        auto unprovenGrouped=groupedPacket.layout;unprovenGrouped.replace("GroupOn =0\n","");AccessFormPreview unprovenGroup("Unproven group metadata",unprovenGrouped,{},db,nullptr,false,{},std::nullopt,0,-1,groupedPacket.recordSource);assert(unprovenGroup.hasDataSource());assert(!unprovenGroup.exportReportPdf(groupedPdf) && unprovenGroup.close());
         auto* reportPages=paged.findChild<QPrintPreviewWidget*>("access-report-pages");
         auto* reportTabs=paged.findChild<QTabWidget*>("access-report-view-tabs");
         auto* pageNumber=paged.findChild<QSpinBox*>("access-report-page-number");

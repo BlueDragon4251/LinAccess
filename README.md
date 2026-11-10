@@ -140,6 +140,10 @@ ctest --test-dir build-core --output-on-failure
 Selbst angelegte Berichte öffnen jetzt dieselbe native Report-Laufzeit mit SQL,
 VBA-Ereignissen, Seitenansicht und PDF. Der automatische Spaltenentwurf bleibt
 begrenzt; siehe [eigene Berichte](docs/NATIVE_STORED_REPORTS.md).
+Im Berichtsentwurf bietet **Gruppieren und sortieren** bis zu zehn Feldstufen mit
+Gruppenkopf, Gruppenfußberechnung und getrennter Berichtssumme; der
+[geprüfte native Umfang und seine Grenzen](docs/NATIVE_REPORT_GROUPING.md) gelten
+für beliebige eigene Datenquellen. Vollständige Access-Druckparität bleibt offen.
 
 Die native klassische Oberfläche ist unter **Ansicht → Klassische Oberfläche**
 umschaltbar; die Auswahl wird gespeichert. Sie bildet eine klassische Qt-Grundlage,

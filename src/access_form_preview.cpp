@@ -603,7 +603,12 @@ public:
     linaccess::VbaValue domainAggregate(std::string_view function,const std::vector<linaccess::VbaValue>& args) override {
         return linaccess::nativeDomainValue(preview_.db_,args,function);
     }
-    linaccess::VbaValue cachedAggregate(const QString& key,const std::function<linaccess::VbaValue()>& compute) {
+    QPair<int,int> aggregateBounds() const {
+        const auto range=preview_.reportGroupRange_.value_or(QPair<int,int>{0,static_cast<int>(preview_.recordRows_.size())});
+        if(range.first<0 || range.second<range.first || range.second>preview_.recordRows_.size()) throw linaccess::VbaRuntimeError(3251,"Report aggregate scope invalid");return range;
+    }
+    linaccess::VbaValue cachedAggregate(const QString& expressionKey,const std::function<linaccess::VbaValue()>& compute) {
+        const auto key=preview_.reportGroupRange_ ? QString("group:%1:%2:").arg(preview_.reportGroupRange_->first).arg(preview_.reportGroupRange_->second)+expressionKey : "report:"+expressionKey;
         if (aggregateRow_) return linaccess::VbaValue::errorValue(3251);
         if (preview_.reportAggregateCaching_) {
             const auto found=preview_.reportAggregateValues_.constFind(key);
@@ -628,13 +633,15 @@ public:
         if (preview_.dataTruncated_) throw linaccess::VbaRuntimeError(3035,"Aggregate would use incomplete records");
         if (allRecords) {
             if (function!="count") throw linaccess::VbaRuntimeError(5,"Aggregate field required");
-            return linaccess::VbaValue::numeric(preview_.recordRows_.size());
+            const auto bounds=aggregateBounds();return linaccess::VbaValue::numeric(bounds.second-bounds.first);
         }
         const auto name=QString::fromUtf8(field.data(),field.size());
         const auto index=columnIndex(name,preview_.dataColumns_);
         if (index<0) throw linaccess::VbaRuntimeError(2465,"Aggregate field unavailable");
         linaccess::NativeReportAggregate aggregate(function,true);
-        for(const auto& row:preview_.recordRows_) {
+        const auto bounds=aggregateBounds();
+        for(int position=bounds.first;position<bounds.second;++position) {
+            const auto& row=preview_.recordRows_[position];
             if(row[index].isNull()) {
                 if(function=="first" || function=="last") aggregate.add(linaccess::VbaValue{});
                 continue;
@@ -657,7 +664,8 @@ public:
             if (preview_.recordRows_.isEmpty()) throw linaccess::VbaRuntimeError(3251,"Empty compound aggregate binding requires validation");
             const QScopedValueRollback<std::optional<int>> scope(aggregateRow_);
             linaccess::NativeReportAggregate aggregate(function);
-            for (int row=0;row<preview_.recordRows_.size();++row) {
+            const auto bounds=aggregateBounds();
+            for (int row=bounds.first;row<bounds.second;++row) {
                 aggregateRow_=row;
                 const auto value=linaccess::evaluateAccessExpression(expression,*this);
                 if (value.kind==linaccess::VbaValue::Kind::Error) return value;

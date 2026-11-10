@@ -3983,3 +3983,31 @@ Check angepasst statt zweiten neuen Dialoglauf; nur GUI wiederholt1/1 in12,07s,
 20s-Watchdog unverändert. Keine neuen CTest-/Katalog-IDs;456/386/70.
 Vorstufeace05fb7 privat/Baum geprüft. DEB/Original/Inventar noch299b946f, vorStrConv/
 RNG/Seitenbereichen. Ohne Zwischenabschluss nächste allgemeine Gruppierung umsetzen.
+
+
+Native allgemeine Berichtsgruppierung: NATIVE_REPORT_GROUPING.md. Echter Gruppen-
+und Sortierdialog mit bis10 unterschiedlichen Quellfeldern, Auf/Ab-Reihenfolge,
+Gruppenköpfen und Fußberechnungen; Speichern/Wiederöffnen/Quellgenerierung/Seiten-
+vorschau/PDF. AST hält tatsächliche Gruppenbereiche/Controls getrennt mit belegter
+Stufenbindung. Renderer verlangt alle7 expliziten Gruppenproperties, GroupOn0,
+Intervall1, KeepTogether0; keine fehlenden importierten Defaults geraten. Andere
+Druckgrenzen bleiben. Stabile temporäre Sortierung, Null-Gruppen, native Text-/
+Zahl-/Date-/Currency-Schlüssel, eindeutige Gruppenaggregate und Berichtssummen;
+Zeilen/IDs/Snapshot/Scope/aktueller Datensatz/Layout restauriert. Native Text-
+Vergleiche sind keine volle Jet-Locale-Parität; binäre/gemischte/fortgeschrittene
+Schlüssel/Intervalle/Repeat/KeepTogether/Events bleiben außerhalb dieses Umfangs.
+App/GUI/Layout gebaut: vorhandene GUI12,68s bestanden (20s unverändert), gezielt
+Layout nach Fixturekorrekturen1/1 in9,99s. Tatsächliche verschachtelte PDF-Summen/
+Counts/Null/stabile Marker/First-Last/Restaurierung, Date-Rand, Grenzen/Dateierhalt.
+Fixture nutzte zunächst bestehendes SQL-CStr3085 und fehlenden RecordSource-
+Override; nun vorhandene Verkettung und tatsächliche Paketquelle wie die App.
+Wichtig: Original-Toolbar-Prüffälle lesen nun bisher ausgelassene Gruppencontrols.
+Ohne Datenbank verweigern alle3 Layout-PDFs wegen numerischem Format auf berechnetem
+Text13. Exakter bekannter Maskenhash/Quelle fehlt/Typ/Error/Dateierhalt geprüft;
+aktuell0 positive Layout-PDFs und3 belegte Verweigerungen. Drei Original-Handler
+weiter ausgeführt; keine neuen privaten VBA-Aufrufe, keine Initialisierungs- /
+Original-Berichtsparität behauptet. Frühere unvollständige positive Layout-
+Beobachtung ist für diesen Stand ersetzt. Keine neuen CTest-/Katalog-IDs;
+456/386/70. Vorstufe6578f056 privat/Baum geprüft. DEB/Original/Inventar noch299b946f,
+vorStrConv/RNG/Seitenbereichen/Gruppierung; neue gebündelte Paketprüfung folgt.
+Ohne Zwischenabschluss weiter. Allgemeine SQL-CStr-Lücke separat beheben.

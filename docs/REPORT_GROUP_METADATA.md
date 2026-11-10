@@ -3,7 +3,9 @@
 The actual Access2003 artifacts contain42 active BreakLevel blocks across nine
 reports, plus30 BreakHeader and29 BreakFooter sections. The earlier output bound
 recognized only GroupLevel. Active BreakLevel ControlSource and unsupported break
-sections now also prevent simplified report print/PDF output. GroupLevel spelling
+sections also guard unproven/unsupported report print/PDF output. Bounded native
+authoring/rendering is now implemented in [native grouping](NATIVE_REPORT_GROUPING.md);
+all source-property and section-link proofs remain required. GroupLevel spelling
 is case-insensitive; an empty inactive BreakLevel source alone does not block.
 The existing atomic PDF path preserves a prior target after refusal. Original
 record-binding observations do not prove faithful grouped output.
@@ -19,7 +21,7 @@ named Index bind actual objects. Repeated access retains identity while held.
 No property absent from the source is filled with a guessed default; it refuses
 3251. Metadata mutation refuses383, bad arity450, Null index94 and an index absent
 from the actual source5. This does not implement group creation/deletion, every
-unused ten-slot/default-template rule, property mutation, group sorting/rendering,
+unused ten-slot/default-template rule, property mutation, advanced grouping outside the bounded native renderer,
 GroupOn intervals, GroupLevel enumeration, Windows error precedence or full
 report grouping/pagination/events. It exposes actual source state and keeps
 unsupported output guarded. F050/F085/F087 remain broad open requirements.

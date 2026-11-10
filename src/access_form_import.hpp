@@ -92,6 +92,7 @@ struct AccessReportGroup {
     std::optional<bool> sortOrder,groupHeader,groupFooter;
     std::optional<int> groupOn,groupInterval,keepTogether;
 };
+struct AccessReportGroupSection {QString section;int level{};bool header{},levelProven{};};
 struct AccessFormLayout {
     AccessDocumentKind kind{AccessDocumentKind::Form};
     QString caption;
@@ -121,6 +122,7 @@ struct AccessFormLayout {
     int reportPageHeader{},reportPageFooter{};
     QStringList reportPrintLimitations;
     QVector<AccessReportGroup> reportGroups;
+    QVector<AccessReportGroupSection> reportGroupSections;
     QVector<AccessVisualControl> controls;
     QMap<QString,QString> events;
 };

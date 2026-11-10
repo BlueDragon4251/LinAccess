@@ -822,6 +822,9 @@ End Sub
         dialog->findChild<QLineEdit*>("native-report-name")->setText("Owned Summary Report");
         dialog->findChild<QPlainTextEdit*>("native-report-sql")->setPlainText("SELECT id FROM native_report_rows ORDER BY id");
         dialog->findChild<QLineEdit*>("native-report-footer-expression")->setText("=Sum([id])");
+        QTimer::singleShot(0,dialog,[&] {auto* editor=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(editor && editor->objectName()=="native-report-group-designer");auto* list=editor->findChild<QTableWidget*>("native-report-groups-list");assert(list && list->rowCount()==0);editor->findChild<QPushButton*>("native-report-group-add")->click();assert(list->rowCount()==1);qobject_cast<QComboBox*>(list->cellWidget(0,0))->setCurrentText("id");qobject_cast<QLineEdit*>(list->cellWidget(0,3))->setText("=Count(*)");editor->findChild<QDialogButtonBox*>("native-report-group-buttons")->button(QDialogButtonBox::Ok)->click();});
+        dialog->findChild<QPushButton*>("native-report-group-design")->click();
+
         dialog->findChild<QComboBox*>("native-report-footer-break")->setCurrentIndex(0);
         dialog->findChild<QComboBox*>("native-report-page-header-mode")->setCurrentIndex(3);
         dialog->findChild<QComboBox*>("native-report-page-footer-mode")->setCurrentIndex(2);
@@ -830,6 +833,7 @@ End Sub
     create->trigger(); QApplication::processEvents();
     assert(sql.exec("SELECT definition FROM main._la_objects WHERE kind='report' AND name='Owned Summary Report'") && sql.next());
     const auto summaryDesign=QJsonDocument::fromJson(sql.value(0).toByteArray()).object(); sql.finish();
+    assert(summaryDesign.value("groups").toArray().size()==1 && summaryDesign.value("groups").toArray()[0].toObject().value("footer_expression").toString()=="=Count(*)");
     assert(summaryDesign.value("footer_expression").toString()=="=Sum([id])" && summaryDesign.value("footer_force_new_page").toInt()==0 && summaryDesign.value("page_header").toInt()==3 && summaryDesign.value("page_footer").toInt()==2);
     selected=nullptr;
     for(QTreeWidgetItemIterator item(explorer);*item;++item)
@@ -846,6 +850,9 @@ End Sub
     QTimer::singleShot(0,&window,[&] {
         auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog);
         assert(dialog->findChild<QLineEdit*>("native-report-footer-expression")->text()=="=Sum([id])");
+        QTimer::singleShot(0,dialog,[&] {auto* editor=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(editor && editor->objectName()=="native-report-group-designer");auto* list=editor->findChild<QTableWidget*>("native-report-groups-list");assert(list && list->rowCount()==1 && qobject_cast<QComboBox*>(list->cellWidget(0,0))->currentText()=="id" && qobject_cast<QCheckBox*>(list->cellWidget(0,2))->isChecked() && qobject_cast<QLineEdit*>(list->cellWidget(0,3))->text()=="=Count(*)");editor->reject();});
+        dialog->findChild<QPushButton*>("native-report-group-design")->click();
+
         assert(dialog->findChild<QComboBox*>("native-report-footer-break")->currentIndex()==0 && dialog->findChild<QComboBox*>("native-report-page-header-mode")->currentIndex()==3 && dialog->findChild<QComboBox*>("native-report-page-footer-mode")->currentIndex()==2);
         dialog->reject();
     });

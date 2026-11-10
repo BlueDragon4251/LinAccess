@@ -5,6 +5,7 @@
 #include "native_designer_history.hpp"
 #include "native_form_controls.hpp"
 #include "native_query_builder.hpp"
+#include "native_report_group_designer.hpp"
 #include <QCryptographicHash>
 #include "native_schema_editor.hpp"
 #include "native_field_defaults.hpp"
@@ -2780,6 +2781,13 @@ void MainWindow::editReport(const QString& existingName) {
             *visual=QJsonObject{{"sql_sha256",hash(edited->sql)},{"design",edited->state}};
         }catch(const std::exception& error){messageError(&dialog,QString::fromUtf8(error.what()));}
     });
+    if(old.contains("groups") && !old.value("groups").isArray()) {messageError(this,"Die gespeicherte Gruppierung ist ungültig.");return;}
+    auto groups=std::make_shared<QJsonArray>(old.value("groups").toArray());
+    auto* groupButton=new QPushButton("Gruppieren und sortieren…",&dialog);groupButton->setObjectName("native-report-group-design");outer->addWidget(groupButton);
+    connect(groupButton,&QPushButton::clicked,&dialog,[this,&dialog,sql,groups,checkProject] {
+        try {checkProject();const auto edited=linaccess::editNativeReportGroups(&dialog,db_,sql->toPlainText(),*groups,checkProject);checkProject();if(edited) *groups=*edited;}
+        catch(const std::exception& error) {messageError(&dialog,QString::fromUtf8(error.what()));}
+    });
     auto* canGrow=new QCheckBox("Text vertikal erweitern (CanGrow)",&dialog); canGrow->setObjectName("native-report-cangrow");
     canGrow->setChecked(old.value("can_grow").toBool());
     canGrow->setToolTip("Ausgerichtete oder untereinanderliegende Textfelder mit begrenztem Seitenumbruch zwischen Textzeilen."); outer->addWidget(canGrow);
@@ -2818,7 +2826,7 @@ void MainWindow::editReport(const QString& existingName) {
     auto* row=new QHBoxLayout; auto* preview=addButton(row,"Vorschau"); preview->setObjectName("native-report-preview");
     auto* pdf=addButton(row,"PDF exportieren"); auto* save=addButton(row,"Speichern"); save->setObjectName("native-report-save"); outer->addLayout(row);
     installDesignerSaveShortcut(dialog,save);
-    const auto definition=[this,&dialog,existingName,old,title,sql,vba,canGrow,runningField,pageBreak,headerBreak,footerExpression,footerBreak,pageHeaderMode,pageFooterMode,visual,hash,checkProject] {
+    const auto definition=[this,&dialog,existingName,old,title,sql,vba,canGrow,runningField,pageBreak,headerBreak,footerExpression,footerBreak,pageHeaderMode,pageFooterMode,groups,visual,hash,checkProject] {
         checkProject();auto content=old;
         auto savedName=dialog.property("la_editor_saved_name").toString();
         if(savedName.isEmpty()) savedName=existingName;
@@ -2841,6 +2849,7 @@ void MainWindow::editReport(const QString& existingName) {
         if(visual->value("sql_sha256").toString()==hash(sql->toPlainText()))content.insert("visual_query",*visual);else content.remove("visual_query");
         content.insert("vba",vba->toPlainText()); content.insert("can_grow",canGrow->isChecked());
         content.insert("running_sum_field",runningField->text().trimmed());
+        content.insert("groups",*groups);
         content.insert("page_header",pageHeaderMode->currentIndex());content.insert("page_footer",pageFooterMode->currentIndex());
         content.insert("detail_force_new_page",pageBreak->currentIndex());
         content.insert("header_force_new_page",headerBreak->currentIndex());

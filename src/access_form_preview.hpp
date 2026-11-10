@@ -220,6 +220,7 @@ private:
     QMap<QString,std::shared_ptr<linaccess::VbaValue>> reportAggregateValues_;
     QMap<QString,QVector<std::shared_ptr<linaccess::VbaValue>>> reportRunningValues_;
     bool reportAggregateCaching_{};
+    std::optional<QPair<int,int>> reportGroupRange_;
     int reportPrintPage_{},reportPrintPages_{};
     QPointer<QWidget> reportPageView_;
     int dataSourceErrorNumber_{};
