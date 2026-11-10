@@ -3481,10 +3481,19 @@ void mutateNativeRelation(std::shared_ptr<NativeRelationCatalog> catalog,const V
             const auto p=findField(parentFields,field->name_),c=findField(childFields,field->foreign_);
             const auto pType=p.sourceType ? p.sourceType : provenDaoFieldType(p.type),cType=c.sourceType ? c.sourceType : provenDaoFieldType(c.type);
             if(pType<=0 || pType!=cType || pType==11 || pType==12 || pType==15 || (pType==10 && (p.sourceSize<=0 || p.sourceSize!=c.sourceSize))) throw VbaRuntimeError(3251,"DAO: Relation field types/capacities are not compatible and proven");
-            if((rebuild || (builder->state_->attributes&1)) && pType!=1 && pType!=2 && pType!=3 && pType!=4 && pType!=6 && pType!=7 && pType!=8) throw VbaRuntimeError(3251,"DAO: Enforced relation requires matching numeric or canonical native Date fields");
+            if((rebuild || (builder->state_->attributes&1)) && pType!=1 && pType!=2 && pType!=3 && pType!=4 && pType!=5 && pType!=6 && pType!=7 && pType!=8) throw VbaRuntimeError(3251,"DAO: Enforced relation requires matching numeric or canonical native Date fields");
             if(pType==6 && (rebuild || (builder->state_->attributes&1))) {
                 const auto nativeSingle=[&](const QString& table,const TableSchemaColumn& column) {if(!column.nativeAttributes || *column.nativeAttributes!=1 || !column.required) return false;QSqlQuery declared(db);if(!declared.exec("PRAGMA main.table_info("+quote(table)+")")) queryFailure(declared);while(declared.next()) if(declared.value(1).toString()==column.name) return declared.value(2).toString().trimmed().toUpper()=="SINGLE_REAL";return false;};
                 if(!nativeSingle(parent,p) || !nativeSingle(child,c)) throw VbaRuntimeError(3251,"DAO: Single relationship keys require native quantized Single fields on both sides");
+            }
+            if(pType==5 && (rebuild || (builder->state_->attributes&1))) {
+                const auto nativeCurrency=[&](const QString& table,const TableSchemaColumn& column) {
+                    if(!column.nativeAttributes || *column.nativeAttributes!=1 || !column.required || column.type!="CURRENCY_REAL") return false;
+                    QSqlQuery declared(db);if(!declared.exec("PRAGMA main.table_info("+quote(table)+")")) queryFailure(declared);
+                    while(declared.next()) if(declared.value(1).toString()==column.name) return declared.value(2).toString().trimmed().compare("REAL",Qt::CaseInsensitive)==0;
+                    return false;
+                };
+                if(!nativeCurrency(parent,p) || !nativeCurrency(child,c)) throw VbaRuntimeError(3251,"DAO: Currency relationship keys require matching native exact Currency storage on both sides");
             }
             if(pType==8 && (rebuild || (builder->state_->attributes&1)) && (!canonicalNativeDateColumn(db,parent,p) || !canonicalNativeDateColumn(db,child,c))) throw VbaRuntimeError(3251,"DAO: Date relationship keys require canonical native Date fields on both sides");
             if(primaryNames.contains(p.name.toCaseFolded()) || foreignNames.contains(c.name.toCaseFolded())) throw VbaRuntimeError(3191,"DAO: Duplicate relation field");primaryNames.insert(p.name.toCaseFolded());foreignNames.insert(c.name.toCaseFolded());pairs.append({p.name,c.name});parentNames.append(p.name);

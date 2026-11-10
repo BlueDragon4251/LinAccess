@@ -5036,3 +5036,19 @@ Scripting-Lookup fremde Präfixe. Optionaler GUI-Phasenlogger enthält nur Namen
 Core/GUI/DAO-Bündel3/3 in15,18s (0,55/12,29/2,35) bestanden. Tatsächliche Etappenzeiten,
 keine allgemeine Benchmark-/Paritätsquote; keine neuen CTest-/Katalog-IDs;456/386/70.
 Ohne Zwischenabschluss weitere allgemeine Anforderungen fortsetzen.
+
+
+Native Währungs-Beziehungsschlüssel: DAO_NATIVE_CURRENCY_RELATIONS.md. Typ5 ist
+für geprüfte native REAL/CURRENCY_REAL-Paare mit expliziten Felddeklarationen
+freigeschaltet; bestehende Required-/Unique-/Schema-/Wertdigest-/FK-Prüfungen
+bleiben. Verwaiste Datensätze brechen atomar ab, Retry nach Korrektur funktioniert;
+echte Update-/Delete-Kaskaden, Null-Fremdschlüssel, Binärpayload, Reorder und
+Relation-Delete im bestehenden DAO-Bündel1/1 in2,44s bestanden. App/DAO gebaut.
+Keine volle Jet-Currency-Reichweite/Windows-Parität; F014/F055/F121 bleiben offen,
+keine neue CTest-/Katalog-ID;456/386/70 unverändert. Vorstufe33b97df privat und
+Remote-Head überprüft. Letztes DEB/Original/Inventar bleibt da72e727; dessen
+bekannte Makrogrenze ist kein positiver initialisierter Verkaufs-/Drucknachweis.
+Unabhängige schreibgeschützte MDB-Kopiebeobachtung:29 Tabellen/316 Spalten,
+81 tatsächliche Defaults vollständig übernommen ohne Literalabweichung;
+15 zusätzliche Backenddefaults ausschließlich Boolean. Keine VBA-/Geschäftsdaten
+für diese Beobachtung geladen oder ausgegeben. Ohne Zwischenabschluss fortsetzen.
