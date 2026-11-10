@@ -140,6 +140,23 @@ End Function
         assert(sql.exec("CREATE TEMP TABLE cross_statistics(row_key INTEGER,category TEXT,value REAL)"));
         int shadowError=0;try{(void)linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery(statisticalSource),{});}catch(const linaccess::VbaRuntimeError& failure){shadowError=failure.number;}assert(shadowError==3251);
         assert(sql.exec("DROP TABLE temp.cross_statistics"));sql.finish();
+        assert(sql.exec("CREATE TABLE cross_selectors(row_key INTEGER4,category TEXT,quantity INTEGER2,amount CURRENCY_REAL,stamp DATETIME)"));
+        assert(sql.exec("INSERT INTO cross_selectors VALUES(1,'B',9,0.9,'2003-01-01 00:00:00'),(1,'A',NULL,NULL,NULL),(1,'A',5,0.5,'2003-01-05 00:00:00'),(1,'B',NULL,NULL,NULL),(2,'Z',1,0.1,'2003-01-02 00:00:00')"));sql.finish();
+        for(const auto& function:QStringList{"First","Last"}) for(const auto& field:QStringList{"quantity","amount","stamp"}) {
+            const auto source="TRANSFORM "+function+"(s."+field+") SELECT s.row_key FROM cross_selectors AS s GROUP BY s.row_key ORDER BY s.row_key PIVOT s.category IN ('A','B','missing')";
+            const auto result=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery(source),{});
+            assert(result.rows.size()==2 && result.rows[0][3].isNull() && result.rows[1][1].isNull() && result.rows[1][2].isNull());
+            for(int column=1;column<=2;++column) {
+                QSqlQuery reference(db);assert(reference.exec("SELECT "+field+" FROM cross_selectors WHERE row_key=1 AND category='"+QString(column==1 ? "A" : "B")+"' ORDER BY rowid "+QString(function=="First" ? "ASC" : "DESC")+" LIMIT 1") && reference.next());
+                assert(result.rows[0][column].isNull()==reference.value(0).isNull() && result.rows[0][column].toString()==reference.value(0).toString());reference.finish();
+            }
+            auto cursor=open(source.toStdString());auto value=cursor->member("Fields",{VbaValue::string("A")}).object;
+            assert(value->member("Type",{}).number==(field=="quantity" ? 3 : field=="amount" ? 5 : 8));
+            const auto actual=value->member("Value",{});
+            if(function=="First") assert(actual.kind==VbaValue::Kind::Null);
+            else assert(field=="quantity" ? actual.numericType==VbaValue::NumericType::Integer && actual.asNumber()==5 : field=="amount" ? actual.kind==VbaValue::Kind::Currency && actual.currencyUnits==5000 : actual.kind==VbaValue::Kind::Date);
+            cursor->member("Close",{});
+        }
         auto extremumDefinition=database->member("CreateQueryDef",{VbaValue::string("fixed_extrema"),VbaValue::string(extrema.toStdString())}).object;
         assert(extremumDefinition->member("Type",{}).number==16);
         rows=open("fixed_extrema");assert(rows->member("Fields",{VbaValue::string("A")}).object->member("Type",{}).number==5);rows->member("Close",{});
@@ -161,7 +178,7 @@ End Function
         assert(sql.exec("DROP TABLE temp.cross_extrema"));
         assert(linaccess::installAccessQueryViews(db)>=0);
         assert(sql.exec("SELECT [A] FROM fixed_extrema ORDER BY row_key") && sql.next() && sql.value(0).toDouble()==-0.3);sql.finish();
-        for(const auto* invalid:{"TRANSFORM First(cell) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category IN ('A')", "TRANSFORM Count(*) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category", "TRANSFORM Count(*) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category IN ('A','a')", "TRANSFORM Count(*) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category IN ('row_key')", "TRANSFORM Count(*) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category IN ('A',)", "TRANSFORM Count(*) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category IN (1,01)", "TRANSFORM Count(*) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category IN (1.5)", "TRANSFORM Count(*) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category IN (2147483648)", "TRANSFORM Count(*) SELECT row_key FROM cross_dates GROUP BY row_key PIVOT CDate(stamp) IN (1)"}) {
+        for(const auto* invalid:{"TRANSFORM Median(cell) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category IN ('A')", "TRANSFORM Count(*) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category", "TRANSFORM Count(*) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category IN ('A','a')", "TRANSFORM Count(*) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category IN ('row_key')", "TRANSFORM Count(*) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category IN ('A',)", "TRANSFORM Count(*) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category IN (1,01)", "TRANSFORM Count(*) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category IN (1.5)", "TRANSFORM Count(*) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category IN (2147483648)", "TRANSFORM Count(*) SELECT row_key FROM cross_dates GROUP BY row_key PIVOT CDate(stamp) IN (1)"}) {
             int refused=0;try {(void)linaccess::compileAccessQuery(invalid);}catch(const linaccess::VbaRuntimeError& error) {refused=error.number;}assert(refused==3251);
         }
     }

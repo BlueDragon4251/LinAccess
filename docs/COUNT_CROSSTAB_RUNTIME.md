@@ -61,3 +61,7 @@ limitations are superseded only within that documented numeric physical scope.
 FIXED_CROSSTAB_SUMS.md supersedes the earlier blanket Sum limitation only for
 proven Double/REAL and native Currency physical input fields. Dynamic headings,
 other sum type promotions and full TRANSFORM remain open.
+
+FIXED_CROSSTAB_SELECTORS.md documents actual filtered First/Last selection of
+matching pivot rows, including matching Null values. Earlier blanket selector
+limitations are superseded only within its checked physical native-type scope.

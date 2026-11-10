@@ -4404,3 +4404,17 @@ Keine neuen Tests/IDs;456/386/70 unverändert. Vorstufe103af93 privat remote/Bau
 geprüft. Geprüftes DEBc8bd82b bleibt älter. Ohne Zwischenabschluss weiter an echten
 festen Pivot-Auswahlen First/Last arbeiten, ohne nichtpassende Null-Zeilen als
 falsche erste/letzte Pivotwerte einzubeziehen.
+
+
+Feste First/Last-Pivots: FIXED_CROSSTAB_SELECTORS.md beschreibt tatsächliche
+Filterung passender Pivotzeilen vor der Auswahl, inklusive echter passender
+Nullwerte. INTEGER2/Currency/Datum und reale DAO-Typen/Variantwerte gegen separate
+native Zeilenscans geprüft; keine Behauptung über identische Windows-Besuchsfolge.
+App gebaut; vorhandener Schemafall erster Lauf1/1 in0,17s. Nach zusammenhängenden
+SQL-Erweiterungen originales Abfrageinventar einmal geprüft1/1 in47,83s:100
+klassifiziert,78 ausgeführt (73 gewöhnlich/5 mit technischen Parametern ohne
+Access-Ergebnisoracle),22 Grenzen (3 Quellspalten/9 Abhängigkeiten/10 Jet-Bindung).
+Alle sieben Upload-/Fixturehashes unverändert. Vorstufe49a60c7 privat remote/Baum
+geprüft. Keine neuen Tests/IDs; F068/456/386/70 unverändert. Geprüftes DEBc8bd82b
+liegt vor späteren Ordner-/Kreuztabellenänderungen. Ohne Zwischenabschluss
+weitere allgemeine DAO-/SQL-Metadatenlücken implementieren.
