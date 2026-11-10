@@ -1056,12 +1056,31 @@ void testEditableStarQueryDynasets() {
     assert(ordered->item("id").asNumber()==1);ordered->member("MoveLast",{});assert(ordered->item("id").asNumber()==0);ordered->member("Close",{});
     auto definition=database->member("CreateQueryDef",{VbaValue::string(""),VbaValue::string("SELECT * FROM query_edit_rows WHERE id=1")}).object;
     auto defined=definition->member("OpenRecordset",{}).object;assert(defined->member("Updatable",{}).truthy());defined->member("Edit",{});defined->assignItem("label",VbaValue::string("defined"));defined->member("Update",{});defined->member("Close",{});
-    assert(!open("SELECT id,label FROM query_edit_rows")->member("Updatable",{}).truthy());
+    auto projected=open("SELECT score,label FROM query_edit_rows ORDER BY id");assert(projected->member("Updatable",{}).truthy());
+    auto projectedFields=projected->member("Fields",{}).object;assert(projectedFields->member("Count",{}).asNumber()==2);
+    assert(projectedFields->member("Item",{VbaValue::integer(0)}).object->member("Name",{}).asText()=="score");
+    projected->member("Edit",{});projected->assignItem("score",VbaValue::longInteger(41));projected->member("Update",{});
+    assert(sql.exec("SELECT score FROM query_edit_rows WHERE id=0") && sql.next() && sql.value(0).toInt()==41);sql.finish();
+    auto aliased=open("SELECT score AS renamed FROM query_edit_rows");assert(!aliased->member("Updatable",{}).truthy());
+    auto projectedPeer=projected->member("Clone",{}).object;projectedPeer->member("MoveFirst",{});assert(projectedPeer->item("score").asNumber()==41);
+    assert(projectedFields->member("Item",{VbaValue::integer(0)}).object->member("SourceField",{}).asText()=="score");
+    assert(sql.exec("CREATE TABLE projected_defaults(id INTEGER PRIMARY KEY,shown INTEGER,omitted TEXT DEFAULT 'native-default',stamp DATE DEFAULT CURRENT_TIMESTAMP)"));sql.finish();
+    auto subset=open("SELECT shown FROM projected_defaults");assert(subset->member("Updatable",{}).truthy());subset->member("AddNew",{});subset->assignItem("shown",VbaValue::longInteger(17));subset->member("Update",{});
+    assert(subset->member("Fields",{}).object->member("Count",{}).asNumber()==1 && subset->item("shown").asNumber()==17);
+    assert(sql.exec("SELECT shown,omitted,stamp FROM projected_defaults") && sql.next() && sql.value(0).toInt()==17 && sql.value(1).toString()=="native-default" && !sql.value(2).isNull());sql.finish();
+    assert(sql.exec("CREATE TABLE projected_counter(id INTEGER PRIMARY KEY AUTOINCREMENT,shown INTEGER)"));sql.finish();
+    auto hiddenGenerator=open("SELECT shown FROM projected_counter");error([&] {hiddenGenerator->member("AddNew",{});},3251);assert(hiddenGenerator->member("EditMode",{}).asNumber()==0);
+    assert(sql.exec("SELECT COUNT(*) FROM projected_counter") && sql.next() && sql.value(0).toInt()==0);sql.finish();
+    auto reordered=open("SELECT label,score FROM query_edit_rows ORDER BY id");assert(reordered->member("Fields",{VbaValue::integer(0)}).object->member("Name",{}).asText()=="label");
+    reordered->member("Edit",{});reordered->assignItem("label",VbaValue::string("reordered"));reordered->member("Update",{});
+    assert(sql.exec("SELECT label FROM query_edit_rows WHERE id=0") && sql.next() && sql.value(0).toString()=="reordered");sql.finish();
+    assert(!open("SELECT score,score FROM query_edit_rows")->member("Updatable",{}).truthy());
+
     assert(!open("SELECT * FROM query_edit_rows",4)->member("Updatable",{}).truthy());
     assert(sql.exec("CREATE TABLE no_query_key(value INTEGER)"));assert(sql.exec("INSERT INTO no_query_key VALUES(7)"));sql.finish();assert(!open("SELECT * FROM no_query_key")->member("Updatable",{}).truthy());
     Host host(db);const auto result=executeVbaProcedure(R"VBA(Function EditStarQuery As Long
 Dim rows As DAO.Recordset
-Set rows=CurrentDb.OpenRecordset("SELECT * FROM query_edit_rows WHERE id=1",dbOpenDynaset)
+Set rows=CurrentDb.OpenRecordset("SELECT score FROM query_edit_rows WHERE id=1",dbOpenDynaset)
 If Not rows.Updatable Then Err.Raise 5
 rows.Edit
 rows!score=12

@@ -6641,3 +6641,17 @@ bestehendes DAO-Bündel1/1 in3,41s bestanden. Keine neuen CTest-/Katalog-IDs;
 456/386/70. Vorstufe8de1ead privat remote/Baum geprüft; letztes geprüftes Paket/
 Original weiterhinc67cbd9e vor Abfrageschreiben/Namen. Ohne Zwischenabschluss
 weitere allgemeine Anforderungen implementieren; keine Windows-Orakelbehauptung.
+
+
+DAO physische Abfrageprojektionen: DAO_EDITABLE_QUERY_PROJECTIONS.md dokumentiert
+schreibbare eindeutige physische Spaltenlisten/Teilmengen/Umordnung ohne Alias.
+Sichtbare Reihenfolge/Herkunft/Typen bleiben echt, unsichtbarer Schlüssel wird
+getrennt für Mutation geführt. Nur ausgewählte Defaults gelangen in Entwürfe;
+ausgelassene Text-/Date-Defaults bleiben echter DB-Ausführung. Ungefiltertes
+AddNew unterstützt; fehlende Generatorprojektion vor Entwurf/Reservierung3251.
+App/DAO/QueryModel/Currency gebaut; einmaliges Bündel5/5 in3,98s bestanden.
+Review ergänzte Generatorgrenze, nur betroffenes DAO erneut1/1 in3,43s.
+Echte SQL-/VBA-/Klon-/Metadaten-/Subset-/Umordnungsbelege. Keine neuen CTest-/
+Katalog-IDs;456/386/70. Vorstufe93a8a9f privat remote/Baum geprüft; letztes geprüftes
+DEB/Original weiterhinc67cbd9e. Alias-/Join-/Provider-/Orakelparität offen.
+Ohne Zwischenabschluss weitere allgemeine Anforderungen implementieren.

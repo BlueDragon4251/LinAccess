@@ -537,12 +537,13 @@ public:
         table_ = db_.tables().contains(source_, Qt::CaseInsensitive);
         if(!table_ && !snapshot && recordsetType_==2 && !queryPlan_.source.isEmpty() && queryPlan_.parameters.isEmpty()) {
             try {
-                QString predicate;QVector<QPair<int,Qt::SortOrder>> ordering;
-                const auto target=editableAccessQueryTable(db_,queryPlan_.source,&predicate,&ordering);
+                QString predicate;QVector<QPair<int,Qt::SortOrder>> ordering;QVector<AccessQueryColumn> projection;
+                const auto target=editableAccessQueryTable(db_,queryPlan_.source,&predicate,&ordering,&projection);
                 (void)physicalRowIdentity(db_,target);(void)readTableSchemaColumns(db_,target);
-                const auto schema=db_.record(target);QStringList terms;
+                const auto schema=db_.record(target);QStringList terms,fields;
+                for(const auto& field:projection) {if(!field.alias.isEmpty()) throw VbaRuntimeError(3251,"DAO: Writable query aliases are not mapped");fields.append(schema.fieldName(field.column));}
                 for(const auto& item:ordering) terms.append(quote(schema.fieldName(item.first))+(item.second==Qt::DescendingOrder ? " DESC" : " ASC"));
-                source_=target;table_=true;queryBased_=true;queryWhere_=predicate;queryOrdering_=terms;
+                source_=target;table_=true;queryBased_=true;queryWhere_=predicate;queryOrdering_=terms;queryProjection_=fields;
             } catch(const VbaRuntimeError& failure) {if(failure.number!=3251) throw;}
         }
         if(table_ && nativeTableNames(db_).contains(source_,Qt::CaseInsensitive)) tableGeneration_=data_->workspace->tableGenerations.value(source_.toCaseFolded());
@@ -792,6 +793,8 @@ public:
         if (key == "edit" || key == "addnew") {
             checkPhysicalSource();
             if(key=="addnew" && queryBased_ && !queryWhere_.isEmpty()) throw VbaRuntimeError(3251,"DAO: Filtered query AddNew membership is not yet validated");
+            if(key=="addnew" && queryBased_) for(const auto& generated:generatedAccessColumns(db_,source_))
+                if(!queryProjection_.contains(generated,Qt::CaseInsensitive)) throw VbaRuntimeError(3251,"DAO: AddNew requires projected generator fields for checked reservation");
             require(!readOnly_, "DAO: Recordset is read-only");
             require(mode_ == Mode::Browse, "DAO: Edit already in progress");
             changed_.clear();chunkFields_.clear();
@@ -1042,7 +1045,7 @@ private:
     struct CloneTag {};
     Recordset(const Recordset& source,CloneTag)
         : data_(source.data_),db_(source.db_),source_(source.source_),openingName_(source.openingName_),bindings_(source.bindings_),
-          table_(source.table_),readOnly_(source.readOnly_),frozen_(source.frozen_),queryBased_(source.queryBased_),recordsetType_(source.recordsetType_),tableGeneration_(source.tableGeneration_),indexName_(source.indexName_),position_(-1),queryPlan_(source.queryPlan_),queryDefinitionSource_(source.queryDefinitionSource_),filter_(source.filter_),sort_(source.sort_),queryWhere_(source.queryWhere_),queryOrdering_(source.queryOrdering_) {
+          table_(source.table_),readOnly_(source.readOnly_),frozen_(source.frozen_),queryBased_(source.queryBased_),recordsetType_(source.recordsetType_),tableGeneration_(source.tableGeneration_),indexName_(source.indexName_),position_(-1),queryPlan_(source.queryPlan_),queryDefinitionSource_(source.queryDefinitionSource_),filter_(source.filter_),sort_(source.sort_),queryWhere_(source.queryWhere_),queryOrdering_(source.queryOrdering_),queryProjection_(source.queryProjection_) {
         cloneCounted_=true; ++data_->workspace->clones;
         data_->cursors.insert(this);
     }
@@ -1178,6 +1181,7 @@ private:
                 const auto schema=readTableSchemaColumns(db_,mainName);
                 data_->literalDefaults=literalDefaultValues(db_,schema);
                 for(const auto& field:schema) {
+                if(queryBased_ && !queryProjection_.contains(field.name,Qt::CaseInsensitive)) {data_->literalDefaults.remove(field.name.toCaseFolded());continue;}
                 const auto key=field.name.toCaseFolded(); data_->types.insert(key,field.type);
                 if(field.nativeAttributes) {data_->validationRules.insert(key,field.validationRule);data_->validationTexts.insert(key,field.validationText);}
                 if(field.required) data_->requiredFields.insert(key,*field.required);if(field.allowZeroLength) data_->allowZeroLengthFields.insert(key,*field.allowZeroLength);
@@ -1202,7 +1206,8 @@ private:
         QSqlQuery query(db_);
         data_->rowIdentity=physicalRowIdentity(db_,source_);std::optional<NativeRecordsetIndex> selected;QString order;if(!indexName_.isEmpty()) {selected=checkedRecordsetIndex(db_,source_,indexName_);QStringList terms;for(int field=0;field<selected->fields.size();++field) terms.append(quote(selected->fields[field])+(selected->descending[field] ? " DESC" : " ASC"));terms.append(data_->rowIdentity+" ASC");order=" ORDER BY "+terms.join(',');}
         if(indexName_.isEmpty() && !queryOrdering_.isEmpty()) {auto terms=queryOrdering_;terms.append(data_->rowIdentity+" ASC");order=" ORDER BY "+terms.join(',');}
-        exec(query,"SELECT "+data_->rowIdentity+",* FROM main." + quote(source_)+(queryWhere_.isEmpty() ? QString{} : " WHERE ("+queryWhere_+")")+order);data_->selectedIndex=std::move(selected);
+        QStringList selection;for(const auto& field:queryProjection_) selection.append(quote(field));
+        exec(query,"SELECT "+data_->rowIdentity+","+(queryBased_ ? selection.join(',') : QString("*"))+" FROM main." + quote(source_)+(queryWhere_.isEmpty() ? QString{} : " WHERE ("+queryWhere_+")")+order);data_->selectedIndex=std::move(selected);
         const int offset = table_ ? 1 : 0;
         data_->columns.clear(); data_->rows.clear(); data_->ids.clear(); position_ = 0;
         const int end = query.record().count();
@@ -1292,7 +1297,7 @@ private:
     AccessQueryPlan queryPlan_;
     QString queryDefinitionSource_;
     QString filter_,sort_,queryWhere_;
-    QStringList queryOrdering_;
+    QStringList queryOrdering_,queryProjection_;
     std::weak_ptr<VbaObject> fields_;
     QMap<QString,std::weak_ptr<Field>> fieldObjects_;
 };
