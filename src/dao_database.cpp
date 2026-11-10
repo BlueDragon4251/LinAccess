@@ -681,11 +681,12 @@ public:
             const auto origin=args.size()==2 ? bookmarkPosition(args[1]) : position_;
             checkTransaction();if(closed_) throw VbaRuntimeError(3420,"DAO: Recordset closed during movement evaluation");
             if(mode_!=pendingMode || data_->revision!=revision) throw VbaRuntimeError(3219,"DAO: Recordset changed during movement evaluation");
-            if (data_->rows.empty() || (origin<0 && distance<=0) ||
-                (origin>=data_->rows.size() && distance>=0))
+            const bool fromDeleted=deleted_.has_value() && args.size()==1;
+            if(!fromDeleted && (data_->rows.empty() || (origin<0 && distance<=0) || (origin>=data_->rows.size() && distance>=0)))
                 throw VbaRuntimeError(3021,"DAO: No current record");
-            const auto destination=static_cast<qlonglong>(origin)+distance;
-            navigate(static_cast<qsizetype>(std::clamp<qlonglong>(destination,-1,data_->rows.size())));
+            if(fromDeleted && distance==0) throw VbaRuntimeError(3021,"DAO: Deleted position has no current record");
+            const auto destination=static_cast<qlonglong>(origin)+distance-(fromDeleted && distance>0 ? 1 : 0);
+            navigate(static_cast<qsizetype>(std::clamp<qlonglong>(destination,-1,data_->rows.size())),distance>0 ? 1 : distance<0 ? -1 : 0);
             noMatch_=false;
             return {};
         }
@@ -750,7 +751,7 @@ public:
             return VbaValue::integer(static_cast<std::int16_t>(*recordsetType_));
         }
         require(args.empty(), "DAO: Unexpected Recordset arguments");
-        if (key=="bookmark") return bookmarkAt(position_);
+        if (key=="bookmark") {current();return bookmarkAt(position_);}
         if (key=="lastmodified") {
             if(readOnly_) throw VbaRuntimeError(3251,"DAO: LastModified requires an editable recordset");
             if(!lastModified_) throw VbaRuntimeError(3021,"DAO: No record modified by this cursor");
@@ -760,17 +761,17 @@ public:
         if (key=="updatable") return VbaValue::logical(!readOnly_ && connectionUpdatable(db_));
         if (key=="editmode") return VbaValue::integer(mode_==Mode::Browse ? 0 : mode_==Mode::Edit ? 1 : 2);
         if (key=="nomatch") return VbaValue::logical(noMatch_);
-        if (key == "eof") return VbaValue::logical(data_->rows.empty() || position_ >= data_->rows.size());
-        if (key == "bof") return VbaValue::logical(data_->rows.empty() || position_ < 0);
+        if (key == "eof") return VbaValue::logical(!deleted_ && (data_->rows.empty() ? emptyBoundary_>=0 : position_>=data_->rows.size()));
+        if (key == "bof") return VbaValue::logical(!deleted_ && (data_->rows.empty() ? emptyBoundary_<=0 : position_<0));
         if (key == "recordcount") return longCount(data_->rows.size());
-        if (key=="absoluteposition") return longCount(position_<0 || position_>=data_->rows.size() ? -1 : position_);
+        if (key=="absoluteposition") return longCount(deleted_ || position_<0 || position_>=data_->rows.size() ? -1 : position_);
         if (key == "movefirst" || key == "movelast" || key == "movenext" || key == "moveprevious") {
             auto target=position_;
             if (key == "movefirst") target=0;
             if (key == "movelast") target=data_->rows.empty() ? 0 : data_->rows.size()-1;
-            if (key == "movenext") {require(position_<data_->rows.size(),"DAO: Already at EOF");++target;}
-            if (key == "moveprevious") {require(position_>=0 && !data_->rows.empty(),"DAO: Already at BOF");--target;}
-            navigate(target);
+            if (key == "movenext") {if(!deleted_) {require(position_<data_->rows.size(),"DAO: Already at EOF");++target;}}
+            if (key == "moveprevious") {if(!deleted_) require(position_>=0 && !data_->rows.empty(),"DAO: Already at BOF");--target;}
+            navigate(target,key=="movenext" ? 1 : key=="moveprevious" ? -1 : 0);
             noMatch_=false;
             return {};
         }
@@ -808,10 +809,16 @@ public:
             checkPhysicalSource();
             require(!readOnly_ && mode_ == Mode::Browse, "DAO: Cannot delete this Recordset");
             current();
+            const auto deletedId=data_->ids[position_];
+            const QPair<QVariant,QVariant> neighbors{position_>0 ? data_->ids[position_-1] : QVariant{},position_+1<data_->ids.size() ? data_->ids[position_+1] : QVariant{}};
+            std::vector<std::shared_ptr<Recordset>> affected;
+            for(auto* cursor:data_->cursors) if(!cursor->closed_ && !cursor->deleted_ && cursor->position_>=0 && cursor->position_<data_->ids.size() && data_->ids[cursor->position_]==deletedId)
+                if(auto lease=cursor->weak_from_this().lock()) affected.push_back(std::move(lease));
             QSqlQuery query(db_);
             require(query.prepare("DELETE FROM main." + quote(source_) + " WHERE "+data_->rowIdentity+"=?"), "DAO: Delete prepare failed");
             query.addBindValue(data_->ids[position_]);
             require(query.exec() && query.numRowsAffected() == 1, "DAO: Delete failed or record changed");
+            for(const auto& cursor:affected) {cursor->deleted_=neighbors;cursor->emptyBoundary_=0;}
             reload(false);
             return {};
         }
@@ -1029,14 +1036,22 @@ private:
             if (data_->columns[i].compare(name, Qt::CaseInsensitive) == 0) return i;
         throw std::runtime_error("DAO: Unknown field");
     }
-    void current() const { if (position_<0 || position_>=data_->rows.size()) throw VbaRuntimeError(3021,"DAO: No current record"); }
-    void navigate(qsizetype target) {
+    void current() const { if (deleted_ || position_<0 || position_>=data_->rows.size()) throw VbaRuntimeError(3021,"DAO: No current record"); }
+    void navigate(qsizetype target,int emptyDirection=0) {
         checkTransaction();if(closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");
         if(mode_!=Mode::Browse) {
-            if(target==position_) throw VbaRuntimeError(3219,"DAO: Pending no-op navigation remains unvalidated");
+            if(target==position_ && !deleted_) throw VbaRuntimeError(3219,"DAO: Pending no-op navigation remains unvalidated");
             pending_.clear();changed_.clear();chunkFields_.clear();mode_=Mode::Browse;
         }
-        position_=target;
+        deleted_.reset();emptyBoundary_=data_->rows.empty() ? emptyDirection : 0;position_=target;
+    }
+    void restoreDeletedPosition() {
+        if(!deleted_) return;
+        qsizetype target=deleted_->second.isNull() ? -1 : data_->ids.indexOf(deleted_->second);
+        if(target<0 && !deleted_->first.isNull()) {const auto previous=data_->ids.indexOf(deleted_->first);if(previous>=0) target=previous+1;}
+        if(target<0) target=std::clamp<qsizetype>(position_,0,data_->rows.size());
+        position_=target;emptyBoundary_=0;
+        deleted_=QPair<QVariant,QVariant>{target>0 ? data_->ids[target-1] : QVariant{},target<data_->ids.size() ? data_->ids[target] : QVariant{}};
     }
 
     void seek(const std::vector<VbaValue>& arguments) {
@@ -1075,7 +1090,7 @@ private:
         const bool backwards=kind=="findlast" || kind=="findprevious";
         const auto revision=data_->revision;
         const qsizetype step=backwards ? -1 : 1;
-        qsizetype candidate=kind=="findfirst" ? 0 : kind=="findlast" ? data_->rows.size()-1 : position_+step;
+        qsizetype candidate=kind=="findfirst" ? 0 : kind=="findlast" ? data_->rows.size()-1 : position_+(deleted_ && kind=="findnext" ? 0 : step);
         for (;candidate>=0 && candidate<data_->rows.size();candidate+=step) {
             if (clock.hasExpired(5000)) throw VbaRuntimeError(3035,"DAO: Find execution budget exceeded");
             const auto& row=data_->rows[candidate];
@@ -1097,14 +1112,15 @@ private:
         std::vector<std::shared_ptr<Recordset>> leases;
         for (auto* cursor:data_->cursors)
             if (auto lease=cursor->weak_from_this().lock()) leases.push_back(std::move(lease));
-        QMap<Recordset*,QPair<qsizetype,bool>> originalPositions;
-        for (auto* cursor:data_->cursors) originalPositions.insert(cursor,{cursor->position_,cursor->noMatch_});
+        struct CursorPosition {qsizetype position;bool noMatch;std::optional<QPair<QVariant,QVariant>> deleted;int emptyBoundary;};
+        QMap<Recordset*,CursorPosition> originalPositions;
+        for(auto* cursor:data_->cursors) originalPositions.insert(cursor,{cursor->position_,cursor->noMatch_,cursor->deleted_,cursor->emptyBoundary_});
         bool completed=false;
         const auto restore=qScopeGuard([&] {
             if (completed) return;
             const auto live=data_->cursors; *data_=original; data_->cursors=live;
             for (auto it=originalPositions.cbegin();it!=originalPositions.cend();++it) {
-                if (live.contains(it.key())) { it.key()->position_=it.value().first; it.key()->noMatch_=it.value().second; }
+                if (live.contains(it.key())) { it.key()->position_=it.value().position;it.key()->noMatch_=it.value().noMatch;it.key()->deleted_=it.value().deleted;it.key()->emptyBoundary_=it.value().emptyBoundary; }
             }
         });
         QMap<qlonglong,quint64> previousTokens;
@@ -1112,7 +1128,7 @@ private:
         if (!invalidate && table_) {
             for (qsizetype i=0;i<data_->ids.size();++i) previousTokens.insert(data_->ids[i].toLongLong(),data_->bookmarks[i]);
             for (auto* cursor:data_->cursors)
-                if (cursor->position_>=0 && cursor->position_<data_->ids.size()) previousRows.insert(cursor,data_->ids[cursor->position_]);
+                if (!cursor->deleted_ && cursor->position_>=0 && cursor->position_<data_->ids.size()) previousRows.insert(cursor,data_->ids[cursor->position_]);
         }
         const auto finalize=[&] {
             if (schemaChanged || data_->rollbackRevision!=data_->workspace->rollbackRevision) data_->family=QUuid::createUuid().toRfc4122();
@@ -1124,12 +1140,13 @@ private:
             }
             for (auto* cursor:data_->cursors) {
                 if(schemaChanged) {cursor->mode_=Mode::Browse;cursor->pending_.clear();cursor->changed_.clear();cursor->chunkFields_.clear();cursor->lastModified_.reset();}
-                if (invalidate) cursor->position_=-1;
+                if(invalidate || schemaChanged) {cursor->deleted_.reset();cursor->emptyBoundary_=0;cursor->position_=-1;}
+                else if(cursor->deleted_) cursor->restoreDeletedPosition();
                 else if (previousRows.contains(cursor)) cursor->position_=data_->ids.indexOf(previousRows.value(cursor));
                 else if (cursor->position_>=0) cursor->position_=data_->rows.size();
                 cursor->noMatch_=false;
             }
-            position_=0; noMatch_=false;
+            if(!deleted_) position_=0; noMatch_=false;
             ++data_->revision;
             completed=true;
         };
@@ -1198,7 +1215,8 @@ private:
         require(!closed_ && !readOnly_ && mode_ != Mode::Browse, "DAO: No editable record buffer");
         checkPhysicalSource();
         const bool adding = mode_ == Mode::Add;
-        const auto previousCurrent=adding && position_>=0 && position_<data_->ids.size() ? data_->ids[position_] : QVariant{};
+        if(!adding) current();
+        const auto previousCurrent=adding && !deleted_ && position_>=0 && position_<data_->ids.size() ? data_->ids[position_] : QVariant{};
         SqliteExecutionBudget budget(db_);
         const auto generated=adding ? generatedAccessColumns(db_,source_) : QSet<QString>{};
         QVariant id = adding ? QVariant{} : data_->ids[position_];
@@ -1236,7 +1254,7 @@ private:
         const auto modifiedPosition=data_->ids.indexOf(id);
         if(modifiedPosition>=0) lastModified_=bookmarkAt(modifiedPosition); else lastModified_.reset();
         const auto previousPosition=previousCurrent.isNull() ? -1 : data_->ids.indexOf(previousCurrent);
-        position_=adding && previousPosition>=0 ? previousPosition : modifiedPosition;
+        deleted_.reset();emptyBoundary_=0;position_=adding && previousPosition>=0 ? previousPosition : modifiedPosition;
     }
     std::shared_ptr<RecordsetData> data_{std::make_shared<RecordsetData>()};
     QSqlDatabase db_;
@@ -1246,6 +1264,8 @@ private:
     std::optional<int> recordsetType_; // Opening kind, independent of write capability; unknown for host-only frozen adapters.
     std::optional<quint64> tableGeneration_;
     std::optional<VbaValue> lastModified_;
+    std::optional<QPair<QVariant,QVariant>> deleted_;
+    int emptyBoundary_{};
     QVariantList pending_;
     QSet<int> changed_,chunkFields_;
     qsizetype position_{};

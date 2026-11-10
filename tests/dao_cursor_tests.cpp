@@ -187,4 +187,26 @@ void testDaoCursors() {
     expect(3251,[&] {database->member("OpenRecordset",{VbaValue::string("temporary_only")});});
     assert(query.exec("DROP TABLE temp.temporary_only"));scoped->member("Close",{});
 
+    for(const int mode:{1,2}) {
+        const auto tableName=QString("deleted_position_%1").arg(mode);
+        assert(query.exec("CREATE TABLE "+tableName+"(id INTEGER PRIMARY KEY,value INTEGER)"));assert(query.exec("INSERT INTO "+tableName+" VALUES(1,10),(2,20),(3,30),(4,40)"));query.finish();
+        auto rows=database->member("OpenRecordset",{VbaValue::string(tableName.toStdString()),VbaValue::integer(static_cast<std::int16_t>(mode))}).object;
+        rows->member("MoveNext",{});const auto removed=rows->member("Bookmark",{});
+        auto peer=rows->member("Clone",{}).object;peer->assign("Bookmark",removed);
+        rows->member("Edit",{});rows->assignItem("value",VbaValue::longInteger(222));peer->member("Delete",{});
+        expect(3021,[&] {rows->member("Update",{});});assert(rows->member("EditMode",{}).asNumber()==1);rows->member("CancelUpdate",{});
+        assert(!rows->member("BOF",{}).truthy() && !rows->member("EOF",{}).truthy());
+        expect(3021,[&] {rows->item("value");});expect(3021,[&] {peer->member("Bookmark",{});});expect(3159,[&] {rows->assign("Bookmark",removed);});
+        assert(query.exec("SELECT value FROM "+tableName+" WHERE id=3") && query.next() && query.value(0).toInt()==30);query.finish();
+        rows->member("MoveNext",{});assert(rows->item("id").asNumber()==3);peer->member("MovePrevious",{});assert(peer->item("id").asNumber()==1);
+        rows->member("MoveLast",{});rows->member("Delete",{});assert(!rows->member("EOF",{}).truthy());rows->member("Move",{VbaValue::longInteger(1)});assert(rows->member("EOF",{}).truthy() && !rows->member("BOF",{}).truthy());
+        peer->member("Delete",{});peer->member("MovePrevious",{});assert(peer->member("BOF",{}).truthy());
+        rows->member("MoveFirst",{});assert(rows->item("id").asNumber()==3);rows->member("Delete",{});
+        assert(!rows->member("EOF",{}).truthy() && !rows->member("BOF",{}).truthy() && rows->member("RecordCount",{}).asNumber()==0);
+        rows->member("MoveNext",{});assert(rows->member("EOF",{}).truthy() && !rows->member("BOF",{}).truthy());
+        assert(query.exec("SELECT COUNT(*) FROM "+tableName) && query.next() && query.value(0).toInt()==0);query.finish();
+        rows->member("Requery",{});assert(rows->member("EOF",{}).truthy() && rows->member("BOF",{}).truthy());
+        rows->member("Close",{});peer->member("Close",{});
+    }
+
 }

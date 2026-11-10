@@ -1152,6 +1152,21 @@ KeepCurrentDuringAdd=rows!id
 rows.Close
 End Function)VBA","KeepCurrentDuringAdd",host);
     assert(current.status==VbaExecutionStatus::Completed && current.typedReturnValue->number==3);
+    const auto deleted=executeVbaProcedure(R"VBA(Function DeleteCursorRows As Long
+Dim rows As DAO.Recordset, count As Long
+Set rows=CurrentDb.OpenRecordset("copy_rows",dbOpenDynaset)
+Do While Not rows.EOF
+rows.Delete
+rows.MoveNext
+count=count+1
+Loop
+DeleteCursorRows=count
+rows.Close
+End Function)VBA","DeleteCursorRows",host);
+    if(deleted.status!=VbaExecutionStatus::Completed) std::cerr<<"Delete loop: "<<deleted.explanation<<" line "<<deleted.line<<" error "<<deleted.errorNumber<<'\n';
+    assert(deleted.status==VbaExecutionStatus::Completed && deleted.typedReturnValue->number==3);
+    assert(sql.exec("SELECT COUNT(*) FROM copy_rows") && sql.next() && sql.value(0).toInt()==0);sql.finish();
+
 }
 
 void testOwnedQueryDefs() {

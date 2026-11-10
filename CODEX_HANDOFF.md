@@ -5901,3 +5901,20 @@ letztes DEBa4bbf4a4 vor Quellbindung/Metadaten. Moderne veröffentlichte DAO-PIA
 Metadaten-Standardwert, AddNew parameterlos. Keine Default1-Behauptung aus
 ADO/Optionalität ableiten; keine PIA inGit oder Original-Ausführung.
 Ohne Zwischenabschluss weitere echte DAO-/Datenbankanforderungen implementieren.
+
+
+DAO gelöschte Cursorposition: DAO_DELETED_POSITION.md dokumentiert einen echten
+logischen Löschmarker mit Nachbaridentitäten statt Sprung zum ersten Datensatz.
+Betroffene Klone, ungültige Bookmarks, Next/Previous/Move/FindNext und BOF-/EOF-
+Zustände nach letzter Löschung sowie invalidierendes Requery werden berücksichtigt.
+Pending Edit nach Klonlöschung prüft Current vor Identitätsindex/SQL und kann
+keine Nachbarzeile überschreiben; Reload-Fehlerrestore umfasst neue Zustände.
+Native3021 bleibt; vollständige3167-/Eigenschafts-/Provider-/Concurrency-Identität
+unbelegt. App/DAO gebaut; einmaliges bestehendes DAO-Bündel1/1 in3,40s bestanden,
+reale Tabellen/Dynaset-/Klon-/Lösch-/Entwurfsfälle und echtes VBA Delete/MoveNext
+löscht alle3Zeilen, unabhängigSQLCOUNT0. Keine neuen CTest-/Katalog-IDs;456/386/70.
+Vorstufe063402b9 privat remote/Baum geprüft. Letztes geprüftes DEBa4bbf4a4 liegt
+vor Quellbindung/Restartable/Löschzustand; anschließend diese gesammelten Änderungen
+gebündelt paketieren/Original prüfen und weitere offene Anforderungen fortsetzen.
+Spezifische BOF-/EOF-/Move-Dokumentation verwenden; moderne generierte Delete-
+Seiten enthalten widersprüchliches unsupported, keine Blindübernahme als Orakel.
