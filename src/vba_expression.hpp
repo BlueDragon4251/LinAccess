@@ -22,6 +22,9 @@ std::size_t vbaStringCodeUnits(std::string_view text);
 struct VbaValue {
     enum class Kind { Null, Empty, Number, Text, Boolean, Object, Error, Currency, ByteArray, Array, Missing, Date, Decimal } kind{Kind::Null};
     enum class NumericType { Double, Integer, Long, Single, Byte } numericType{NumericType::Double};
+    // Ephemeral declaration category for native arithmetic; distinct from subtype.
+    // Unbound host values retain their existing guarded behavior.
+    enum class ArithmeticBinding { Unbound, Static, Variant } arithmeticBinding{ArithmeticBinding::Unbound};
     double number{};
     std::int64_t currencyUnits{};
     std::string text;
@@ -49,6 +52,10 @@ struct VbaValue {
     bool truthy() const;
     std::optional<std::string> asField() const;
 };
+
+inline VbaValue bindArithmeticValue(VbaValue value,VbaValue::ArithmeticBinding binding) {
+    value.arithmeticBinding=binding;return value;
+}
 
 struct VbaArgumentSignature {
     std::vector<std::string> names;

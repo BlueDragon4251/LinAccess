@@ -2544,7 +2544,9 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
     auto completed = [&](int line, bool exited) {
         VbaExecutionResult outcome{VbaExecutionStatus::Completed, {}, line, exited};
         if (isFunction) {
-            const auto value = locals[returnBinding];
+            auto value = locals[returnBinding];
+            const auto type=variableType(returnBinding);
+            value.arithmeticBinding=type.empty() || type=="variant" ? VbaValue::ArithmeticBinding::Variant : VbaValue::ArithmeticBinding::Static;
             outcome.typedReturnValue = std::make_shared<VbaValue>(value);
             if (value.kind != VbaValue::Kind::Object && value.kind!=VbaValue::Kind::Error && value.kind!=VbaValue::Kind::Missing && !isVbaArray(value)) outcome.returnValue = value.asField();
         }
@@ -2737,7 +2739,12 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         if(!signature) throw VbaRuntimeError(3251,"Declared local procedure binding is unsupported");
         return signatureCache.emplace(key,std::move(signature)).first->second;
     };
-    resolver.variableValue=[&](std::string_view name,const VbaValue& value) {const auto key=lower(std::string(name));return automaticObjects.contains(key) ? readVariable(key) : value;};
+    resolver.variableValue=[&](std::string_view name,const VbaValue& value) {
+        const auto key=lower(std::string(name));auto actual=automaticObjects.contains(key) ? readVariable(key) : value;
+        const auto type=variableType(key);
+        actual.arithmeticBinding=type.empty() || type=="variant" ? VbaValue::ArithmeticBinding::Variant : VbaValue::ArithmeticBinding::Static;
+        return actual;
+    };
     resolver.undeclaredIdentifier=[&](std::string_view name) -> std::optional<VbaValue> {
         if(const auto signature=externalProcedure(name)) {
             if(!signature->function) throw VbaRuntimeError(3251,"A Sub cannot be used as a value");

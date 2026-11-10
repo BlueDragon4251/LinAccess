@@ -134,7 +134,9 @@ std::size_t vbaArraySize(const VbaValue& value) { return value.kind==VbaValue::K
 std::vector<VbaValue> vbaArrayValues(const VbaValue& value) { return storage(value).values; }
 VbaValue vbaArrayLinearElement(const VbaValue& value,std::size_t index) {
     if(index>=vbaArraySize(value)) throw VbaRuntimeError(9,"Subscript out of range");
-    return value.kind==VbaValue::Kind::ByteArray ? VbaValue::byte(value.bytes[index]) : storage(value).values[index];
+    auto element=value.kind==VbaValue::Kind::ByteArray ? VbaValue::byte(value.bytes[index]) : storage(value).values[index];
+    const bool variant=value.kind!=VbaValue::Kind::ByteArray && storage(value).elementType=="variant";
+    return bindArithmeticValue(std::move(element),variant ? VbaValue::ArithmeticBinding::Variant : VbaValue::ArithmeticBinding::Static);
 }
 VbaValue resizeVbaArray(const VbaValue& value,int lowerBound,int upperBound,bool preserve) {
     return resizeVbaArrayWithBounds(value,{{lowerBound,upperBound}},preserve);

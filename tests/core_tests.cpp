@@ -328,6 +328,84 @@ void testNativeMathFunctions() {
         "VarType(1/2)=vbDouble And 1/2=0.5",
         "VarType(CSng(1)+1)=vbSingle And VarType(CSng(1)+32768)=vbDouble"})
         assert(eval(expression).truthy());
+    for(const auto& expression:std::vector<std::string>{
+        "TypeName(CVar(Expression:=CInt(32767))+1)=CStr(\"Long\")",
+        "CVar(CInt(32767))+1=32768",
+        "TypeName(CVar(CLng(2147483647))+1)=CStr(\"Double\")",
+        "CVar(CLng(2147483647))+1=2147483648",
+        "TypeName(-CVar(CInt(-32768)))=CStr(\"Long\")",
+        "TypeName(-CVar(CLng(-2147483648)))=CStr(\"Double\")",
+        "VarType((CVar(CInt(32767))+1)+1)=vbLong",
+        "TypeName(CVar(CSng(3e38))*CSng(2))=CStr(\"Double\")",
+        "IsEmpty(CVar(Empty)) And IsNull(CVar(Null))",
+        "IsError(CVar(CVErr(7)))",
+        "TypeName(CVar(CDate(2958465))+1)=CStr(\"Double\")",
+        "TypeName(-CVar(CDate(657435)))=CStr(\"Double\")"})
+        assert(eval(expression).truthy());
+    for(const auto& expression:std::vector<std::string>{
+        "CInt(32767)+1","CInt(-32768)-1","CInt(200)*CInt(200)",
+        "CLng(2147483647)+1","-CInt(-32768)","-CLng(-2147483648)",
+        "CSng(3e38)*CSng(2)","CByte(255)+CByte(1)",
+        "CDate(2958465)+1","-CDate(657435)"}) {
+        int code=0;try {(void)eval(expression);}catch(const VbaRuntimeError& error){code=error.number;}assert(code==6);
+    }
+    {
+        auto probe=std::make_shared<ScalarProbe>();probe->value=VbaValue::integer(7);
+        const auto value=evaluateVbaExpression("CVar(item)",host,{{"item",VbaValue::reference(probe)}});
+        assert(value.kind==VbaValue::Kind::Object && value.object==probe && probe->reads==0);
+    }
+    // Runtime helper coercions do not establish a function's declared result.
+    assert(eval("Abs(CVar(CInt(-32767)))+1").asNumber()==32768);
+    assert(eval("CSng(3e38)*Abs(CSng(2))").numericType==VbaValue::NumericType::Double);
+    {
+        struct CachedHost final:VbaHost {
+            std::optional<std::string> field(std::string_view) override {return {};}
+            void setField(std::string_view,std::optional<std::string>) override {assert(false);}
+            void saveRecord() override {assert(false);}
+            void message(std::string_view) override {assert(false);}
+            VbaValue expressionValue(std::string_view,bool) override {return bindArithmeticValue(VbaValue::integer(32767),VbaValue::ArithmeticBinding::Static);}
+            std::optional<VbaValue> resolveIdentifier(std::string_view,bool) override {return bindArithmeticValue(VbaValue::integer(32767),VbaValue::ArithmeticBinding::Static);}
+        } cached;
+        assert(evaluateAccessExpression("[cached]+1",cached).asNumber()==32768);
+        assert(evaluateVbaExpression("cached+1",cached,{}).asNumber()==32768);
+        assert(evaluateVbaExpression("cached+1",host,{{"cached",bindArithmeticValue(VbaValue::integer(32767),VbaValue::ArithmeticBinding::Static)}}).asNumber()==32768);
+        struct CachedMember final:VbaObject {
+            int reads{};
+            VbaValue member(std::string_view,const std::vector<VbaValue>&) override {++reads;return bindArithmeticValue(VbaValue::integer(32767),VbaValue::ArithmeticBinding::Static);}
+        };
+        auto member=std::make_shared<CachedMember>();
+        assert(evaluateVbaExpression("cached.Value+1",host,{{"cached",VbaValue::reference(member)}}).asNumber()==32768 && member->reads==1);
+    }
+    const std::string boundModule=R"BOUND(Function VariantPromotion() As String
+Dim small As Variant, wide As Variant
+small=CInt(32767)
+wide=CLng(2147483647)
+VariantPromotion=TypeName(small+1) & ":" & CStr(small+1) & ":" & TypeName(wide+1)
+End Function
+Function StaticOverflow() As Integer
+Dim small As Integer
+small=32767
+StaticOverflow=small+1
+End Function
+Function VariantResult() As Variant
+VariantResult=CInt(32767)
+End Function
+Function StaticResult() As Integer
+StaticResult=32767
+End Function
+Function UseVariantResult() As String
+UseVariantResult=TypeName(VariantResult()+1)
+End Function
+Function UseStaticResult() As Integer
+UseStaticResult=StaticResult()+1
+End Function)BOUND";
+    auto boundResult=executeVbaProcedure(boundModule,"VariantPromotion",host);
+    assert(boundResult.status==VbaExecutionStatus::Completed && boundResult.typedReturnValue->asText()=="Long:32768:Double");
+    boundResult=executeVbaProcedure(boundModule,"UseVariantResult",host);
+    assert(boundResult.status==VbaExecutionStatus::Completed && boundResult.typedReturnValue->asText()=="Long");
+    for(const auto& procedure:{"StaticOverflow","UseStaticResult"}) {
+        boundResult=executeVbaProcedure(boundModule,procedure,host);assert(boundResult.status==VbaExecutionStatus::Error && boundResult.errorNumber==6);
+    }
     assert(eval("Choose(2.5,10,20,30)").asNumber()==20 && eval("Choose(0,10)").kind==VbaValue::Kind::Null);
     assert(eval("Choose(2,10,Null)").kind==VbaValue::Kind::Null);
     assert(eval("Switch(False,10,True,CCur(\"1.25\"),True,30)").kind==VbaValue::Kind::Currency);
@@ -866,7 +944,7 @@ void testCalendarFunctions() {
     assert(eval("CStr(TimeValue(Time:=\"2024-02-29T12:34\"))").asText()=="12:34:00");
     assert(eval("CStr(TimeValue(CDate(-1.25)))").asText()=="06:00:00" && eval("TimeValue(Null)").kind==VbaValue::Kind::Null);
     assert(eval("CStr(CDate(\"14:24\"))").asText()=="14:24:00");
-    assert(eval("TypeName(CDate(2958465)-(-1))").asText()=="Double" && eval("CDate(2958465)-(-1)").asNumber()==2958466);
+    assert(eval("TypeName(CVar(CDate(2958465))-(-1))").asText()=="Double" && eval("CVar(CDate(2958465))-(-1)").asNumber()==2958466);
     assert(eval("CStr(DateAdd(Date:=\"2024-01-31\",Number:=1,Interval:=\"m\"))").asText()=="2024-02-29");
     assert(eval("CStr(DateAdd(\"yyyy\",1,\"2024-02-29\"))").asText()=="2025-02-28");
     assert(eval("CStr(DateAdd(\"w\",1,\"2024-03-01\"))").asText()=="2024-03-02");

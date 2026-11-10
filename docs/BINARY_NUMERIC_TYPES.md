@@ -22,3 +22,5 @@ existing bundled core/DAO/query-model run passed 3/3 in 8.91 seconds
 numeric operands, Boolean/Empty, fractional division, nested arithmetic, Null
 and string concatenation. No new CTest IDs or catalog entries were added.
 Fixed catalog totals remain 456/386/70; F041 stays open.
+
+Later proven declaration/Variant contexts are extended in [BOUND_NUMERIC_ARITHMETIC.md](BOUND_NUMERIC_ARITHMETIC.md); its explicit unbound/full-parity limits still apply.

@@ -5614,3 +5614,25 @@ answers[]/confirmed_decisions[], Grund: recipient ended before agent finalizatio
 Keine Zustimmung/Antwort/Zustellung erfunden, kein erneuter Anruf. Windows-
 Nachlauf und alte Makroquellen bleiben offen; unabhängig weiterprogrammieren.
 Ohne Zwischenabschluss vollständiger gebundene native Arithmetik fortsetzen.
+
+
+Gebundene native Arithmetik: BOUND_NUMERIC_ARITHMETIC.md dokumentiert tatsächliche
+Deklarationskategorien getrennt von VarType, lokale/Argument-/Alias-/Funktions-
+und Arrayelementtypen, Literale/unterstützte explizite Konvertierungen und CVar.
+Festes Integer/Long/Single meldet Überlauf6, nachgewiesene Variant-Werte erweitern
+sich Long/Double; Unary-Minima und Date-Grenzen unterscheiden feste/Variant-Typen.
+Erster gezielter Lauf fand echten ParamArray-Bindungsfehler99*1000: Element ist
+Variant, darf keinen alten RHS-Static-Tag übernehmen. Tatsächliche Arraylesegrenze
+korrigiert. Allgemeine Host-/Member-/Cache-/rohe Lokalwerte ohne Deklarationsresolver
+bleiben ungebunden; interne Hilfskonvertierungen erzeugen keine Quell-Deklaration.
+CVar erhält tatsächliche Daten-/Objektidentität, liest kein ScalarDefault hinzu.
+Variant-Byte-Überlauf, vollständige Intrinsics/Member/Logik/Integerdivision-
+Provenienz/Misch-Currency/AST/IEEE/Zusatzsuffixe/Windows bleiben offen.
+App/Core/DAO/Abfragemodell/GUI gebaut. DAO2,93s/Modell0,19s bestanden zunächst;
+nach Array-/Hostkorrektur Core5,67s/GUI19,70s gemeinsam2/2 in25,37s; letzte rohe
+Lokalgrenze nur Core5,47s erneut bestanden. Testhelper-Final-Ableitung kompiliert
+zunächst nicht, vor bestandenem Lauf behoben. Keine neuen CTest-/Katalog-IDs;
+456/386/70 unverändert. Vorstufe7d78d04c privat remote/Baum geprüft. Letztes DEB/
+Originalinventar46,35/Originalpfad120,51/7Hashes liegt auf5df3cba2 vor Literal- und
+Deklarationsänderungen. Ohne Zwischenabschluss native numerische Intrinsic-
+Rückgabebindungen und weitere tatsächliche Anforderungen fortsetzen.

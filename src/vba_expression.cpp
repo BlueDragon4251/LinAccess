@@ -496,8 +496,13 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
             throw error("VBA: Is benötigt Objekte");
         return VbaValue::logical(left.object == right.object);
     }
-    if (left.kind==VbaValue::Kind::Object) return binary(op,scalarObjectValue(left),right,host,mode,nativeNumericTypes);
-    if (right.kind==VbaValue::Kind::Object) return binary(op,left,scalarObjectValue(right),host,mode,nativeNumericTypes);
+    if (left.kind==VbaValue::Kind::Object) return binary(op,bindArithmeticValue(scalarObjectValue(left),VbaValue::ArithmeticBinding::Unbound),right,host,mode,nativeNumericTypes);
+    if (right.kind==VbaValue::Kind::Object) return binary(op,left,bindArithmeticValue(scalarObjectValue(right),VbaValue::ArithmeticBinding::Unbound),host,mode,nativeNumericTypes);
+    using Binding=VbaValue::ArithmeticBinding;
+    const auto binding=!nativeNumericTypes ? Binding::Unbound :
+        left.arithmeticBinding==Binding::Variant || right.arithmeticBinding==Binding::Variant ? Binding::Variant :
+        left.arithmeticBinding==Binding::Static && right.arithmeticBinding==Binding::Static ? Binding::Static : Binding::Unbound;
+    const auto finish=[&](VbaValue value) {return bindArithmeticValue(std::move(value),binding);};
     if(op=="like") {
         if(left.kind==VbaValue::Kind::Null || right.kind==VbaValue::Kind::Null) return {};
         return VbaValue::logical(likeMatch(utf16String(left.asText()),utf16String(right.asText()),*host,mode));
@@ -567,7 +572,7 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
         const auto answer=std::pow(base,exponent);
         if (!std::isfinite(answer)) throw error("Power result overflow",6);
         if (answer==0 && base!=0) throw error("Power underflow is not validated",3251);
-        return VbaValue::numeric(answer);
+        return finish(VbaValue::numeric(answer));
     }
     if (left.kind == VbaValue::Kind::Empty && right.kind == VbaValue::Kind::Text)
         return binary(op, VbaValue::string(""), right,host,mode,nativeNumericTypes);
@@ -597,20 +602,23 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
     }
     if (op == "+" && left.kind == VbaValue::Kind::Text && right.kind == VbaValue::Kind::Text)
         return VbaValue::string(left.text + right.text);
-    if(left.kind==VbaValue::Kind::Decimal || right.kind==VbaValue::Kind::Decimal) return decimalBinary(op,left,right);
+    if(left.kind==VbaValue::Kind::Decimal || right.kind==VbaValue::Kind::Decimal) return finish(decimalBinary(op,left,right));
     if (left.kind==VbaValue::Kind::Currency && right.kind==VbaValue::Kind::Currency && (op=="+" || op=="-" || op=="*"))
-        return currencyBinary(op,left,right);
+        return finish(currencyBinary(op,left,right));
     if((left.kind==VbaValue::Kind::Date || right.kind==VbaValue::Kind::Date) && (op=="+" || op=="-")) {
         if(left.kind==VbaValue::Kind::Text || right.kind==VbaValue::Kind::Text) throw error("Text/Date arithmetic coercion is not implemented",3251);
         const auto a=left.asNumber(),b=right.asNumber();
         if((left.kind==VbaValue::Kind::Date && a<0 && a!=std::trunc(a)) || (right.kind==VbaValue::Kind::Date && b<0 && b!=std::trunc(b)))
             throw error("Negative fractional Date arithmetic is not validated",3251);
-        if(op=="-" && left.kind==VbaValue::Kind::Date && right.kind==VbaValue::Kind::Date) return VbaValue::numeric(a-b);
+        if(op=="-" && left.kind==VbaValue::Kind::Date && right.kind==VbaValue::Kind::Date) return finish(VbaValue::numeric(a-b));
         const auto result=op=="+" ? a+b : a-b;
         if(!std::isfinite(result)) throw error("Date arithmetic overflow",6);
-        if(result<=-657435.0 || result>=2958466.0) return VbaValue::numeric(result);
+        if(result<=-657435.0 || result>=2958466.0) {
+            if(binding==Binding::Static) throw error("Declared Date arithmetic overflow",6);
+            return finish(VbaValue::numeric(result));
+        }
         if(result<0 && result!=std::trunc(result)) throw error("Negative fractional Date arithmetic is not validated",3251);
-        return VbaValue::dateSerial(result);
+        return finish(VbaValue::dateSerial(result));
     }
     const auto a = left.asNumber(), b = right.asNumber();
     double answer = 0;
@@ -637,22 +645,27 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
         if(l && r) {
             const bool single=(*l==Type::Single || *r==Type::Single) &&
                 *l!=Type::Double && *r!=Type::Double && *l!=Type::Long && *r!=Type::Long;
-            if(single && std::abs(answer)<=std::numeric_limits<float>::max())
-                return VbaValue::single(static_cast<float>(answer));
+            if(single) {
+                if(std::abs(answer)<=std::numeric_limits<float>::max()) return finish(VbaValue::single(static_cast<float>(answer)));
+                if(binding==Binding::Static) throw error("Declared Single arithmetic overflow",6);
+            }
             if(op!="/" && *l!=Type::Single && *r!=Type::Single && *l!=Type::Double && *r!=Type::Double) {
                 const auto type=*l==Type::Long || *r==Type::Long ? Type::Long :
                     *l==Type::Integer || *r==Type::Integer ||
                     (left.kind==VbaValue::Kind::Empty && right.kind==VbaValue::Kind::Empty) ? Type::Integer : Type::Byte;
                 if(type==Type::Byte && answer>=0 && answer<=255)
-                    return VbaValue::byte(static_cast<unsigned char>(answer));
+                    return finish(VbaValue::byte(static_cast<unsigned char>(answer)));
                 if(type==Type::Integer && answer>=-32768 && answer<=32767)
-                    return VbaValue::integer(static_cast<std::int16_t>(answer));
+                    return finish(VbaValue::integer(static_cast<std::int16_t>(answer)));
                 if(type==Type::Long && answer>=-2147483648.0 && answer<=2147483647.0)
-                    return VbaValue::longInteger(static_cast<std::int32_t>(answer));
+                    return finish(VbaValue::longInteger(static_cast<std::int32_t>(answer)));
+                if(binding==Binding::Static) throw error("Declared integral arithmetic overflow",6);
+                if(binding==Binding::Variant && type==Type::Integer && answer>=-2147483648.0 && answer<=2147483647.0)
+                    return finish(VbaValue::longInteger(static_cast<std::int32_t>(answer)));
             }
         }
     }
-    return VbaValue::numeric(answer);
+    return finish(VbaValue::numeric(answer));
 }
 
 class VbaDictionary final : public VbaObject,public NativeVariantContainer {
@@ -758,7 +771,7 @@ bool vbaIntrinsicName(const std::string& name) {
     static const std::unordered_set<std::string> intrinsics{
                 "error","error$","array","lbound","ubound","isarray","ismissing","isobject","iserror","cverr","vartype","typename",
                 "createobject","doevents","msgbox","inputbox","inputbox$","round","asc","ascw","chr","chr$","chrw","chrw$",
-                "cbyte","cint","clng","csng","cdbl","cbool","ccur","cdec","cdate","cstr","str","str$","format","format$","formatnumber","formatcurrency","formatpercent","formatdatetime",
+                "cbyte","cint","clng","csng","cdbl","cbool","cvar","ccur","cdec","cdate","cstr","str","str$","format","format$","formatnumber","formatcurrency","formatpercent","formatdatetime",
                 "left","left$","right","right$","mid","mid$","trim","trim$","ltrim","ltrim$","rtrim","rtrim$","len","lenb",
                 "ucase","ucase$","lcase","lcase$","instr","strcomp","instrrev","strreverse","replace","split","join","filter",
                 "hex","hex$","oct","oct$","space","space$","string","string$","val","abs","int","fix","sgn",
@@ -792,7 +805,7 @@ public:
         return result;
     }
 private:
-    VbaValue readLocal(std::string_view name,const VbaValue& value) {return host_ && resolver_.variableValue ? resolver_.variableValue(name,value) : value;}
+    VbaValue readLocal(std::string_view name,const VbaValue& value) {return host_ && resolver_.variableValue ? resolver_.variableValue(name,value) : bindArithmeticValue(value,VbaValue::ArithmeticBinding::Unbound);}
     struct ReferenceCapture { std::size_t start{},end{}; std::optional<VbaArrayElementReference> element; };
     std::optional<ReferenceCapture> referenceCapture_;
     VbaEvaluatedArgument argumentExpression(bool objectContext=false) {
@@ -914,6 +927,7 @@ private:
                         }
                         if (value.kind!=VbaValue::Kind::Object || !value.object) throw error("Default member requires an object",91);
                         value=value.object->defaultMember(arguments,objectContext || nextSymbol(".") || nextSymbol("!") || nextSymbol("("));
+                        value.arithmeticBinding=VbaValue::ArithmeticBinding::Unbound;
                     } catch(const VbaRuntimeError& failure) { if (!accessExpression_) throw; value=VbaValue::errorValue(failure.number); }
                 }
                 continue;
@@ -975,6 +989,8 @@ private:
                 const bool reference=objectContext || nextSymbol(".") || nextSymbol("!");
                 value = item ? (reference ? value.object->objectItem(member.value) : value.object->item(member.value))
                     : (reference ? value.object->objectMember(member.value,args) : value.object->invokeMember(member.value,args,!(statementContext_ && peek().type==Token::Type::End)));
+                // Generic host/member values lack a proven expression declaration.
+                value.arithmeticBinding=VbaValue::ArithmeticBinding::Unbound;
                 } catch(const VbaRuntimeError& failure) { if (!accessExpression_) throw; value=VbaValue::errorValue(failure.number); }
             }
         }
@@ -982,28 +998,38 @@ private:
     }
     VbaValue atom(bool objectContext,int minPrecedence) {
         if (take("-")) {
-            const auto arg = expression(std::max(jetEval_ ? 14 : 12,minPrecedence));
+            const auto arg=expression(std::max(jetEval_ ? 14 : 12,minPrecedence));
             if(!host_) return {};
-            const auto value=scalarObjectValue(arg);
-            if(value.kind==VbaValue::Kind::Null) return {};
-            if(value.kind==VbaValue::Kind::Decimal) return decimalUnary("-",value);
+            auto value=scalarObjectValue(arg);
+            using Binding=VbaValue::ArithmeticBinding;
+            if(arg.kind==VbaValue::Kind::Object || jetEval_) value.arithmeticBinding=Binding::Unbound;
+            const auto finish=[&](VbaValue result) {return bindArithmeticValue(std::move(result),value.arithmeticBinding);};
+            if(value.kind==VbaValue::Kind::Null) return finish({});
+            if(value.kind==VbaValue::Kind::Decimal) return finish(decimalUnary("-",value));
             if(!jetEval_) {
-                if(value.kind==VbaValue::Kind::Empty) return VbaValue::integer(0);
-                if(value.kind==VbaValue::Kind::Boolean) return VbaValue::integer(value.boolean ? 1 : 0);
+                if(value.kind==VbaValue::Kind::Empty) return finish(VbaValue::integer(0));
+                if(value.kind==VbaValue::Kind::Boolean) return finish(VbaValue::integer(value.boolean ? 1 : 0));
                 if(value.kind==VbaValue::Kind::Number) {
+                    if(value.numericType==VbaValue::NumericType::Integer && value.number==-32768.0) {
+                        if(value.arithmeticBinding==Binding::Static) throw error("Declared Integer negation overflow",6);
+                        if(value.arithmeticBinding==Binding::Variant) return finish(VbaValue::longInteger(32768));
+                    }
                     if(value.numericType==VbaValue::NumericType::Byte ||
                        (value.numericType==VbaValue::NumericType::Integer && value.number!=-32768.0))
-                        return VbaValue::integer(static_cast<std::int16_t>(-value.number));
-                    if(value.numericType==VbaValue::NumericType::Long && value.number!=-2147483648.0)
-                        return VbaValue::longInteger(static_cast<std::int32_t>(-value.number));
-                    if(value.numericType==VbaValue::NumericType::Single)
-                        return VbaValue::single(static_cast<float>(-value.number));
+                        return finish(VbaValue::integer(static_cast<std::int16_t>(-value.number)));
+                    if(value.numericType==VbaValue::NumericType::Long) {
+                        if(value.number!=-2147483648.0) return finish(VbaValue::longInteger(static_cast<std::int32_t>(-value.number)));
+                        if(value.arithmeticBinding==Binding::Static) throw error("Declared Long negation overflow",6);
+                    }
+                    if(value.numericType==VbaValue::NumericType::Single) return finish(VbaValue::single(static_cast<float>(-value.number)));
                 }
-                if(value.kind==VbaValue::Kind::Date && -value.number>-657435.0 && -value.number<2958466.0)
-                    return VbaValue::dateSerial(-value.number);
+                if(value.kind==VbaValue::Kind::Date) {
+                    if(-value.number>-657435.0 && -value.number<2958466.0) return finish(VbaValue::dateSerial(-value.number));
+                    if(value.arithmeticBinding==Binding::Static) throw error("Declared Date negation overflow",6);
+                }
             }
             if(jetEval_ && value.kind==VbaValue::Kind::Number && value.numericType==VbaValue::NumericType::Long && value.number!=-2147483648.0) return VbaValue::longInteger(static_cast<std::int32_t>(-value.number));
-            return value.kind==VbaValue::Kind::Currency ? negateCurrency(value) : VbaValue::numeric(-value.asNumber());
+            return finish(value.kind==VbaValue::Kind::Currency ? negateCurrency(value) : VbaValue::numeric(-value.asNumber()));
         }
         if (take("+")) {
             const auto arg = expression(std::max(jetEval_ ? 14 : 12,minPrecedence));
@@ -1064,10 +1090,11 @@ private:
                 if (root=="reports" || root=="berichte") return VbaValue::reference(host_->reportsCollection());
             }
             const bool reference=objectContext || nextSymbol(".") || nextSymbol("!");
-            return accessExpression_ ? host_->expressionValue(tok.value,reference) : host_->bracketValue(tok.value,reference);
+            return bindArithmeticValue(accessExpression_ ? host_->expressionValue(tok.value,reference) : host_->bracketValue(tok.value,reference),VbaValue::ArithmeticBinding::Unbound);
         }
-        if(tok.type==Token::Type::Date) return host_ ? vbaDateValue(VbaValue::string(tok.value)) : VbaValue{};
-        if (tok.type == Token::Type::Text) return VbaValue::string(tok.value);
+        const auto literalValue=[&](VbaValue value) {return jetEval_ ? value : bindArithmeticValue(std::move(value),VbaValue::ArithmeticBinding::Static);};
+        if(tok.type==Token::Type::Date) return host_ ? literalValue(vbaDateValue(VbaValue::string(tok.value))) : VbaValue{};
+        if (tok.type == Token::Type::Text) return literalValue(VbaValue::string(tok.value));
         if (tok.type == Token::Type::Number) {
             if(tok.value.starts_with('&')) {
                 const bool forceLong=tok.value.back()=='&',forceInteger=tok.value.back()=='%';
@@ -1080,10 +1107,10 @@ private:
                 if(magnitude>0xffffffffULL || (forceInteger && magnitude>0xffff)) throw error("Based integer literal overflow",6);
                 if(!forceLong && magnitude<=0xffff) {
                     const auto signedValue=static_cast<std::int64_t>(magnitude)-(magnitude>0x7fff ? 0x10000LL : 0);
-                    return VbaValue::integer(static_cast<std::int16_t>(signedValue));
+                    return literalValue(VbaValue::integer(static_cast<std::int16_t>(signedValue)));
                 }
                 const auto signedValue=static_cast<std::int64_t>(magnitude)-(magnitude>0x7fffffff ? 0x100000000LL : 0);
-                return VbaValue::longInteger(static_cast<std::int32_t>(signedValue));
+                return literalValue(VbaValue::longInteger(static_cast<std::int32_t>(signedValue)));
             }
             if(jetEval_ && tok.value.find_first_of(".eE")!=std::string::npos && tok.value.find_first_of("eE")==std::string::npos) return decimalLiteral(tok.value);
             std::size_t consumed = 0;
@@ -1095,12 +1122,12 @@ private:
             catch(const std::invalid_argument&) { throw error("Invalid numeric literal",5); }
             if (consumed!=tok.value.size()) throw error("Ungültige VBA-Zahl");
             if (!std::isfinite(number)) throw error("Numeric literal overflow",6);
-            if(jetEval_ && tok.value.find_first_of(".eE")==std::string::npos && number>=0 && number<=2147483647.0) return VbaValue::longInteger(static_cast<std::int32_t>(number));
+            if(jetEval_ && tok.value.find_first_of(".eE")==std::string::npos && number>=0 && number<=2147483647.0) return literalValue(VbaValue::longInteger(static_cast<std::int32_t>(number)));
             if(!jetEval_ && tok.value.find_first_of(".eEdD")==std::string::npos) {
-                if(number<=32767) return VbaValue::integer(static_cast<std::int16_t>(number));
-                if(number<=2147483647.0) return VbaValue::longInteger(static_cast<std::int32_t>(number));
+                if(number<=32767) return literalValue(VbaValue::integer(static_cast<std::int16_t>(number)));
+                if(number<=2147483647.0) return literalValue(VbaValue::longInteger(static_cast<std::int32_t>(number)));
             }
-            return VbaValue::numeric(number);
+            return literalValue(VbaValue::numeric(number));
         }
         if (tok.type != Token::Type::Word)
             throw error("Ungültiger VBA-Ausdruck: " + tok.value);
@@ -1109,13 +1136,13 @@ private:
             && !locals_.contains(word) && (!host_ || !host_->hasInstanceIdentifier(word))) {
             const auto qualified=word+"."+lower(tokens_[index_+1].value);
             if(const auto found=locals_.find(qualified);found!=locals_.end()) {
-                consume(); consume(); return found->second;
+                consume(); consume(); return bindArithmeticValue(found->second,VbaValue::ArithmeticBinding::Unbound);
             }
         }
         bool qualifiedArray=false,qualifiedIntrinsic=false;
         if(!accessExpression_ && word=="vba" && nextSymbol(".") && index_+1<tokens_.size() && tokens_[index_+1].type==Token::Type::Word) {
             if(const auto local=locals_.find(word);local!=locals_.end()) return readLocal(word,local->second);
-            if(host_) if(auto resolved=host_->resolveIdentifier(tok.value,true)) return *resolved;
+            if(host_) if(auto resolved=host_->resolveIdentifier(tok.value,true)) return bindArithmeticValue(*resolved,VbaValue::ArithmeticBinding::Unbound);
             consume(); word=lower(consume().value);
 
             if(!vbaIntrinsicName(word) && !word.starts_with("vb")) throw error("Qualified VBA member is not implemented",3251);
@@ -1143,7 +1170,7 @@ private:
             return host_ ? VbaValue::reference(host_->constructClass(type.value)) : VbaValue{};
         }
         if (word == "null") return {};
-        if (word == "empty") return VbaValue::empty();
+        if (word == "empty") return jetEval_ ? VbaValue::empty() : bindArithmeticValue(VbaValue::empty(),VbaValue::ArithmeticBinding::Variant);
         if (word == "nothing") return VbaValue::reference(nullptr);
         if (word=="dbengine") return host_ ? VbaValue::reference(host_->databaseEngine()) : VbaValue{};
         if (word == "currentdb") {
@@ -1214,8 +1241,8 @@ private:
         if (const auto type=variantTypes.find(word);type!=variantTypes.end()) return VbaValue::numeric(type->second);
         static const std::unordered_map<std::string,int> calendarConstants{{"vbusesystem",0},{"vbsunday",1},{"vbmonday",2},{"vbtuesday",3},{"vbwednesday",4},{"vbthursday",5},{"vbfriday",6},{"vbsaturday",7},{"vbfirstjan1",1},{"vbfirstfourdays",2},{"vbfirstfullweek",3}};
         if(const auto constant=calendarConstants.find(word);constant!=calendarConstants.end()) return VbaValue::integer(constant->second);
-        if (word == "true") return jetEval_ ? VbaValue::integer(-1) : VbaValue::logical(true);
-        if (word == "false") return jetEval_ ? VbaValue::integer(0) : VbaValue::logical(false);
+        if (word == "true") return jetEval_ ? VbaValue::integer(-1) : literalValue(VbaValue::logical(true));
+        if (word == "false") return jetEval_ ? VbaValue::integer(0) : literalValue(VbaValue::logical(false));
         static const std::unordered_map<std::string,int> messageConstants{
             {"vbokonly",0},{"vbokcancel",1},{"vbabortretryignore",2},{"vbyesnocancel",3},{"vbyesno",4},{"vbretrycancel",5},
             {"vbcritical",16},{"vbquestion",32},{"vbexclamation",48},{"vbinformation",64},
@@ -1257,7 +1284,7 @@ private:
         if((word=="currentproject" || word=="currentdata") && !nextSymbol("(")) {
             if(const auto local=locals_.find(word);local!=locals_.end()) return readLocal(word,local->second);
             if(!host_) return {};
-            if(!accessExpression_) if(auto resolved=host_->resolveIdentifier(tok.value,true)) return *resolved;
+            if(!accessExpression_) if(auto resolved=host_->resolveIdentifier(tok.value,true)) return bindArithmeticValue(*resolved,VbaValue::ArithmeticBinding::Unbound);
             return host_->applicationObject()->member(word=="currentproject" ? "CurrentProject" : "CurrentData",{});
         }
         if (word=="codecontextobject") return host_ ? VbaValue::reference(host_->currentForm()) : VbaValue{};
@@ -1310,12 +1337,12 @@ private:
             }
             const bool formProperty = !item && (key == "name" || key == "dirty" || key == "newrecord" || key == "recordsource" || key == "caption" || key=="visible" || key=="tag" || key=="filter" || key=="filteron" || key=="keypreview" || key=="bookmark" || key=="recordset" || key=="openargs" || key=="modal" || key=="popup");
             if (!item && !formProperty)
-                if (auto value=host_->resolveIdentifier(field.value,objectContext || nextSymbol(".") || nextSymbol("!"))) return *value;
+                if (auto value=host_->resolveIdentifier(field.value,objectContext || nextSymbol(".") || nextSymbol("!"))) return bindArithmeticValue(*value,VbaValue::ArithmeticBinding::Unbound);
             if (!formProperty && objectContext)
                 return item ? host_->currentForm()->objectItem(field.value) : host_->currentForm()->objectMember(field.value,{});
             if (!formProperty && (nextSymbol(".") || nextSymbol("!")))
                 return host_->currentForm()->member("Controls",{VbaValue::string(field.value)});
-            return item ? host_->controlValue(field.value) : host_->fieldValue(field.value);
+            return bindArithmeticValue(item ? host_->controlValue(field.value) : host_->fieldValue(field.value),VbaValue::ArithmeticBinding::Unbound);
         }
         const auto currentDirectory=[&]() -> VbaValue {
             if(!host_) return {};
@@ -1341,7 +1368,7 @@ private:
                         return resolver_(tok.value,arguments,VbaArgumentReferences{});
                     }
                 }
-                if(auto value=host_->resolveIdentifier(tok.value,objectContext || nextSymbol(".") || nextSymbol("!"))) return *value;
+                if(auto value=host_->resolveIdentifier(tok.value,objectContext || nextSymbol(".") || nextSymbol("!"))) return bindArithmeticValue(*value,VbaValue::ArithmeticBinding::Unbound);
             }
             return currentDirectory();
         }
@@ -1482,7 +1509,7 @@ private:
                     {"ppmt",{{"Rate","Per","NPer","Pv","Fv","Type"},4}},
                     {"partition",{{"Number","Start","Stop","Interval"},4}},
                     {"rgb",{{"Red","Green","Blue"},3}}, {"qbcolor",{{"Color"},1}},
-                    {"cdate",{{"Expression"},1}}, {"cdec",{{"Expression"},1}},
+                    {"cdate",{{"Expression"},1}}, {"cdec",{{"Expression"},1}}, {"cvar",{{"Expression"},1}},
                     {"formatnumber",{{"Expression","NumDigitsAfterDecimal","IncludeLeadingDigit","UseParensForNegativeNumbers","GroupDigits"},1}},
                     {"formatcurrency",{{"Expression","NumDigitsAfterDecimal","IncludeLeadingDigit","UseParensForNegativeNumbers","GroupDigits"},1}},
                     {"formatpercent",{{"Expression","NumDigitsAfterDecimal","IncludeLeadingDigit","UseParensForNegativeNumbers","GroupDigits"},1}},
@@ -1542,10 +1569,16 @@ private:
                 return VbaValue::integer(host_->doEvents());
             }
             const auto one = args.size() == 1;
+            if(word=="cvar") {
+                if(!host_) return {};
+                if(args.size()!=1 || omitted[0]) throw error("CVar requires one argument",450);
+                if(jetEval_) throw error("CVar Access Eval binding is not validated",3251);
+                return bindArithmeticValue(args[0],VbaValue::ArithmeticBinding::Variant);
+            }
             if(word=="cdate") {
                 if(!host_) return {};
                 if(args.size()!=1 || omitted[0]) throw error("CDate requires one argument",450);
-                return vbaDateValue(args[0]);
+                return bindArithmeticValue(vbaDateValue(args[0]),jetEval_ ? VbaValue::ArithmeticBinding::Unbound : VbaValue::ArithmeticBinding::Static);
             }
             if(word=="datevalue" || word=="timevalue" || word=="dateadd" || word=="dateserial" || word=="timeserial" || word=="datepart" || word=="datediff" || word=="year" || word=="month" || word=="day" || word=="hour" || word=="minute" || word=="second" || word=="weekday") {
                 if(!host_) return {};
@@ -1564,7 +1597,7 @@ private:
                 if (!host_) return {};
                 if (args.size()!=1) throw error("Eval requires one argument",450);
                 if (args[0].kind==VbaValue::Kind::Null) throw error("Invalid Null Eval argument",94);
-                return host_->eval(args[0].asText());
+                return bindArithmeticValue(host_->eval(args[0].asText()),VbaValue::ArithmeticBinding::Unbound);
             }
             if (word=="inputbox" || word=="inputbox$") {
                 if (!host_) return {};
@@ -1739,13 +1772,14 @@ private:
                 if (!host_) return {};
                 if (args.size()!=1) throw error("Conversion requires one argument",450);
                 const auto type=word=="cbyte" ? "byte" : word=="cint" ? "integer" : word=="clng" ? "long" : word=="csng" ? "single" : word=="cdbl" ? "double" : "boolean";
-                return coerceVbaModuleValue(scalarObjectValue(args.front()),type);
+                auto converted=coerceVbaModuleValue(scalarObjectValue(args.front()),type);
+                return jetEval_ ? converted : bindArithmeticValue(std::move(converted),VbaValue::ArithmeticBinding::Static);
             }
             if (word=="ccur" || word=="cdec" || word=="vartype" || word=="typename") {
                 if (!host_) return {};
                 if (args.size()!=1) throw error("Conversion/type function requires one argument",450);
                 const auto value=word=="vartype" ? typeInspectionValue(args.front()) : args.front();
-                if (word=="ccur") return convertCurrency(value);
+                if (word=="ccur") return bindArithmeticValue(convertCurrency(value),jetEval_ ? VbaValue::ArithmeticBinding::Unbound : VbaValue::ArithmeticBinding::Static);
                 if(word=="cdec" && jetEval_) throw error("CDec is unavailable in the observed Access Eval context",2439);
                 if (word=="cdec") return convertDecimal(value);
                 const int type=value.kind==VbaValue::Kind::Empty ? 0 : value.kind==VbaValue::Kind::Null ? 1
@@ -2432,9 +2466,9 @@ private:
                     return scalar.kind==VbaValue::Kind::Null ? VbaValue{} : stringLongResult(vbaStringCodeUnits(scalar.asText()));
                 }
                 if (word == "cstr") {
-                    if (value.kind==VbaValue::Kind::Error) return VbaValue::string("Error "+std::to_string(value.errorNumber));
+                    if (value.kind==VbaValue::Kind::Error) return literalValue(VbaValue::string("Error "+std::to_string(value.errorNumber)));
                     if (value.kind == VbaValue::Kind::Null) throw error("VBA: Ungültige Verwendung von Null", 94);
-                    return VbaValue::string(value.asText());
+                    return literalValue(VbaValue::string(value.asText()));
                 }
                 if (word == "isnumeric") {
                     try { const auto scalar=scalarObjectValue(value); if(scalar.kind==VbaValue::Kind::Date) return VbaValue::logical(false);if(scalar.kind==VbaValue::Kind::Text) return VbaValue::logical(host_->isNumericText(scalar.text)); (void)scalar.asNumber(); return VbaValue::logical(true); }
@@ -2478,7 +2512,7 @@ private:
         if(qualifiedIntrinsic) throw error("Qualified VBA member requires supported arguments",3251);
         const auto variable = locals_.find(word);
         if (variable==locals_.end() && accessExpression_)
-            return host_->expressionValue(tok.value,objectContext || nextSymbol(".") || nextSymbol("!"));
+            return bindArithmeticValue(host_->expressionValue(tok.value,objectContext || nextSymbol(".") || nextSymbol("!")),VbaValue::ArithmeticBinding::Unbound);
         if (variable==locals_.end()) {
             if(resolver_.argumentSignature) {
                 const auto signature=resolver_.argumentSignature(tok.value);
@@ -2486,7 +2520,7 @@ private:
                     std::vector<VbaValue> arguments;return resolver_(tok.value,arguments,VbaArgumentReferences{});
                 }
             }
-            if (auto value=host_->resolveIdentifier(tok.value,objectContext || nextSymbol(".") || nextSymbol("!"))) return *value;
+            if (auto value=host_->resolveIdentifier(tok.value,objectContext || nextSymbol(".") || nextSymbol("!"))) return bindArithmeticValue(*value,VbaValue::ArithmeticBinding::Unbound);
             if(resolver_.undeclaredIdentifier) if(auto value=resolver_.undeclaredIdentifier(tok.value)) return *value;
             throw error("VBA-Variable nicht deklariert: " + tok.value);
         }

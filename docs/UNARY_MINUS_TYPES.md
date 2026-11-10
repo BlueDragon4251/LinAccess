@@ -27,3 +27,5 @@ seconds (48.34/121.86). Inventory remains 100 classified, 78 executed and 22
 bounded cases, without a complete Windows query oracle. The missing original
 macro-source boundary remains. All seven upload/fixture hashes were unchanged.
 That checked package predates this unary-minus scope.
+
+Later proven declaration/Variant contexts are extended in [BOUND_NUMERIC_ARITHMETIC.md](BOUND_NUMERIC_ARITHMETIC.md); its explicit unbound/full-parity limits still apply.

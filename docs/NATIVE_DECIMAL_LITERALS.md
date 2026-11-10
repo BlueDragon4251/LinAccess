@@ -20,3 +20,5 @@ implemented Integer paths. Explicit Double fixtures preserve their previous
 behavior. After correcting those expectations, only core was rerun; it passed in
 5.41 seconds. This is not a claim that the initial three-target bundle passed.
 No new CTest IDs or catalog points were added; totals remain 456/386/70.
+
+Later proven declaration/Variant contexts are extended in [BOUND_NUMERIC_ARITHMETIC.md](BOUND_NUMERIC_ARITHMETIC.md); its explicit unbound/full-parity limits still apply.
