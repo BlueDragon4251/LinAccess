@@ -1064,7 +1064,14 @@ void testEditableStarQueryDynasets() {
     assert(sql.exec("SELECT score FROM query_edit_rows WHERE id=0") && sql.next() && sql.value(0).toInt()==41);sql.finish();
     auto aliased=open("SELECT score AS renamed FROM query_edit_rows ORDER BY id");assert(aliased->member("Updatable",{}).truthy());
     auto aliasField=aliased->member("Fields",{VbaValue::string("renamed")}).object;
-    assert(aliasField->member("SourceField",{}).asText()=="score");error([&] {aliasField->member("Properties",{VbaValue::string("SourceField")});},3251);
+    assert(aliasField->member("SourceField",{}).asText()=="score");
+    assert(aliasField->member("DataUpdatable",{}).kind==VbaValue::Kind::Boolean && aliasField->member("DataUpdatable",{}).truthy());
+    error([&] {aliasField->member("DataUpdatable",{VbaValue::integer(1)});},450);error([&] {aliasField->assign("DataUpdatable",VbaValue::logical(false));},383);
+    assert(sql.exec("PRAGMA query_only=ON"));sql.finish();assert(!aliasField->member("DataUpdatable",{}).truthy());assert(sql.exec("PRAGMA query_only=OFF"));sql.finish();assert(aliasField->member("DataUpdatable",{}).truthy());
+    auto readonlyField=open("SELECT score AS observed FROM query_edit_rows",4)->member("Fields",{VbaValue::string("observed")}).object;assert(!readonlyField->member("DataUpdatable",{}).truthy());
+    auto calculated=open("SELECT score+1 AS calculated FROM query_edit_rows");assert(!calculated->member("Fields",{VbaValue::integer(0)}).object->member("DataUpdatable",{}).truthy());
+    auto closing=open("query_edit_rows",1);auto closedField=closing->member("Fields",{VbaValue::string("score")}).object;assert(closedField->member("DataUpdatable",{}).truthy());closing->member("Close",{});error([&] {closedField->member("DataUpdatable",{});},3420);
+error([&] {aliasField->member("Properties",{VbaValue::string("SourceField")});},3251);
     aliased->member("Edit",{});aliased->assignItem("renamed",VbaValue::longInteger(42));aliased->member("Update",{});
     assert(sql.exec("SELECT score FROM query_edit_rows WHERE id=0") && sql.next() && sql.value(0).toInt()==42);sql.finish();
     assert(!open("SELECT score AS renamed FROM query_edit_rows WHERE [renamed]>20")->member("Updatable",{}).truthy());
@@ -1089,6 +1096,7 @@ void testEditableStarQueryDynasets() {
 Dim rows As DAO.Recordset
 Set rows=CurrentDb.OpenRecordset("SELECT score AS EditedScore FROM query_edit_rows WHERE id=1",dbOpenDynaset)
 If Not rows.Updatable Then Err.Raise 5
+If Not rows.Fields("EditedScore").DataUpdatable Then Err.Raise 5
 rows.Edit
 rows!EditedScore=12
 rows.Update
@@ -1264,7 +1272,15 @@ void testEditableTypedAliases() {
     rows->assignItem("Caption",VbaValue::string("created"));rows->member("Fields",{VbaValue::string("Bytes")}).object->member("AppendChunk",{VbaValue::byteArray({0,1,255})});rows->member("Update",{});
     assert(rows->item("Caption").asText()=="created");
     auto key=rows->member("Fields",{VbaValue::string("KeyValue")}).object;assert(key->member("Attributes",{}).asNumber()==49 && key->member("SourceField",{}).asText()=="ID");assert(key->member("Properties",{VbaValue::string("SourceField")}).object->member("Value",{}).asText()=="ID");
-    auto caption=rows->member("Fields",{VbaValue::string("Caption")}).object;assert(caption->member("Size",{}).asNumber()==12 && caption->member("Properties",{VbaValue::string("DefaultValue")}).object->member("Value",{}).asText()=="\"initial\"");
+    auto caption=rows->member("Fields",{VbaValue::string("Caption")}).object;
+    assert(caption->member("Attributes",{}).asNumber()==34);
+    assert(caption->member("Properties",{VbaValue::string("Attributes")}).object->member("Value",{}).asNumber()==34);
+    assert(rows->member("Fields",{VbaValue::string("Ratio")}).object->member("Attributes",{}).asNumber()==33);
+    assert(rows->member("Fields",{VbaValue::string("Bytes")}).object->member("Attributes",{}).asNumber()==34);
+    auto physicalSnapshot=database->member("OpenRecordset",{VbaValue::string("AliasTyped"),VbaValue::integer(4)}).object;
+    assert(physicalSnapshot->member("Fields",{VbaValue::string("Label")}).object->member("Attributes",{}).asNumber()==2 && !physicalSnapshot->member("Fields",{VbaValue::string("Label")}).object->member("DataUpdatable",{}).truthy());
+    assert(sql.exec("PRAGMA query_only=ON"));sql.finish();assert(caption->member("Attributes",{}).asNumber()==2 && !caption->member("DataUpdatable",{}).truthy());assert(sql.exec("PRAGMA query_only=OFF"));sql.finish();assert(caption->member("Attributes",{}).asNumber()==34);
+assert(caption->member("DataUpdatable",{}).truthy() && caption->member("Properties",{VbaValue::string("DataUpdatable")}).object->member("Value",{}).truthy());assert(caption->member("Size",{}).asNumber()==12 && caption->member("Properties",{VbaValue::string("DefaultValue")}).object->member("Value",{}).asText()=="\"initial\"");
     auto peer=rows->member("Clone",{}).object;peer->member("MoveFirst",{});peer->member("Edit",{});peer->assignItem("Caption",VbaValue::string("peer"));int number=0;try {peer->assignItem("KeyValue",VbaValue::longInteger(99));}catch(const VbaRuntimeError& failure) {number=failure.number;}assert(number==3164);peer->member("Update",{});
     assert(rows->item("Caption").asText()=="peer");assert(sql.exec("SELECT Label,hex(Payload),Stamp FROM main.AliasTyped WHERE ID=1") && sql.next() && sql.value(0).toString()=="peer" && sql.value(1).toString()=="0001FF" && !sql.value(2).isNull());sql.finish();
     assert(sql.exec("CREATE TABLE AliasMoney(id INTEGER PRIMARY KEY,amount CURRENCY_TICKS DEFAULT 12500)"));sql.finish();
