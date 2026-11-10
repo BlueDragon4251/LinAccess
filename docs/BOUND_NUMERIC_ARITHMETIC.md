@@ -54,3 +54,5 @@ with build-ID/SQLite3.54.1/MDBTools1.0.1/content checks. Its inventory46.35s and
 separately secured original-path120.51s passed with100/78/22 and seven unchanged
 hashes, retaining the missing macro-source boundary. That package and original
 proof predate the later decimal-literal and declared-arithmetic changes.
+
+Selected intrinsic result declarations are extended in [NUMERIC_INTRINSIC_BINDINGS.md](NUMERIC_INTRINSIC_BINDINGS.md); the remaining boundaries still apply.

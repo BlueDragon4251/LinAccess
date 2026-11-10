@@ -805,6 +805,9 @@ public:
         return result;
     }
 private:
+    VbaValue variantResult(VbaValue value) const {
+        return bindArithmeticValue(std::move(value),jetEval_ ? VbaValue::ArithmeticBinding::Unbound : VbaValue::ArithmeticBinding::Variant);
+    }
     VbaValue readLocal(std::string_view name,const VbaValue& value) {return host_ && resolver_.variableValue ? resolver_.variableValue(name,value) : bindArithmeticValue(value,VbaValue::ArithmeticBinding::Unbound);}
     struct ReferenceCapture { std::size_t start{},end{}; std::optional<VbaArrayElementReference> element; };
     std::optional<ReferenceCapture> referenceCapture_;
@@ -1404,10 +1407,10 @@ private:
             if (end==start+1 && ((field.type==Token::Type::Word && fieldWord!="null"
                     && fieldWord!="true" && fieldWord!="false" && fieldWord!="empty")
                 || field.type==Token::Type::Bracket || (field.type==Token::Type::Symbol && field.value=="*")))
-                return host_ ? host_->expressionAggregate(word,field.value,field.type==Token::Type::Symbol && field.value=="*") : VbaValue{};
+                return host_ ? bindArithmeticValue(host_->expressionAggregate(word,field.value,field.type==Token::Type::Symbol && field.value=="*"),VbaValue::ArithmeticBinding::Unbound) : VbaValue{};
             const auto body=source_.substr(field.offset,tokens_[end].offset-field.offset);
             if (!host_) { (void)ExpressionParser(body,nullptr,locals_,{},false,true).parse(); return {}; }
-            return host_->expressionAggregateExpression(word,body);
+            return bindArithmeticValue(host_->expressionAggregateExpression(word,body),VbaValue::ArithmeticBinding::Unbound);
         }
         if (nextSymbol("(")) {
             const auto variable=locals_.find(word);
@@ -1702,7 +1705,7 @@ private:
             if(word=="round") {
                 if(!host_) return {};
                 if(args.empty() || omitted[0]) throw error("Round requires an expression",450);
-                return vbaRound(args);
+                return variantResult(vbaRound(args));
             }
             if(word=="hex" || word=="hex$" || word=="oct" || word=="oct$") {
                 if(!host_) return {};
@@ -1799,7 +1802,7 @@ private:
             if (word=="dsum" || word=="dcount" || word=="dlookup" || word=="dmin" || word=="dmax" || word=="davg" || word=="dfirst" || word=="dlast" || word=="dvar" || word=="dstdev" || word=="dvarp" || word=="dstdevp") {
                 if (!host_) return {};
                 if (args.size()<2 || args.size()>3) throw error("Domain aggregate requires two or three arguments",450);
-                return host_->domainAggregate(word,args);
+                return bindArithmeticValue(host_->domainAggregate(word,args),VbaValue::ArithmeticBinding::Unbound);
             }
             if(word=="ismissing") {
                 if(!host_) return {};
@@ -2317,9 +2320,10 @@ private:
                     : word=="log" ? std::log(number) : word=="sin" ? std::sin(number)
                     : word=="cos" ? std::cos(number) : word=="tan" ? std::tan(number) : std::atan(number);
                 if(!std::isfinite(result)) throw error("Math result overflow",6);
-                return VbaValue::numeric(result);
+                return literalValue(VbaValue::numeric(result));
             }
             if (word=="abs" || word=="int" || word=="fix" || word=="sgn") {
+                const auto result=[&]() -> VbaValue {
                 if (!host_) return {};
                 if (args.size()!=1) throw error("Numeric function requires one argument",450);
                 const auto value=scalarObjectValue(args.front());
@@ -2349,6 +2353,8 @@ private:
                     if(value.numericType==VbaValue::NumericType::Single) return coerceVbaModuleValue(result,"single");
                 }
                 return result;
+                }();
+                return variantResult(result);
             }
             if(word=="choose" || word=="switch") {
                 if(!host_) return {};
@@ -2358,11 +2364,11 @@ private:
                 if(word=="choose") {
                     const auto index=coerceVbaModuleValue(scalarObjectValue(args[0]),"long").number;
                     if(index<1 || index>=args.size()) return {};
-                    return args[static_cast<std::size_t>(index)];
+                    return variantResult(args[static_cast<std::size_t>(index)]);
                 }
                 for(std::size_t index=0;index<args.size();index+=2) {
                     const auto condition=scalarObjectValue(args[index]);
-                    if(condition.kind!=VbaValue::Kind::Null && coerceVbaModuleValue(condition,"boolean").boolean) return args[index+1];
+                    if(condition.kind!=VbaValue::Kind::Null && coerceVbaModuleValue(condition,"boolean").boolean) return variantResult(args[index+1]);
                 }
                 return {};
             }
@@ -2478,12 +2484,12 @@ private:
             if (word == "nz" && (args.size() == 1 || args.size() == 2)) {
                 if (!host_) return {};
                 if(omitted[0]) throw error("Nz requires a value",450);
-                return args[0].kind == VbaValue::Kind::Null
-                    ? (args.size() == 2 && !omitted[1] ? args[1] : accessExpression_ && !jetEval_ ? VbaValue::string("") : VbaValue::empty()) : args[0];
+                return variantResult(args[0].kind == VbaValue::Kind::Null
+                    ? (args.size() == 2 && !omitted[1] ? args[1] : accessExpression_ && !jetEval_ ? VbaValue::string("") : VbaValue::empty()) : args[0]);
             }
             if (word == "iif" && args.size() == 3) {
                 if (!host_) return {};
-                return vbaBooleanCondition(args[0]) ? args[1] : args[2];
+                return variantResult(vbaBooleanCondition(args[0]) ? args[1] : args[2]);
             }
             if (word=="left" || word=="right" || word=="left$" || word=="right$" || word=="mid" || word=="mid$") {
                 if (!host_) return {};

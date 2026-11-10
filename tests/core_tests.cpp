@@ -406,6 +406,22 @@ End Function)BOUND";
     for(const auto& procedure:{"StaticOverflow","UseStaticResult"}) {
         boundResult=executeVbaProcedure(boundModule,procedure,host);assert(boundResult.status==VbaExecutionStatus::Error && boundResult.errorNumber==6);
     }
+    for(const auto& expression:std::vector<std::string>{
+        "TypeName(Abs(CInt(-32767))+1)=CStr(\"Long\")",
+        "TypeName(Int(CInt(32767))+1)=CStr(\"Long\")",
+        "TypeName(Fix(CInt(32767))+1)=CStr(\"Long\")",
+        "TypeName(Round(CInt(32767))+1)=CStr(\"Long\")",
+        "TypeName(Sgn(1)+CInt(32767))=CStr(\"Long\")",
+        "TypeName(Abs(CLng(-2147483647))+1)=CStr(\"Double\")",
+        "TypeName(Choose(1,CInt(32767))+1)=CStr(\"Long\")",
+        "TypeName(Switch(True,CInt(32767))+1)=CStr(\"Long\")",
+        "TypeName(IIf(True,CInt(32767),0)+1)=CStr(\"Long\")",
+        "TypeName(Nz(CInt(32767))+1)=CStr(\"Long\")",
+        "TypeName(Nz(Null,CInt(32767))+1)=CStr(\"Long\")"})
+        assert(eval(expression).truthy());
+    for(const auto& expression:{"CDate(2958465)+Sqr(1)","CDate(2958465)+Cos(0)","CDate(2958465)+Exp(0)"}) {
+        int code=0;try {(void)eval(expression);}catch(const VbaRuntimeError& error){code=error.number;}assert(code==6);
+    }
     assert(eval("Choose(2.5,10,20,30)").asNumber()==20 && eval("Choose(0,10)").kind==VbaValue::Kind::Null);
     assert(eval("Choose(2,10,Null)").kind==VbaValue::Kind::Null);
     assert(eval("Switch(False,10,True,CCur(\"1.25\"),True,30)").kind==VbaValue::Kind::Currency);

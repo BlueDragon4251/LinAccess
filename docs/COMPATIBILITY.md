@@ -6332,3 +6332,17 @@ zunächst nicht, vor bestandenem Lauf behoben. Keine neuen CTest-/Katalog-IDs;
 Originalinventar46,35/Originalpfad120,51/7Hashes liegt auf5df3cba2 vor Literal- und
 Deklarationsänderungen. Ohne Zwischenabschluss native numerische Intrinsic-
 Rückgabebindungen und weitere tatsächliche Anforderungen fortsetzen.
+
+
+Numerische Intrinsic-Rückgabebindungen: NUMERIC_INTRINSIC_BINDINGS.md ergänzt
+tatsächliche deklarierte Variant-Ergebnisse für Abs/Int/Fix/Round/Sgn und
+Choose/Switch/IIf/Nz; ausgewählte feste Integer-Argumente machen diese Funktionen
+nicht selbst statisch. Sqr/Exp/Log/Sin/Cos/Tan/Atn sind nachgewiesenes Double.
+Unveränderte eigentliche Zahlen-/Fehler-/Präzisions-/Eager-Pfade, generische Host-
+Aggregate ohne fälschlich übernommene Cache-Deklaration, Access-Eval unverändert.
+App/Core/DAO/Abfragemodell gebaut; erstes bestehendes Bündel3/3 in8,36s
+(5,18/2,98/0,20) bestanden. Keine neuen CTest-/Katalog-IDs;456/386/70 unverändert,
+keine Voll-Varianten-/AST-/Windows-Parität. Vorstufef38f6970 privat remote/Baum
+geprüft. Letztes geprüftes DEB5df3cba2 liegt vor Literal-/Deklarationsumfängen.
+Ohne Zwischenabschluss aktuellen Paket-/Originalnachweis für diese Umfänge
+bündeln und danach weitere tatsächliche Anforderungen implementieren.
