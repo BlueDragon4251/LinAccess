@@ -299,6 +299,10 @@ void boundScalarSqlFunction(sqlite3_context* context,int count,sqlite3_value** a
         const auto result=evaluateVbaExpression(expression,host,values);
         if(result.kind==VbaValue::Kind::Null) native.nullResult(context);
         else if(result.kind==VbaValue::Kind::Boolean) native.integerResult(context,result.boolean ? -1 : 0);
+        else if(result.kind==VbaValue::Kind::Number && (result.numericType==VbaValue::NumericType::Double || result.numericType==VbaValue::NumericType::Single)) {
+            if(!std::isfinite(result.number)) throw VbaRuntimeError(6,"Nonfinite bound scalar SQL result");
+            native.numberResult(context,result.number);
+        }
         else if(result.kind==VbaValue::Kind::Date) returnText(context,sqlFieldValue(result,"DATETIME").toString());
         else if(result.kind==VbaValue::Kind::Text) returnText(context,QString::fromUtf8(result.text.data(),static_cast<qsizetype>(result.text.size())));
         else if(result.kind==VbaValue::Kind::Number && (result.numericType==VbaValue::NumericType::Integer || result.numericType==VbaValue::NumericType::Long || result.numericType==VbaValue::NumericType::Byte)) native.integerResult(context,static_cast<qlonglong>(result.number));
@@ -366,12 +370,19 @@ void stringReverse(sqlite3_context* context,int count,sqlite3_value** args) noex
 void stringReverseTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"StrReverse",1,1,true);}
 void stringInStrRev(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"InStrRev",2,4,false);}
 void stringInStrRevTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"InStrRev",2,4,true);}
+void mathSqrTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Sqr",1,1,true);}
 void mathSqr(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Sqr",1,1); }
+void mathExpTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Exp",1,1,true);}
 void mathExp(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Exp",1,1); }
+void mathLogTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Log",1,1,true);}
 void mathLog(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Log",1,1); }
+void mathSinTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Sin",1,1,true);}
 void mathSin(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Sin",1,1); }
+void mathCosTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Cos",1,1,true);}
 void mathCos(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Cos",1,1); }
+void mathTanTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Tan",1,1,true);}
 void mathTan(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Tan",1,1); }
+void mathAtnTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Atn",1,1,true);}
 void mathAtn(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Atn",1,1); }
 void stringLCase(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"LCase",1,1,false);}
 void stringLCaseTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"LCase",1,1,true);}
@@ -839,10 +850,15 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_ascw",-1,&stringAscW,nullptr,nullptr);
     ensure("linaccess_jet_chr",-1,&stringChr,nullptr,nullptr);
     ensure("linaccess_jet_sqr",-1,&mathSqr,nullptr,nullptr);
+    ensure("linaccess_jet_sqr_typed",-1,&mathSqrTyped,nullptr,nullptr);
     ensure("linaccess_jet_exp",-1,&mathExp,nullptr,nullptr);
+    ensure("linaccess_jet_exp_typed",-1,&mathExpTyped,nullptr,nullptr);
     ensure("linaccess_jet_log",-1,&mathLog,nullptr,nullptr);
+    ensure("linaccess_jet_log_typed",-1,&mathLogTyped,nullptr,nullptr);
     ensure("linaccess_jet_sin",-1,&mathSin,nullptr,nullptr);
+    ensure("linaccess_jet_sin_typed",-1,&mathSinTyped,nullptr,nullptr);
     ensure("linaccess_jet_cos",-1,&mathCos,nullptr,nullptr);
+    ensure("linaccess_jet_cos_typed",-1,&mathCosTyped,nullptr,nullptr);
     ensure("linaccess_jet_power",2,&numericPower,nullptr,nullptr);
     ensure("linaccess_jet_double_add",2,&double_add,nullptr,nullptr);
     ensure("linaccess_jet_double_subtract",2,&double_subtract,nullptr,nullptr);
@@ -899,7 +915,9 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_cdbl",-1,&convert_cdbl,nullptr,nullptr);
 
     ensure("linaccess_jet_tan",-1,&mathTan,nullptr,nullptr);
+    ensure("linaccess_jet_tan_typed",-1,&mathTanTyped,nullptr,nullptr);
     ensure("linaccess_jet_atn",-1,&mathAtn,nullptr,nullptr);
+    ensure("linaccess_jet_atn_typed",-1,&mathAtnTyped,nullptr,nullptr);
     ensure("linaccess_jet_lcase",-1,&stringLCase,nullptr,nullptr);
     ensure("linaccess_jet_ucase",-1,&stringUCase,nullptr,nullptr);
     ensure("linaccess_jet_filelen",-1,&fileLength,nullptr,nullptr);

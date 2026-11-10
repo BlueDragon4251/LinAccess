@@ -2074,6 +2074,34 @@ FROM calendar_inputs WHERE marker=1)SQL");
         assert(values[6].toString()=="2024-02-28 00:00:00" && values[7].toString()=="1899-12-30 12:34:56" && values[8].toString()=="1900-01-01 00:00:00");
         assert(values[9].toString()=="2024-02-28 00:00:00" && values[10].toInt()==12 && values[11].toString()=="Feb" && values[12].toString()=="Tuesday");
         assert(values[13].toString()=="2024-02-27 12:34:56" && values[14].toString()=="2024-09-09 16:55:12" && values[15].toString()=="2024-02-28 14:34:56" && values[16].toString()=="2024-03-02 12:34:56");
+        calendarPhase="typed math family";
+        const auto mathSource=QStringLiteral("SELECT Sqr(offset_date) AS root,Exp(offset_date) AS exponential,Log(offset_date) AS logarithm,Sin(offset_date) AS sine,Cos(offset_date) AS cosine,Tan(offset_date) AS tangent,Atn(offset_date) AS arctangent,Exp(enabled) AS logical_exp,Sin(elapsed) AS single_sine,Sqr(amount) AS money_root FROM calendar_inputs WHERE marker=1");
+        const auto mathValues=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery(mathSource),{});
+        assert(mathValues.rows.size()==1 && mathValues.columnTypes==QVector<QString>(10,"DOUBLE"));
+        const double mathExpected[]{std::sqrt(2.0),std::exp(2.0),std::log(2.0),std::sin(2.0),std::cos(2.0),std::tan(2.0),std::atan(2.0),std::exp(-1.0),std::sin(16777216.0),std::sqrt(1.5)};
+        for(int index=0;index<10;++index) assert(std::abs(mathValues.rows[0][index].toDouble()-mathExpected[index])<1e-12);
+        const auto mathFields=database->member("OpenRecordset",{linaccess::VbaValue::string(mathSource.toStdString())}).object;
+        assert(mathFields->member("Fields",{linaccess::VbaValue::string("root")}).object->member("Type",{}).asNumber()==7);
+        assert(mathFields->item("root").numericType==linaccess::VbaValue::NumericType::Double);mathFields->member("Close",{});
+        const auto mathFilter=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT marker FROM calendar_inputs WHERE marker=1 AND Exp(enabled)<1 AND Sqr(offset_date)>1"),{});
+        assert(mathFilter.rows.size()==1 && mathFilter.rows[0][0].toInt()==1);
+        const auto mathGroups=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT Sqr(offset_date) AS root,Count(*) AS tally FROM calendar_inputs GROUP BY Sqr(offset_date) ORDER BY Sqr(offset_date)"),{});
+        assert(mathGroups.rows.size()==1 && mathGroups.rows[0][1].toInt()==2 && mathGroups.columnTypes[0]=="DOUBLE");
+        for(const auto& failure:std::vector<std::pair<std::string,int>>{
+            {"SELECT Sqr(enabled) FROM calendar_inputs WHERE marker=2",94},
+            {"SELECT Exp(enabled) FROM calendar_inputs WHERE marker=2",94},
+            {"SELECT Log(enabled) FROM calendar_inputs WHERE marker=2",94},
+            {"SELECT Sin(enabled) FROM calendar_inputs WHERE marker=2",94},
+            {"SELECT Cos(enabled) FROM calendar_inputs WHERE marker=2",94},
+            {"SELECT Tan(enabled) FROM calendar_inputs WHERE marker=2",94},
+            {"SELECT Atn(enabled) FROM calendar_inputs WHERE marker=2",94},
+            {"SELECT Sqr(enabled) FROM calendar_inputs WHERE marker=1",5},
+            {"SELECT Log(enabled) FROM calendar_inputs WHERE marker=1",5},
+            {"SELECT Exp(elapsed) FROM calendar_inputs WHERE marker=1",6},
+            {"SELECT Sqr(offset_text) FROM calendar_inputs WHERE marker=1",13}}) {
+            int actual=0;try{(void)database->member("OpenRecordset",{linaccess::VbaValue::string(failure.first)});}catch(const linaccess::VbaRuntimeError& error){actual=error.number;}
+            assert(actual==failure.second);
+        }
         calendarPhase="DAO fields";
         const auto calendarFields=database->member("OpenRecordset",{linaccess::VbaValue::string(calendarSource.toStdString())}).object;
         assert(calendarFields->member("Fields",{linaccess::VbaValue::string("shifted")}).object->member("Type",{}).asNumber()==8);

@@ -7260,3 +7260,15 @@ Baum61740b61e261d6ea954b3347240193e3be67ac57.
 work/single-bang-identifiers/package-proof/package/linaccess-0.7.0-Linux.deb:
 Bau/CPack/check-deb bestanden, bestehendes Original-/Inventarbündel2/2 in164,29s
 (117,39/46,90s),7 geschützte Hashes unverändert. Bekannte Referenzgrenzen bleiben.
+
+
+Typisierte SQL-Mathematik (2026-11-10): TYPED_SQL_ARITHMETIC.md.
+Sqr/Exp/Log/Sin/Cos/Tan/Atn erhalten nachgewiesene Date/Boolean/Single/Currency-
+Argumente und deklarierte Double-Ergebnisse in Projektion/Filter/Gruppierung/
+Sortierung. Tatsächliches DAO dbDouble ist7. Native Null94/Domain5/Typ13/
+Overflow6 bleiben erhalten; kein Windows-Library-Orakel behauptet. App/DAO/
+Query-Modell gebaut; Modell0,25s bestanden, betroffener abschließender DAO-Lauf
+1/1 in3,36s. Technische Test-Erwartungen dbDouble und Null korrigiert; keine
+Produktregel dafür gelockert. Keine neuen IDs;456/386/70, F067/F068/F071 offen.
+Vorstand51b8e75ce1ee55827a3c7da243671a821d645fd5/Baumaa57c12dd3cdc7046009a39076fde7c00a7168f6
+privat veröffentlicht und exakt verifiziert. Letzter Paketbeleg weiterhin9413428.

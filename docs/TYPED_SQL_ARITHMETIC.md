@@ -48,3 +48,19 @@ The native index regression observes SQLite statement scan counters on the
 actual executed query and requires zero full-scan steps for the indexed ID
 predicate. Cache tests use the real importer for ambiguous REAL storage with
 proven Double metadata, distinct from DAO-created physical DOUBLE declarations.
+
+
+Native mathematical scalar family (2026-11-10)
+--------------------------------------------
+Sqr/Exp/Log/Sin/Cos/Tan/Atn use proven argument declarations through the shared
+native scalar binding. Date inputs retain their OLE numeric meaning, Boolean
+True is -1 even where physical storage is1, Single input is rounded as Single,
+and bounded Currency uses the existing exact conversion. TEXT remains TEXT;
+there is no inference of a Date from its contents. Results are Double with
+actual DAO dbDouble metadata; nonfinite results are refused with error6.
+Nested supported projections, WHERE/HAVING, GROUP BY and ORDER BY retain the
+bound function calls. A NULL math argument raises the existing VBA error94;
+domain/type/overflow checks are the same native implementation used outside SQL.
+This does not implement every Jet arithmetic promotion, locale conversion,
+complex query source or Access numerical-library equivalence. F067/F068/F071
+remain open. No new CTest IDs or Windows observations are introduced.
