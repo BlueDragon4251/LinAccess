@@ -248,3 +248,15 @@ identity and live child lookup, refuses collision/traversal/Null without changin
 the held path, and independently reads the original payload after relocation.
 All temporary objects are confined to the fixture directory and cleaned there.
 No additional CTest target or catalog ID is introduced.
+
+Folder.Move(Destination) and FileSystemObject.MoveFolder(Source,Destination) now
+relocate one actual directory to an exact absent native destination. Both reuse
+the existing same-filesystem atomic no-replace helper. Folder.Move updates the
+held object's path only after success; independent path objects are not silently
+rewritten. Named arguments use the real Source/Destination signatures.
+Existing destinations fail58; trailing-separator destination-folder interpretation
+remains3251; Null fails94. Wildcards, Windows paths, cross-filesystem copy fallback,
+merged trees, recursive directory copying and full Windows sharing/attribute
+semantics are not introduced. The existing core scope checks both actual APIs,
+Unicode, aliases, collision/Null/directory refusal, live collection refresh and
+independently preserved file contents. No new test target or catalog point.

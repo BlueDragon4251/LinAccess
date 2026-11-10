@@ -9,6 +9,19 @@
 
 namespace linaccess {
 inline VbaValue nativeFolderReference(std::filesystem::path path);
+inline std::filesystem::path nativeFolderMove(const std::filesystem::path& source,const VbaValue& target) {
+    auto destination=nativeFilePath(scalarVbaValue(target));
+    if(destination.empty()) throw VbaRuntimeError(52,"Invalid Folder.Move destination");
+    if(destination.filename().empty()) throw VbaRuntimeError(3251,"Folder.Move requires an exact destination pathname");
+    std::error_code error;destination=std::filesystem::absolute(destination,error);
+    if(error==std::errc::permission_denied) throw VbaRuntimeError(70,"Folder.Move permission denied");
+    if(error) throw VbaRuntimeError(75,"Folder.Move destination unavailable");
+    destination=destination.lexically_normal();
+    (void)nativeFolderReference(source);
+    nativeFileRename(VbaValue::string(source.string()),VbaValue::string(destination.string()));
+    return destination;
+}
+
 // Native file object. Metadata is read again; successful moves update its path.
 class VbaFileObject final : public VbaObject {
     std::filesystem::path path_;
@@ -191,6 +204,7 @@ public:
         std::string method(name);
         std::transform(method.begin(),method.end(),method.begin(),[](unsigned char ch) { return std::tolower(ch); });
         if(method=="createtextfile") return VbaArgumentSignature{{"FileName","Overwrite","Unicode"},1};
+        if(method=="move") return VbaArgumentSignature{{"Destination"},1};
         return {};
     }
     bool hasScalarDefault() const override { return true; }
@@ -203,6 +217,10 @@ public:
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
         std::string method(name);
         std::transform(method.begin(),method.end(),method.begin(),[](unsigned char ch) { return std::tolower(ch); });
+        if(method=="move") {
+            if(args.size()!=1 || args[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"Folder.Move requires Destination");
+            path_=nativeFolderMove(path_,args[0]);return {};
+        }
         if(method=="createtextfile") {
             if(args.empty() || args.size()>3 || args[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"Invalid Folder.CreateTextFile argument count");
             const auto name=coerceVbaModuleValue(scalarVbaValue(args[0]),"string").asText();
@@ -315,6 +333,7 @@ public:
         if(method=="deletefile") return VbaArgumentSignature{{"FileSpec","Force"},1};
         if(method=="createfolder") return VbaArgumentSignature{{"Path"},1};
         if(method=="getfolder") return VbaArgumentSignature{{"FolderPath"},1};
+        if(method=="movefolder") return VbaArgumentSignature{{"Source","Destination"},2};
         if(method=="getfile") return VbaArgumentSignature{{"FilePath"},1};
         if(method=="fileexists") return VbaArgumentSignature{{"FileSpec"},1};
         if(method=="folderexists") return VbaArgumentSignature{{"FolderSpec"},1};
@@ -334,6 +353,10 @@ public:
             if(args.empty() || args.size()>4 || args[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"Invalid OpenTextFile argument count");
             const auto options=nativeTextOptions(args,1,3);
             return nativeOpenTextStream(VbaValue::string(path(args[0]).string()),options.mode,nativeFileFlag(args,2,false),false,options.unicode);
+        }
+        if(method=="movefolder") {
+            if(args.size()!=2 || args[0].kind==VbaValue::Kind::Missing || args[1].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"MoveFolder requires Source and Destination");
+            (void)nativeFolderMove(path(args[0]),args[1]);return {};
         }
         if(method=="copyfile" || method=="movefile" || method=="deletefile") {
             const auto required=method=="deletefile" ? 1u : 2u;

@@ -1152,3 +1152,15 @@ Fixtures geprüft; danach DAO2,81s+Original120,75s,2/2 in123,57s. Bekannte Makro
 bleibt. Sieben Hashes vor Paketlauf unverändert. Paket liegt vor Folder.Name.
 Ohne Zwischenabschluss weitere allgemeine native Objekt-/Entwurfsanforderungen
 implementieren; keinen Abschlussanruf für diese Etappe auslösen.
+
+
+Native Ordnerverlagerung: Folder.Move und FileSystemObject.MoveFolder benutzen
+den vorhandenen atomaren No-Replace-Helfer für einzelne tatsächliche Ordner und
+exakte Zielpfade; Name-/Alias-Pfad erst nach Erfolg. Benannte Source/Destination,
+Unicode, tatsächliche Unterdatei, frische Collections und unveränderte Pfade nach
+58/3251/94 geprüft. App gebaut; bestehender Kern erster Lauf1/1 in5,26s. Keine
+neuen Tests/IDs; F091/456/386/70 unverändert. Vorstufe1d8f606 privat remote/Baum
+verifiziert. Geprüftes DEBc8bd82b unter /workspace/work/population-statistics/package
+liegt vor Name/Move; letztes Original120,75s/DAO2,81s ebenfalls davor. Weiter ohne
+Zwischenabschluss: feste numerische TRANSFORM-Kreuztabellen um Avg/Var/StDev/
+VarP/StDevP mit nachgewiesener Double-Ausgabetypisierung erweitern.

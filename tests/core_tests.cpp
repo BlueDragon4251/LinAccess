@@ -3340,6 +3340,37 @@ End Sub)VBA","RenameFolder",host);
         std::ifstream renamedInput(renameRoot/"final"/"keep.txt",std::ios::binary);
         const std::string renamedContents((std::istreambuf_iterator<char>(renamedInput)),{});assert(renamedContents=="payload");renamedInput.close();
         assert(fs::remove_all(renameRoot)==4);
+        assert(fs::create_directory(renameRoot));host.fields["FolderMoveRoot"]=renameRoot.string();
+        const auto moveFolder=executeVbaProcedure(R"VBA(Sub MoveFolderProbe()
+Dim fs As Scripting.FileSystemObject, folder As Scripting.Folder, aliasFolder As Scripting.Folder
+Dim parent As Scripting.Folder, stream As Scripting.TextStream
+Set fs=New Scripting.FileSystemObject
+Set folder=fs.CreateFolder(Me!FolderMoveRoot & "/source")
+Set aliasFolder=folder
+Set stream=folder.CreateTextFile("keep.txt",False)
+stream.Write "move-payload"
+stream.Close
+Set stream=Nothing
+Set parent=fs.CreateFolder(Me!FolderMoveRoot & "/destination")
+folder.Move Destination:=parent.Path & "/moved-ä"
+Me!FolderMoved=aliasFolder.Name & ":" & CStr(fs.FolderExists(Me!FolderMoveRoot & "/source")) & ":" & CStr(folder.Files.Count)
+On Error Resume Next
+folder.Move parent.Path
+Me!FolderMoveCollision=CStr(Err.Number) & ":" & aliasFolder.Name
+Err.Clear
+folder.Move parent.Path & "/"
+Me!FolderMoveDirectory=CStr(Err.Number) & ":" & aliasFolder.Name
+Err.Clear
+folder.Move Null
+Me!FolderMoveNull=CStr(Err.Number) & ":" & aliasFolder.Name
+On Error GoTo 0
+fs.MoveFolder Destination:=Me!FolderMoveRoot & "/final", Source:=folder.Path
+Me!FolderMoveFinal=CStr(fs.FileExists(Me!FolderMoveRoot & "/final/keep.txt")) & ":" & CStr(parent.SubFolders.Count)
+End Sub)VBA","MoveFolderProbe",host);
+        assert(moveFolder.status==VbaExecutionStatus::Completed);
+        assert(host.fields["FolderMoved"]=="moved-ä:False:1" && host.fields["FolderMoveCollision"]=="58:moved-ä");
+        assert(host.fields["FolderMoveDirectory"]=="3251:moved-ä" && host.fields["FolderMoveNull"]=="94:moved-ä" && host.fields["FolderMoveFinal"]=="True:0");
+        std::ifstream movedInput(renameRoot/"final"/"keep.txt",std::ios::binary);const std::string movedContents((std::istreambuf_iterator<char>(movedInput)),{});assert(movedContents=="move-payload");movedInput.close();assert(fs::remove_all(renameRoot)==4);
         const auto textFile=directory/"read-lines.txt";
         { std::ofstream output(textFile,std::ios::binary); output<<"one\r\ntwo\nend"; }
         host.fields["FsoTextFile"]=textFile.string();
