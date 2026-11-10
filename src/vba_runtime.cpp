@@ -1,3 +1,4 @@
+#include "vba_identifier_use.hpp"
 #include "vba_analyzer.hpp"
 #include "vba_expression_call.hpp"
 #include "vba_identifier_type.hpp"
@@ -553,6 +554,9 @@ VbaValue constantExpression(const std::string& expression,const VbaVariables& va
     }
     ConstantExpressionHost host;
     VbaFunctionResolver resolver;
+    resolver.variableDeclaredType=[&](std::string_view name) -> std::optional<std::string> {
+        const auto declared=types.find(lower(std::string(name)));return declared==types.end() ? std::nullopt : std::optional{declared->second};
+    };
     resolver.typedIdentifier=[&](std::string_view name) -> std::optional<std::string> {
         const auto suffix=vbaIdentifierType(name);if(suffix.empty()) return {};
         const auto key=lower(vbaIdentifierName(name));
@@ -2893,6 +2897,12 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         if(!signature) throw VbaRuntimeError(3251,"Declared local procedure binding is unsupported");
         return signatureCache.emplace(key,std::move(signature)).first->second;
     };
+    resolver.variableDeclaredType=[&](std::string_view name) -> std::optional<std::string> {
+        const auto key=lower(std::string(name));
+        if(locals.contains(key)) return variableType(key);
+        const auto signature=resolver.argumentSignature(key);
+        return signature && signature->function && !signature->required ? std::optional{signature->resultType} : std::nullopt;
+    };
     resolver.typedIdentifier=typedIdentifier;
     resolver.variableValue=[&](std::string_view name,const VbaValue& value) {
         const auto key=lower(std::string(name));auto actual=automaticObjects.contains(key) ? readVariable(key) : value;
@@ -2913,6 +2923,71 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         }
         auto value=locals.at(key);value.arithmeticBinding=variableArithmeticBinding(key);return value;
     };
+    const auto visitExpressions=[&](const Statement& instruction,const auto& visit) {
+        if(instruction.type==Statement::Type::Dim) return; // constants/fixed bounds were folded with declaration metadata
+            if(instruction.type==Statement::Type::Call || instruction.type==Statement::Type::OpenForm
+                || instruction.type==Statement::Type::FileCopy || instruction.type==Statement::Type::RaiseError
+                || instruction.type==Statement::Type::SendKeys) {
+                for(const auto& part:splitArguments(instruction.expression)) visit(callArgument(part).expression);
+            } else if(instruction.type==Statement::Type::Case) {
+                if(lower(instruction.expression)!="else") for(const auto& clause:splitArguments(instruction.expression)) {
+                    if(outsideKeyword(clause,"is")==0 || (!clause.empty() && std::string("<>=").find(clause.front())!=std::string::npos)) {
+                        const auto comparison=trim(outsideKeyword(clause,"is")==0 ? clause.substr(2) : clause);
+                        const auto end=comparison.find_first_not_of("<>=");if(end!=std::string::npos) visit(trim(comparison.substr(end)));
+                    } else if(const auto range=outsideKeyword(clause,"to");range!=std::string::npos) {visit(trim(clause.substr(0,range)));visit(trim(clause.substr(range+2)));}
+                    else visit(clause);
+                }
+            } else visit(instruction.expression);
+            if(instruction.type==Statement::Type::If || instruction.type==Statement::Type::ObjectAssign
+                || instruction.type==Statement::Type::IndexedAssign || instruction.type==Statement::Type::FileRename) visit(instruction.argument);
+            if(instruction.type==Statement::Type::IndexedAssign) {
+                for(const auto& part:splitArguments(instruction.endExpression)) visit(callArgument(part).expression);
+            } else visit(instruction.endExpression);
+            visit(instruction.stepExpression);
+            for(const auto& item:instruction.outputItems) visit(item.expression);
+            for(const auto& target:instruction.resizeTargets) for(const auto& dimension:splitArguments(target.bounds)) {
+                const auto range=outsideKeyword(dimension,"to");
+                if(range!=std::string::npos) visit(trim(dimension.substr(0,range)));
+                visit(trim(range==std::string::npos ? dimension : dimension.substr(range+2)));
+            }
+    };
+    std::unordered_map<std::string,std::string> firstTypes;
+    const auto rememberUses=[&](std::string_view expression) {
+        for(const auto& use:vbaIdentifierUses(expression)) {
+            auto hint=use.type.empty() ? implicitTypes.forName(use.name) : use.type;
+            if(hint.empty()) hint="variant";if(use.call) hint="call";
+            const auto [first,inserted]=firstTypes.try_emplace(use.name,std::move(hint));
+            if(!use.singleWordOperator || explicitVariables || locals.contains(use.name) || first->second!="single") continue;
+            if(stateOwners.front()->procedures.contains(use.name) || host.hasInstanceIdentifier(use.name) || externalProcedure(use.name)) continue;
+            ensureImplicitLocal(use.name,false,{},"single");
+        }
+    };
+    // Only procedures with this ambiguity need the extra lexical pass. The
+    // declaration type comes from the first textual use, independent of which
+    // control-flow branch eventually runs; Variant subtypes do not qualify.
+    const bool ambiguous=std::any_of(instructions.begin(),instructions.end(),[&](const Statement& instruction) {
+        bool found=false;visitExpressions(instruction,[&](std::string_view expression){if(vbaNeedsSingleBangBinding(expression)) found=true;});return found;
+    });
+    if(ambiguous) for(const auto& instruction:instructions) {
+        try {
+            if(instruction.type==Statement::Type::SetVar || instruction.type==Statement::Type::ObjectSet
+                || instruction.type==Statement::Type::For || instruction.type==Statement::Type::ForEach
+                || instruction.type==Statement::Type::StringAlign || instruction.type==Statement::Type::IndexedAssign) rememberUses(instruction.argument);
+            visitExpressions(instruction,rememberUses);
+        } catch(const VbaRuntimeError& failure) {
+            VbaExecutionResult outcome{VbaExecutionStatus::Unsupported,failure.what(),instruction.line};outcome.errorNumber=failure.number;return outcome;
+        }
+    }
+    const auto boundSyntax=[&](std::string_view expression) {
+        if(!vbaNeedsSingleBangBinding(expression)) return;
+        if(!validVbaExpression(expression,true,resolver)) throw VbaRuntimeError(3251,"Single type character requires a proven variable binding or valid bang access");
+    };
+    if(ambiguous) for(const auto& instruction:instructions) {
+        try {visitExpressions(instruction,boundSyntax);}
+        catch(const VbaRuntimeError& failure) {
+            VbaExecutionResult outcome{VbaExecutionStatus::Unsupported,failure.what(),instruction.line};outcome.errorNumber=failure.number;return outcome;
+        }
+    }
     const auto compareMode=moduleCompareMode(module);
     const auto evaluate = [&](std::string_view expression,bool statementContext=false) {
         return evaluateVbaExpression(expression, host, locals, resolver,withFrames.empty() ? nullptr : &withFrames.back().value,compareMode,arrayBase,statementContext);
@@ -3811,6 +3886,11 @@ VbaExecutionResult executeVbaEventExpression(std::string_view module,std::string
         resolver.argumentSignature=[&](std::string_view name) -> std::optional<VbaArgumentSignature> {
             const auto target=binding(name);return target ? std::optional{target->second} : std::nullopt;
         };
+        resolver.variableDeclaredType=[&](std::string_view name) -> std::optional<std::string> {
+            const auto target=binding(name);
+            return target && !target->second.required ? std::optional{target->second.resultType} : std::nullopt;
+        };
+        if(vbaNeedsSingleBangBinding(source) && !validVbaExpression(source,true,resolver)) throw VbaRuntimeError(3251,"Event Single/bang expression has no proven variable binding");
         const auto value=evaluateVbaExpression(source,host,{},resolver);
         VbaExecutionResult result{VbaExecutionStatus::Completed,{},line};
         result.typedReturnValue=std::make_shared<VbaValue>(value);

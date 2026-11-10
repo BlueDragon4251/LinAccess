@@ -181,6 +181,8 @@ public:
     std::function<std::optional<VbaValue>(std::string_view)> undeclaredIdentifier;
     std::function<VbaValue(std::string_view,const VbaValue&)> variableValue;
     std::function<std::optional<std::string>(std::string_view)> typedIdentifier;
+    // Declaration metadata only: never evaluate/materialize a variable or call.
+    std::function<std::optional<std::string>(std::string_view)> variableDeclaredType;
     VbaFunctionResolver()=default;
     VbaFunctionResolver(std::nullptr_t) {}
     template<class Function> requires (!std::is_same_v<std::remove_cvref_t<Function>,VbaFunctionResolver>
@@ -196,7 +198,8 @@ VbaEvaluatedArgument evaluateVbaArgumentExpression(std::string_view expression,V
     VbaCompareMode compareMode=VbaCompareMode::Binary,int arrayBase=0,bool objectContext=false);
 std::vector<std::string> vbaConstructedClasses(std::string_view expression);
 std::vector<std::string> vbaExpressionClassTypes(std::string_view expression);
-bool validVbaExpression(std::string_view expression,bool withContext=false);
+bool validVbaExpression(std::string_view expression,bool withContext=false,const VbaFunctionResolver& bindings={});
+bool vbaNeedsSingleBangBinding(std::string_view expression);
 VbaValue evaluateVbaExpression(std::string_view expression, VbaHost& host,
                                const VbaVariables& variables, const VbaFunctionResolver& resolver = {},const VbaValue* withContext=nullptr,VbaCompareMode compareMode=VbaCompareMode::Binary,int arrayBase=0,bool statementContext=false);
 VbaValue evaluateVbaObjectExpression(std::string_view expression,VbaHost& host,

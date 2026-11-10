@@ -170,6 +170,40 @@ benannte/optionale Werte, falsche Typzeichen, Bibliotheksrückfall und unterblie
 Ausführung privater Funktionen werden im vorhandenen Kernbündel geprüft.
 Keine neuen CTest-/Katalog-IDs; kein Windows-/Gesamtparitätsnachweis.
 
-Weiter offen innerhalb F040: kontextabhängige Single-`!`-Namen vor Wortoperatoren
-wie And/Mod können mit Bang-Feldern zusammenfallen; diese Fälle sind durch die
-bisherigen einfachen Suffixproben nicht als vollständig belegt anzusehen.
+Die nachfolgende Erweiterung bindet Single-`!` vor Wortoperatoren. F040 bleibt
+wegen der vollständigen Grammatik-/Projekt-/Library-/Bindungsanforderungen offen.
+
+
+## Single-Typzeichen vor Wortoperatoren
+
+Der native Tokenstrom unterscheidet `mask! And 3` und `mask! Mod 3` anhand reiner
+Deklarationsmetadaten von Bang-Feldzugriffen. Bekannte Single-Variablen, Konstanten,
+Parameter und parameterlos aufrufbare Single-Funktionen/Get-Properties werden
+gebunden. Benannte Objektmitglieder werden nicht als gleichnamige lokale Variablen
+behandelt; Text-/Bracket-/Datumliterale bleiben erhalten. Literalbezeichner wie
+True ignorieren ihr Typzeichen gemäß den bestehenden Literalregeln.
+
+Die Syntaxannahme allein beweist keine Bindung. Vor dem Prozedurkörper werden
+mehrdeutige Ausdrücke erneut ohne Hostausführung gegen den tatsächlichen Rahmen
+geprüft. Auch Getter/Funktionen werden dabei nur inventarisiert, nicht ausgeführt.
+Der kontextbezogene Gang behandelt Aufrufargumente, Case-Relationen/-Bereiche,
+ReDim-Dimensionen und Druckausdrücke einzeln; Dim-Konstanten/feste Grenzen wurden
+bereits mit Deklarationsmetadaten gefaltet. Unpassende Bang-/Single-Bindungen
+verweigern den Körper vor dessen ersten Effekten. Ereignisse nutzen denselben
+Nachweis für bekannte Funktionen; Access-/Jet-Eval wird nicht auf VBA umgestellt.
+
+Für betroffene native Prozeduren kommen implizite Single-Bindungen aus der ersten
+textlichen Verwendung, unabhängig von später tatsächlich ausgeführten Zweigen.
+Typzeichen/Def-Typen bestimmen die Deklaration; ein vorangehendes Variant-Symbol
+wird nicht wegen seines aktuellen Single-Werts umgedeutet. Option Explicit bleibt
+wirksam. Host-/Projekt-/Prozedurnamen werden vor einer neuen impliziten Bindung
+geprüft; native Intrinsics/Enum-Konstanten werden ohne Hostausführung erkannt.
+Die quellgebundenen Pläne enthalten weiterhin keine Rahmen-/Hostdaten.
+
+Anwendung/Kern/DAO gebaut; finales vorhandenes Bündel2/2 in3,69s (0,47/3,23s)
+bestanden. Die Probe umfasst hoisted lokale Deklarationen, Modul-/Const-/Parameter-
+und implizite/DefSng-/Zweigbindung, parameterlose Funktionen/Get/Events, Call/For/
+Case/ReDim und feste konstante Grenzen. Die Single-Funktion läuft nachweislich
+nur bei Auswertung einmal. Ein tatsächliches DAO-Recordset mit Feld `[And]`
+bleibt über Bang erreichbar. Kein neuer CTest-/Katalogpunkt; keine vollständige
+VBA-/Access-Parität oder vollständige Library-/UDT-/Unicode-Bindung behauptet.

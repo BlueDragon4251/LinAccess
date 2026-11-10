@@ -1,3 +1,4 @@
+#include "vba_identifier_use.hpp"
 #include "vba_expression_call.hpp"
 #include "vba_identifier_type.hpp"
 #include "vba_error_text.hpp"
@@ -849,11 +850,37 @@ bool vbaIntrinsicName(const std::string& name) {
     return intrinsics.contains(name);
 }
 
+bool singleBangCandidate(const std::vector<Token>& tokens,std::size_t i) {
+    if(i+3>=tokens.size() || tokens[i].type!=Token::Type::Word || !vbaIdentifierType(tokens[i].value).empty()
+        || tokens[i+1].value!="!" || tokens[i+1].offset!=tokens[i].offset+tokens[i].value.size()
+        || tokens[i+2].type!=Token::Type::Word || !precedence(tokens[i+2])) return false;
+    // A member name is not an unqualified variable, even if a local shares it.
+    if(i && (tokens[i-1].value=="." || tokens[i-1].value=="!")) return false;
+    const auto& rhs=tokens[i+3];
+    if(rhs.type==Token::Type::End) return false;
+    if(rhs.type==Token::Type::Word) return !precedence(rhs);
+    if(rhs.type==Token::Type::Symbol) return rhs.value=="(" || rhs.value=="+" || rhs.value=="-" || rhs.value=="." || rhs.value=="!";
+    return true;
+}
+void bindSingleBangTokens(std::vector<Token>& tokens,VbaHost* host,const VbaFunctionResolver& resolver) {
+    for(std::size_t i=0;i+3<tokens.size();++i) if(singleBangCandidate(tokens,i)) {
+        const auto name=lower(tokens[i].value);
+        const bool literal=name=="true" || name=="false" || name=="null" || name=="empty" || name=="nothing";
+        bool typed=literal || (!host && !resolver.variableDeclaredType);
+        if(!literal && resolver.variableDeclaredType) {
+            const auto declared=resolver.variableDeclaredType(name);typed=declared && *declared=="single";
+        }
+        if(typed) {tokens[i].value+='!';tokens.erase(tokens.begin()+i+1);}
+    }
+}
+
 class ExpressionParser {
 public:
     ExpressionParser(std::string_view source, VbaHost* host, const VbaVariables& locals,
                      const VbaFunctionResolver& resolver = {},bool objectContext=false,bool accessExpression=false,const VbaValue* withContext=nullptr,bool allowWith=false,VbaCompareMode compareMode=VbaCompareMode::Binary,int arrayBase=0,bool jetEval=false,bool statementContext=false)
-        : source_(source),tokens_(tokenize(source,accessExpression,!accessExpression && !jetEval)), host_(host), locals_(locals), resolver_(resolver),objectContext_(objectContext),accessExpression_(accessExpression),jetEval_(jetEval),statementContext_(statementContext),withContext_(withContext),allowWith_(allowWith || withContext),compareMode_(compareMode),arrayBase_(arrayBase),executionEpoch_(vbaExecutionEpoch()) {}
+        : source_(source),tokens_(tokenize(source,accessExpression,!accessExpression && !jetEval)), host_(host), locals_(locals), resolver_(resolver),objectContext_(objectContext),accessExpression_(accessExpression),jetEval_(jetEval),statementContext_(statementContext),withContext_(withContext),allowWith_(allowWith || withContext),compareMode_(compareMode),arrayBase_(arrayBase),executionEpoch_(vbaExecutionEpoch()) {
+        if(!accessExpression && !jetEval) bindSingleBangTokens(tokens_,host,resolver);
+    }
 
     VbaValue parse() {
         std::optional<VbaLexicalScope> external;
@@ -2944,10 +2971,37 @@ VbaValue compareVbaValues(std::string_view relation,const VbaValue& left,const V
         throw VbaRuntimeError(5,"Invalid relational operator");
     return binary(std::string(relation),left,right,&host,mode);
 }
-bool validVbaExpression(std::string_view text,bool withContext) {
+bool validVbaExpression(std::string_view text,bool withContext,const VbaFunctionResolver& bindings) {
     const VbaVariables vars;
-    try { (void)ExpressionParser(text, nullptr, vars,{},false,false,nullptr,withContext).parse(); return true; }
-    catch (...) { return false; }
+    try { (void)ExpressionParser(text,nullptr,vars,bindings,false,false,nullptr,withContext).parse();return true; }
+    catch (...) {return false;}
+}
+bool vbaNeedsSingleBangBinding(std::string_view text) {
+    if(text.find('!')==std::string_view::npos) return false;
+    const auto tokens=tokenize(text,false,true);
+    for(std::size_t i=0;i+3<tokens.size();++i) if(singleBangCandidate(tokens,i)) return true;
+    return false;
+}
+std::vector<VbaIdentifierUse> vbaIdentifierUses(std::string_view text) {
+    std::vector<VbaIdentifierUse> result;if(text.empty()) return result;
+    const auto tokens=tokenize(text,false,true);
+    static const std::unordered_set<std::string> special{
+        "me","vba","application","docmd","forms","reports","screen","currentdb","dbengine","err",
+        "true","false","null","empty","nothing","not","new","typeof","as","to","step","else",
+        "variant","boolean","byte","integer","long","single","double","currency","date","string","object",
+        "eval","nz","iif","dsum","dcount","dlookup","dmin","dmax","davg","dfirst","dlast","dvar","dstdev","dvarp","dstdevp"};
+    const VbaVariables empty;
+    for(std::size_t i=0;i+1<tokens.size();++i) {
+        if(tokens[i].type!=Token::Type::Word || precedence(tokens[i]) || (i && (tokens[i-1].value=="." || tokens[i-1].value=="!")) || tokens[i+1].value==":=") continue;
+        const auto name=lower(vbaIdentifierName(tokens[i].value));
+        if(special.contains(name) || vbaIntrinsicName(name)) continue;
+        // Reuse the parser's pure no-host constant branches, rather than
+        // duplicating its public enum/constant registry or guessing prefixes.
+        try {if(ExpressionParser(name,nullptr,empty).parse().kind!=VbaValue::Kind::Null) continue;} catch(const VbaRuntimeError&) {continue;}
+        const bool candidate=singleBangCandidate(tokens,i);
+        result.push_back({name,candidate ? "single" : std::string(vbaIdentifierType(tokens[i].value)),tokens[i+1].value=="(",candidate});
+    }
+    return result;
 }
 VbaValue evaluateVbaExpression(std::string_view text, VbaHost& host,
                                const VbaVariables& vars, const VbaFunctionResolver& resolver,const VbaValue* withContext,VbaCompareMode compareMode,int arrayBase,bool statementContext) {

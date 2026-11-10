@@ -5708,6 +5708,80 @@ End Function
     const auto hiddenExternalEvent=executeVbaEventExpression("Sub LocalEventScope()\nEnd Sub","=ExpressionHidden$()",host);
     assert(hiddenExternalEvent.status==VbaExecutionStatus::Error && !host.fields.contains("HiddenTypedExpression"));
     host.evalModule=savedTypedEvalSource;
+    const auto singleWords=executeVbaProcedure(R"VBA(
+Private shared!
+Sub CaptureSingleWords(ByVal value As Long)
+Me!SingleWordCall=value
+End Sub
+Function SingleWordParameter(ByVal mask!) As Long
+SingleWordParameter=mask! And 3
+End Function
+Function SingleWordFunction!()
+Me!SingleFunctionCalls=Me!SingleFunctionCalls+1
+SingleWordFunction!=7
+End Function
+Property Get SingleWordProperty!()
+SingleWordProperty!=7
+End Property
+Sub SingleWords()
+Const positive!=7
+Const derived%=positive! And 3
+Dim mask!, values%(), counter%
+Dim fixed%(0 To positive! And 3)
+Me!SingleConstantBound=UBound(fixed)
+mask!=7
+shared!=7
+late!=7
+Me!SingleFunctionCalls=0
+ReDim values%(0 To mask! Mod 3)
+Call CaptureSingleWords(mask! And 3)
+For counter%=0 To mask! And 3
+Me!SingleLoopCounter=counter%
+Next counter%
+Select Case 1
+Case Is >= mask! Mod 3
+Me!SingleWordCase="match"
+Case Else
+Me!SingleWordCase="wrong"
+End Select
+Me![And]=2
+Me!SingleFunctionWords=CStr(SingleWordFunction! And 3) & ":" & CStr(SingleWordProperty! Mod 3)
+Me!PreservedBang=CStr(Me!And+1)
+Me!SingleWordResult=CStr(mask! And 3) & ":" & CStr(shared! Mod 3) & ":" & CStr(SingleWordParameter(mask!)) & ":" & CStr(UBound(values)) & ":" & CStr(late! And 3) & ":" & CStr(True! And 1) & ":" & CStr(derived%)
+Dim late!
+End Sub
+)VBA","SingleWords",host);
+    if(singleWords.status!=VbaExecutionStatus::Completed) std::cerr << "Single word binding: " << singleWords.errorNumber << "/" << singleWords.line << " " << singleWords.explanation << "\n";
+    assert(singleWords.status==VbaExecutionStatus::Completed && host.fields["SingleWordResult"]=="3:1:3:1:3:1:3");
+    assert(host.fields["SingleFunctionWords"]=="3:1" && host.fields["SingleFunctionCalls"]=="1" && host.fields["SingleConstantBound"]=="3");
+    assert(host.fields["SingleWordCall"]=="3" && host.fields["SingleLoopCounter"]=="3" && host.fields["SingleWordCase"]=="match" && host.fields["PreservedBang"]=="3");
+    const auto singleFunctionEvent=executeVbaEventExpression("Function SingleEvent!()\nSingleEvent!=7\nEnd Function","=SingleEvent! And 3",host);
+    assert(singleFunctionEvent.status==VbaExecutionStatus::Completed && singleFunctionEvent.returnValue=="3");
+    const auto wrongSingleWords=executeVbaProcedure(R"VBA(
+Function WrongBangEffect() As Long
+Me!WrongBangEffect=1
+WrongBangEffect=7
+End Function
+Sub WrongSingleWords()
+Me!BeforeWrongBang=1
+Me!WrongSingleValue=WrongBangEffect! And 3
+End Sub
+)VBA","WrongSingleWords",host);
+    assert(wrongSingleWords.status==VbaExecutionStatus::Unsupported && wrongSingleWords.errorNumber==3251 && !host.fields.contains("WrongBangEffect") && !host.fields.contains("BeforeWrongBang"));
+    const auto implicitSingleWords=executeVbaProcedure(R"VBA(
+Sub ImplicitSingleWords()
+mask!=7
+If False Then hidden!=7
+Me!ImplicitSingleWords=CStr(mask! And 3) & ":" & CStr(hidden! And 3) & ":" & CStr(unset! And 3)
+End Sub
+)VBA","ImplicitSingleWords",host);
+    assert(implicitSingleWords.status==VbaExecutionStatus::Completed && host.fields["ImplicitSingleWords"]=="3:0:0");
+    const auto variantSingleWords=executeVbaProcedure("Sub VariantSingleWords()\nmask=CSng(7)\nMe!VariantSingleWords=mask! And 3\nEnd Sub","VariantSingleWords",host);
+    assert(variantSingleWords.status==VbaExecutionStatus::Unsupported && !host.fields.contains("VariantSingleWords"));
+    const auto defaultSingleWords=executeVbaProcedure("DefSng A-Z\nSub DefaultSingleWords()\nmask=7\nMe!DefaultSingleWords=mask! And 3\nEnd Sub","DefaultSingleWords",host);
+    assert(defaultSingleWords.status==VbaExecutionStatus::Completed && host.fields["DefaultSingleWords"]=="3");
+    const auto explicitSingleWords=executeVbaProcedure("Option Explicit\nSub ExplicitSingleWords()\nMe!ExplicitSingleWords=unset! And 3\nEnd Sub","ExplicitSingleWords",host);
+    assert(explicitSingleWords.status==VbaExecutionStatus::Unsupported && !host.fields.contains("ExplicitSingleWords"));
     testVbaDebugger();
     testVbaDebugOutput();
     testVbaProperties();

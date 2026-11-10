@@ -4271,3 +4271,27 @@ Fester Katalog456/386/70 unverändert, keine neuen IDs. Weiter offenF040:
 Single-!-Namen vor Wortoperatoren/Bang-Feldmehrdeutigkeit, vollständige Bindung.
 Vorstand89824952415203a67e181c48fa6935cc96c3442c/Baumece81dd9b9b89507f8be5ad14334501906dddd3d
 privat verifiziert. Paketbeleg bleibt53e91932, frischer Paket-/Originallauf folgt.
+
+
+Paketbeleg für Eval-/Event-/Projektbindung (2026-11-10):
+Privater veröffentlichter Stand780a709610a275cc5bef493fc8f0ed07735a9c3e,
+Baum579ff0b2e97091dc04918ad3a2195c5c0e4921db. DEB unter
+work/expression-identifiers/package-proof/package/linaccess-0.7.0-Linux.deb:
+Bau/CPack/check-deb bestanden, vorhandenes Original-/Inventarbündel2/2 in165,00s
+(Inventar47,08/Original117,91s),7 geschützte Hashes unverändert.100/78/22,
+Kategorien73/5/3/9/10, kein Access-Ergebnisoracle für die78 ausgeführten Abfragen.
+Bekannte Original-/Referenzgrenzen bleiben. Dieses Paket liegt vor Single-!.
+
+
+Single-! vor Wortoperatoren (2026-11-10): VBA_IDENTIFIER_TYPES.md erweitert.
+Kontextbezogene Tokennamensbindung gegen echte Variablen-/Ergebnistypen, keine
+Ausführung in Metadaten-/Syntaxprüfung; Bang-/Member-/Literalnamen erhalten.
+Gebundene Syntax vor dem Körper; kontextbezogene Case/Argument/Bounds/Print-Gänge.
+Implizite Single-Typen nach erster textlicher Verwendung, Zweige/Def/OptionExplicit
+und vorheriger Variant-Deklaration; Intrinsics/Host-/Projektname nicht verdrängt.
+App/Kern/DAO gebaut; finales bestehendes Bündel2/2 in3,69s (0,47/3,23s) bestanden:
+Deklarationen/Const/Parameter/Modul/hoisted/implizit/Def/Fn/Get/Event/Call/For/Case/
+ReDim, Funktion nur1x und echtes DAO-Feld[And] belegt; ungültiger Funktionsbang
+vor Körpereffekten verweigert. Keine neuen IDs,456/386/70. F040 bleibt breit offen.
+Paketbeleg780a709 (117,91/47,08s,7Hash gleich). Stand780a709/Baum579ff0b2 privat
+verifiziert; neue Single-Erweiterung liegt nach diesem Paket.

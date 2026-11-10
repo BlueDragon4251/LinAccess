@@ -2923,6 +2923,18 @@ void testProjectErrorContexts() {
 }
 void testNativeDaoArrays() {
     auto db=QSqlDatabase::addDatabase("QSQLITE","native-dao-arrays");db.setDatabaseName(":memory:");assert(db.open());QSqlQuery sql(db);assert(sql.exec("CREATE TABLE native_array_rows(id INTEGER PRIMARY KEY,value INTEGER)"));assert(sql.exec("INSERT INTO native_array_rows VALUES(1,17),(2,23)"));Host host(db);
+    const auto bangFields=linaccess::executeVbaProcedure(R"VBA(Sub SingleBangFields()
+Dim rows As DAO.Recordset
+Dim mask!
+mask!=7
+Set rows=CurrentDb.OpenRecordset("SELECT 2 AS [And]")
+Me!ActualBangField=CStr(rows!And+1) & ":" & CStr(mask! And 3)
+rows.Close
+End Sub
+)VBA","SingleBangFields",host);
+    if(bangFields.status!=linaccess::VbaExecutionStatus::Completed) std::cerr << "DAO Single/bang: " << bangFields.errorNumber << "/" << bangFields.line << " " << bangFields.explanation << "\n";
+    assert(bangFields.status==linaccess::VbaExecutionStatus::Completed && host.fields["ActualBangField"]=="3:3");
+
     const std::string source=R"VBA(Option Explicit
 Private Sub GrowDatabases(ByRef items() As DAO.Database)
 ReDim Preserve items(1 To 2)
