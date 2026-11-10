@@ -4761,3 +4761,19 @@ Katalog-IDs;456/386/70. Vorstufec0dc87a9 privat remote/Baum geprüft. Letztes
 geprüftes DEB4ebc3f6c liegt vor Feldherkunft/DAO-Zustandsänderungen. Kein neuer
 GUI-/Original-/Paketbeleg für diese Etappe. Ohne Zwischenabschluss weitere
 allgemeine offene Anforderungen fortlaufend implementieren.
+
+
+Native Dynaset-Reihenfolge: DAO_DYNASET_ORDER.md beschreibt linearen Merge nach
+exakter physischer Identität bei nichtinvalidierendem Refresh nativer Tabellen-
+Dynasets: vorhandene Zeilenordnung behalten, neue Zeilen anhängen, anschließend
+vorhandene Bookmark-/Klon-/Cursorwiederherstellung. Nachfolgende Updates setzen
+Reihenfolge nicht auf SQLite-Physicalorder zurück. Tabellen-Cursor/Indexpfade und
+explizites invalidierendes Requery bleiben getrennt; keine neue SQL-Ausführung.
+App/DAO gebaut, einmaliges bestehendes DAO-Bündel1/1 in3,24s bestanden: reale
+Ordnung mit neuem Schlüssel0 (Tabelle0/1/2/3 vs.Dynaset1/2/3/0), Klone, Updates,
+weitere Inserts und unveränderte Positions-/LastModified-/Entwurfsmatrizen.
+Keine neuen CTest-/Katalog-IDs;456/386/70. Vollständige externe Live-Dynaset-/
+Delete-/Orakelparität bleibt offen. Vorstufe32d4a49d privat remote/Baum geprüft.
+Geprüftes DEB4ebc3f6c liegt vor Feldherkunft/DAO-Zustands-/Ordnungsänderungen;
+anschließend gesammelte Änderungen gebündelt paketieren/Original prüfen und
+weitere Anforderungen ohne Zwischenabschluss fortsetzen.

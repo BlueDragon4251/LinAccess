@@ -117,10 +117,17 @@ void testDaoCursors() {
         rows->member("AddNew",{});rows->assignItem("id",VbaValue::longInteger(0));rows->assignItem("value",VbaValue::longInteger(40));rows->member("Update",{});
         assert(rows->item("id").asNumber()==2 && rows->member("Bookmark",{}).bytes==original.bytes);
         assert(peer->item("id").asNumber()==3 && rows->member("RecordCount",{}).asNumber()==4);
+        const auto assertOrder=[&](const std::vector<int>& expected) {
+            const auto current=peer->member("Bookmark",{});peer->member("MoveFirst",{});std::vector<int> actual;
+            while(!peer->member("EOF",{}).truthy()) {actual.push_back(static_cast<int>(peer->item("id").asNumber()));peer->member("MoveNext",{});}
+            assert(actual==expected);peer->assign("Bookmark",current);
+        };
+        assertOrder(mode==1 ? std::vector<int>{0,1,2,3} : std::vector<int>{1,2,3,0});
         const auto added=rows->member("LastModified",{});assert(added.bytes!=original.bytes);
         rows->assign("Bookmark",added);assert(rows->item("id").asNumber()==0 && rows->item("value").asNumber()==40);
         rows->member("Edit",{});rows->assignItem("value",VbaValue::longInteger(41));rows->member("Update",{});
         assert(rows->item("id").asNumber()==0 && rows->member("LastModified",{}).bytes==added.bytes);
+        assertOrder(mode==1 ? std::vector<int>{0,1,2,3} : std::vector<int>{1,2,3,0});
         rows->member("AddNew",{});rows->assignItem("id",VbaValue::longInteger(9));rows->member("CancelUpdate",{});
         assert(rows->item("id").asNumber()==0 && rows->member("RecordCount",{}).asNumber()==4);
         rows->member("AddNew",{});rows->assignItem("id",VbaValue::longInteger(2));
@@ -128,11 +135,13 @@ void testDaoCursors() {
         rows->assignItem("id",VbaValue::longInteger(9));rows->member("Update",{});
         assert(rows->item("id").asNumber()==0 && rows->member("LastModified",{}).bytes!=added.bytes);
         rows->assign("Bookmark",rows->member("LastModified",{}));assert(rows->item("id").asNumber()==9);
+        assertOrder(mode==1 ? std::vector<int>{0,1,2,3,9} : std::vector<int>{1,2,3,0,9});
         assert(query.exec("SELECT COUNT(*) FROM "+tableName) && query.next() && query.value(0).toInt()==5);query.finish();
         // Every supported successful movement to another row discards the
         // pending Edit/AddNew buffer without inserting/updating SQL rows.
+        const auto firstId=mode==1 ? 0 : 1,nextId=mode==1 ? 2 : 3;
         const auto discard=[&](const std::function<void()>& movement,int target) {
-            rows->member("MoveFirst",{});rows->member("MoveNext",{}); // id1
+            rows->member("MoveFirst",{});rows->member("MoveNext",{}); // A stable second row in this cursor family.
             rows->member("Edit",{});rows->assignItem("value",VbaValue::longInteger(999));movement();
             assert(rows->member("EditMode",{}).asNumber()==0 && rows->item("id").asNumber()==target);
             rows->member("MoveFirst",{});rows->member("MoveNext",{});
@@ -140,11 +149,11 @@ void testDaoCursors() {
             assert(rows->member("EditMode",{}).asNumber()==0 && rows->item("id").asNumber()==target);
         };
         rows->member("MoveLast",{});const auto last=rows->member("Bookmark",{});
-        discard([&] {rows->member("MoveFirst",{});},0);
+        discard([&] {rows->member("MoveFirst",{});},firstId);
         discard([&] {rows->member("MoveLast",{});},9);
-        discard([&] {rows->member("MoveNext",{});},2);
-        discard([&] {rows->member("MovePrevious",{});},0);
-        discard([&] {rows->member("Move",{VbaValue::longInteger(1)});},2);
+        discard([&] {rows->member("MoveNext",{});},nextId);
+        discard([&] {rows->member("MovePrevious",{});},firstId);
+        discard([&] {rows->member("Move",{VbaValue::longInteger(1)});},nextId);
         discard([&] {rows->assign("AbsolutePosition",VbaValue::longInteger(4));},9);
         discard([&] {rows->assign("Bookmark",last);},9);
         discard([&] {find(rows,"FindFirst","id=9");},9);

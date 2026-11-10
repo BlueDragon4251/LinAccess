@@ -1161,6 +1161,16 @@ private:
             data_->rows.append(row);
         }
         if (query.lastError().isValid()) queryFailure(query);
+        if(!invalidate && recordsetType_==2 && !original.ids.isEmpty()) {
+            QHash<qlonglong,qsizetype> positions;
+            for(qsizetype i=0;i<data_->ids.size();++i) positions.insert(data_->ids[i].toLongLong(),i);
+            QVector<QVariantList> orderedRows;QVector<QVariant> orderedIds;QVector<bool> used(data_->ids.size(),false);
+            orderedRows.reserve(data_->rows.size());orderedIds.reserve(data_->ids.size());
+            const auto append=[&](qsizetype i) {orderedRows.append(std::move(data_->rows[i]));orderedIds.append(data_->ids[i]);used[i]=true;};
+            for(const auto& id:original.ids) if(const auto found=positions.constFind(id.toLongLong());found!=positions.cend()) append(found.value());
+            for(qsizetype i=0;i<data_->ids.size();++i) if(!used[i]) append(i);
+            data_->rows=std::move(orderedRows);data_->ids=std::move(orderedIds);
+        }
         finalize();
     }
     void update() {
