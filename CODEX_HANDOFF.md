@@ -6665,3 +6665,17 @@ bestanden. Keine neuen IDs;456/386/70 unverändert, keine Windows-Oracle-Behaupt
 Vorstand2d7fa91e0ee8010c1bcc258bb6d84d0df829372e/Baum812ba0beafe3a152b033afa6a4f8d61139c53938
 privat verifiziert; dessen Paketprüfung/Originalbündel164,85s/7Hash gleich siehe
 Paketbeleg oben. Neue Zeichen-/Längenbindung liegt nach diesem Paket.
+
+
+Typisierte skalare SQL-Finanzfamilie (2026-11-10): NATIVE_FINANCIAL_FUNCTIONS.md.
+FV/PV/Pmt/NPer/Rate, SLN/SYD/DDB und IPmt/PPmt erhalten tatsächliche Date/
+Boolean/Single/Currency/integrale Argumente; deklarierte Double-Ergebnisse und
+DAO dbDouble7 sowie unterstützte Verschachtelung/Filter/Gruppierung/Sortierung
+geprüft. Unabhängige Nullzins-/Zweiperioden-Abschreibungswerte, Single-Rundung,
+Null94, Text13 und negative Asset-/Timinggrenzen3251 belegt. Vorhandene Solver/
+Domain-/Iterations-/Präzisionsgrenzen unverändert, keine SQL-Arrays hinzugefügt.
+App/DAO/Query-Modell gebaut; bestehendes Bündel2/2 in4,19s (3,89/0,30) bestanden.
+Keine neuen IDs,456/386/70 unverändert; kein neuer Access-Oracle.
+Vorstandf8bb8a6b1016b5224ff19b86652c89f8b9e27885/Baum01cc89b8c8d4424e7778caba70eeb6a4b9685aa0
+privat veröffentlicht/exakt verifiziert. Letzter Paketbeleg2d7fa91 (164,85s,
+7Hashes gleich) liegt vor Zeichen-/Längen-/Finanzbindung.

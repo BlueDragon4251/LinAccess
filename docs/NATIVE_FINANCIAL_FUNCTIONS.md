@@ -197,3 +197,22 @@ IRR, MIRR, SLN, SYD and DDB within their explicit domains above. This inventorie
 implemented entry points, not complete financial-library or Access2003 parity.
 References: [IPmt](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/ipmt-function),
 [PPmt](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/ppmt-function).
+
+
+## Proven native SQL argument types (2026-11-10)
+
+FV/PV/Pmt/NPer/Rate, SLN/SYD/DDB and IPmt/PPmt preserve proven native Date,
+Boolean, Single, bounded Currency and integral/Double arguments through the
+shared scalar binder. Date values reach the numeric calculation as OLE Date
+Variants; True remains -1 even for physical BOOLEAN1; Single input is rounded
+before calculation. ISO TEXT does not become a Date declaration by its contents.
+Nested supported expressions and simple WHERE/HAVING/GROUP-BY/ORDER-BY paths
+retain these bindings and declared Double result metadata, including real DAO
+Fields.Type=dbDouble7 and Double values.
+
+The numerical algorithms, iteration count, supported domains, timing0/1 rules,
+Null94, unsupported-domain3251, type13 and nonfinite6 behavior are unchanged.
+In particular a Boolean True timing argument is -1 and does not acquire the
+semantics of physical integer1. This adds no array transport for NPV/IRR/MIRR,
+no new solver, no Windows precision/error oracle and no full financial-library
+or Jet equivalence claim. The raw unproven-input callbacks keep their limits.

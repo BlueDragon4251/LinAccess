@@ -2193,6 +2193,28 @@ FROM calendar_inputs WHERE marker=1)SQL");
             int actual=0;try{(void)database->member("OpenRecordset",{linaccess::VbaValue::string(failure.first)});}catch(const linaccess::VbaRuntimeError& error){actual=error.number;}
             if(actual!=failure.second) std::cerr<<"Typed character error actual="<<actual<<" expected="<<failure.second<<"\n";assert(actual==failure.second);
         }
+        calendarPhase="typed scalar financial family";
+        const auto financialSource=QStringLiteral("SELECT FV(0,offset_date,enabled) AS future,PV(0,offset_date,enabled) AS present,Pmt(0,offset_date,amount) AS payment,NPer(0,enabled,offset_date) AS periods,Rate(offset_date,enabled,offset_date,0,0,0) AS rate,SLN(offset_date,0,offset_date) AS linear,SYD(offset_date,0,offset_date,1) AS sum_years,DDB(offset_date,0,offset_date,1) AS declining,IPmt(0,1,offset_date,amount) AS interest,PPmt(0,1,offset_date,amount) AS principal,FV(0,offset_date,elapsed) AS single_future,CDbl(FV(0,offset_date,enabled)) AS nested_future FROM calendar_inputs WHERE marker=1");
+        const auto financialValues=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery(financialSource),{});
+        assert(financialValues.rows.size()==1 && financialValues.columnTypes==QVector<QString>(12,"DOUBLE"));
+        // Zero-rate annuities and two-period depreciation have independent closed forms.
+        const double financialExpected[]{2,2,-0.75,2,0,1,4.0/3.0,2,0,-0.75,-33554432,2};
+        for(int index=0;index<12;++index) assert(std::abs(financialValues.rows[0][index].toDouble()-financialExpected[index])<1e-10);
+        const auto financialFields=database->member("OpenRecordset",{linaccess::VbaValue::string(financialSource.toStdString())}).object;
+        assert(financialFields->member("Fields",{linaccess::VbaValue::string("future")}).object->member("Type",{}).asNumber()==7 && financialFields->item("payment").numericType==linaccess::VbaValue::NumericType::Double);financialFields->member("Close",{});
+        const auto financialFilter=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT marker FROM calendar_inputs WHERE marker=1 AND PV(0,offset_date,enabled)=2"),{});
+        assert(financialFilter.rows.size()==1 && financialFilter.rows[0][0].toInt()==1);
+        const auto financialGroups=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT PV(0,offset_date,1) AS value,Count(*) AS tally FROM calendar_inputs GROUP BY PV(0,offset_date,1) ORDER BY PV(0,offset_date,1) DESC"),{});
+        assert(financialGroups.rows.size()==1 && financialGroups.rows[0][0].toDouble()==-2 && financialGroups.rows[0][1].toInt()==2 && financialGroups.columnTypes[0]=="DOUBLE");
+        for(const auto& failure:std::vector<std::pair<std::string,int>>{
+            {"SELECT FV(0,offset_date,enabled) FROM calendar_inputs WHERE marker=2",94},
+            {"SELECT NPer(0,enabled,offset_date) FROM calendar_inputs WHERE marker=2",94},
+            {"SELECT FV(0,offset_text,enabled) FROM calendar_inputs WHERE marker=1",13},
+            {"SELECT SLN(enabled,0,offset_date) FROM calendar_inputs WHERE marker=1",3251},
+            {"SELECT PV(0,offset_date,amount,0,enabled) FROM calendar_inputs WHERE marker=1",3251}}) {
+            int actual=0;try{(void)database->member("OpenRecordset",{linaccess::VbaValue::string(failure.first)});}catch(const linaccess::VbaRuntimeError& error){actual=error.number;}
+            if(actual!=failure.second) std::cerr<<"Typed financial error actual="<<actual<<" expected="<<failure.second<<"\n";assert(actual==failure.second);
+        }
         calendarPhase="DAO fields";
         const auto calendarFields=database->member("OpenRecordset",{linaccess::VbaValue::string(calendarSource.toStdString())}).object;
         assert(calendarFields->member("Fields",{linaccess::VbaValue::string("shifted")}).object->member("Type",{}).asNumber()==8);
