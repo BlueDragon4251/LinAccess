@@ -294,7 +294,7 @@ keine Tests oder Teilpunkte allein zur Erhöhung einer Fortschrittszahl anlegen.
 
 - [x] **F019** — Top-level label handlers, Resume retry/next/label and nested error-number propagation; obsolete snapshots release collection leases and DAO clones after restored scopes end.
 - [x] **F024** — Do While loops, multiple DAO Dim declarations and Nothing identity.
-- [ ] **F041** — Implement typed Variants (Empty/Null/Error/Object/Date/Currency), coercions, banker rounding, Unicode, operator precedence and three-valued logic. Native scalar/array fixed-length strings are documented in VBA_FIXED_STRINGS.md and bounded unary minus result types in UNARY_MINUS_TYPES.md; the complete requirement remains open.
+- [ ] **F041** — Implement typed Variants (Empty/Null/Error/Object/Date/Currency), coercions, banker rounding, Unicode, operator precedence and three-valued logic. Native scalar/array fixed-length strings are documented in VBA_FIXED_STRINGS.md and bounded unary minus result types in UNARY_MINUS_TYPES.md and binary numeric types in BINARY_NUMERIC_TYPES.md; the complete requirement remains open.
 - [x] **F044** — Native For Each/Next, Exit For, nested loops and DAO Fields enumeration; real 29-table structure regression.
 - [ ] **F045** — Complete With/Select Case/Do/While/Exit grammar, type/error and conditional semantics.
 - [x] **F049** — Bounded Error Variants, CVErr/IsError, ByRef/function return and calculated-control error handling. Native Error-value conversion is documented in CVERR_CONVERSION.md.

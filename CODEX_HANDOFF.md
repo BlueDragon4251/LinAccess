@@ -5545,3 +5545,13 @@ Makroquellengrenze und fehlender vollständiger Windows-Orakelvergleich bleiben.
 Alle sieben Original-/Fixturehashes unverändert. Dieses Paket liegt vor dem
 Minusumfang. Ohne Zwischenabschluss weitere native Sprach-/Datenbankumfänge
 implementieren; kein Abschlussanruf vor tatsächlichem Gesamtabschluss.
+
+
+Native binäre Zahlentypen: BINARY_NUMERIC_TYPES.md dokumentiert In-range-Typen
+für +,-,* sowie Single-Division, Boolean/Empty, gemischte Long/Single→Double und
+gebrochene Ganzzahldivision. Access-Eval bleibt unverändert; statisch/Variant-
+abhängiger Überlauf und vollständige SQL-Typinferenz bleiben offen. App/Core/DAO/
+Abfragemodell gebaut, ein bestehendes Bündel3/3 in8,91s (5,33/3,37/0,21) bestanden.
+Keine neuen Test-/Katalog-IDs;456/386/70 unverändert. Vorstufe2b090e05 privat remote/
+Baum geprüft. Letztes geprüftes DEB8fd1d50 liegt vor beiden nativen Operatorumfängen.
+Ohne Zwischenabschluss weiter tatsächliche Report-/Datenbankfunktionalität umsetzen.

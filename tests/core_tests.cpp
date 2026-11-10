@@ -294,6 +294,28 @@ void testNativeMathFunctions() {
         "IsNull(-Null)", "VarType(-CCur(1.25))=vbCurrency",
         "VarType(-CDec(1.25))=vbDecimal", "VarType(-CStr(1.25))=vbDouble"})
         assert(eval(expression).truthy());
+    for(const auto& expression:std::vector<std::string>{
+        "VarType(CByte(2)+CByte(3))=vbByte And CByte(2)+CByte(3)=5",
+        "VarType(CByte(5)-CByte(3))=vbByte And CByte(5)-CByte(3)=2",
+        "VarType(CByte(2)*CByte(3))=vbByte And CByte(2)*CByte(3)=6",
+        "VarType(CInt(2)+CByte(3))=vbInteger",
+        "VarType(CInt(2)-CInt(3))=vbInteger And CInt(2)-CInt(3)=-1",
+        "VarType(CLng(2)*CInt(3))=vbLong And CLng(2)*CInt(3)=6",
+        "VarType(True+True)=vbInteger And True+True=-2",
+        "VarType(Empty+Empty)=vbInteger And Empty+Empty=0",
+        "VarType(Empty+CByte(2))=vbByte And Empty+CByte(2)=2",
+        "VarType(CSng(1.5)+CByte(2))=vbSingle",
+        "VarType(CSng(1.5)-CInt(2))=vbSingle",
+        "VarType(CSng(1.5)*CSng(2))=vbSingle And CSng(1.5)*CSng(2)=3",
+        "VarType(CSng(1.5)/CSng(2))=vbSingle And CSng(1.5)/CSng(2)=0.75",
+        "VarType(CSng(1.5)/CByte(2))=vbSingle",
+        "VarType(CSng(1.5)+CLng(2))=vbDouble",
+        "VarType(CLng(2)/CSng(1.5))=vbDouble",
+        "VarType(CByte(1)/CByte(2))=vbDouble And CByte(1)/CByte(2)=0.5",
+        "VarType(CDbl(2)+CInt(3))=vbDouble",
+        "IsNull(CInt(1)+Null)", "CStr(1)+CStr(2)=CStr(12)",
+        "VarType((CInt(2)+CInt(3))*CInt(4))=vbInteger"})
+        assert(eval(expression).truthy());
     assert(eval("Choose(2.5,10,20,30)").asNumber()==20 && eval("Choose(0,10)").kind==VbaValue::Kind::Null);
     assert(eval("Choose(2,10,Null)").kind==VbaValue::Kind::Null);
     assert(eval("Switch(False,10,True,CCur(\"1.25\"),True,30)").kind==VbaValue::Kind::Currency);

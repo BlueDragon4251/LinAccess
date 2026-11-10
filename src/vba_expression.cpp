@@ -488,7 +488,7 @@ bool likeMatch(std::u16string_view input,std::u16string_view pattern,VbaHost& ho
     });
 }
 
-VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& right,VbaHost* host,VbaCompareMode mode) {
+VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& right,VbaHost* host,VbaCompareMode mode,bool nativeNumericTypes=true) {
     if (left.kind==VbaValue::Kind::Error || right.kind==VbaValue::Kind::Error || left.kind==VbaValue::Kind::Missing || right.kind==VbaValue::Kind::Missing)
         throw error("Error Variant cannot be used as an operand",13);
     if (op == "is") {
@@ -496,8 +496,8 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
             throw error("VBA: Is benötigt Objekte");
         return VbaValue::logical(left.object == right.object);
     }
-    if (left.kind==VbaValue::Kind::Object) return binary(op,scalarObjectValue(left),right,host,mode);
-    if (right.kind==VbaValue::Kind::Object) return binary(op,left,scalarObjectValue(right),host,mode);
+    if (left.kind==VbaValue::Kind::Object) return binary(op,scalarObjectValue(left),right,host,mode,nativeNumericTypes);
+    if (right.kind==VbaValue::Kind::Object) return binary(op,left,scalarObjectValue(right),host,mode,nativeNumericTypes);
     if(op=="like") {
         if(left.kind==VbaValue::Kind::Null || right.kind==VbaValue::Kind::Null) return {};
         return VbaValue::logical(likeMatch(utf16String(left.asText()),utf16String(right.asText()),*host,mode));
@@ -570,9 +570,9 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
         return VbaValue::numeric(answer);
     }
     if (left.kind == VbaValue::Kind::Empty && right.kind == VbaValue::Kind::Text)
-        return binary(op, VbaValue::string(""), right,host,mode);
+        return binary(op, VbaValue::string(""), right,host,mode,nativeNumericTypes);
     if (right.kind == VbaValue::Kind::Empty && left.kind == VbaValue::Kind::Text)
-        return binary(op, left, VbaValue::string(""),host,mode);
+        return binary(op, left, VbaValue::string(""),host,mode,nativeNumericTypes);
     if (left.kind == VbaValue::Kind::Null || right.kind == VbaValue::Kind::Null)
         return {}; // Simplified three-valued logic: NULL comparisons yield NULL.
 
@@ -625,6 +625,33 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
         answer = a / b;
     } else throw error("Nicht unterstützter Operator " + op);
     if (!std::isfinite(answer)) throw error("VBA: Ungültiges numerisches Ergebnis",6);
+    if(nativeNumericTypes) {
+        using Type=VbaValue::NumericType;
+        const auto primitiveType=[](const VbaValue& value)->std::optional<Type> {
+            if(value.kind==VbaValue::Kind::Number) return value.numericType;
+            if(value.kind==VbaValue::Kind::Boolean) return Type::Integer;
+            if(value.kind==VbaValue::Kind::Empty) return Type::Byte;
+            return {};
+        };
+        const auto l=primitiveType(left),r=primitiveType(right);
+        if(l && r) {
+            const bool single=(*l==Type::Single || *r==Type::Single) &&
+                *l!=Type::Double && *r!=Type::Double && *l!=Type::Long && *r!=Type::Long;
+            if(single && std::abs(answer)<=std::numeric_limits<float>::max())
+                return VbaValue::single(static_cast<float>(answer));
+            if(op!="/" && *l!=Type::Single && *r!=Type::Single && *l!=Type::Double && *r!=Type::Double) {
+                const auto type=*l==Type::Long || *r==Type::Long ? Type::Long :
+                    *l==Type::Integer || *r==Type::Integer ||
+                    (left.kind==VbaValue::Kind::Empty && right.kind==VbaValue::Kind::Empty) ? Type::Integer : Type::Byte;
+                if(type==Type::Byte && answer>=0 && answer<=255)
+                    return VbaValue::byte(static_cast<unsigned char>(answer));
+                if(type==Type::Integer && answer>=-32768 && answer<=32767)
+                    return VbaValue::integer(static_cast<std::int16_t>(answer));
+                if(type==Type::Long && answer>=-2147483648.0 && answer<=2147483647.0)
+                    return VbaValue::longInteger(static_cast<std::int32_t>(answer));
+            }
+        }
+    }
     return VbaValue::numeric(answer);
 }
 
@@ -807,7 +834,7 @@ private:
                 lhs=lhs.kind==VbaValue::Kind::Error ? lhs : rhs;
             else {
                 const auto left=lhs;
-                try {lhs=binary(op,left,rhs,host_,compareMode_);}catch(const VbaRuntimeError& failure) {if(!jetEval_) throw;lhs=VbaValue::errorValue(failure.number);}
+                try {lhs=binary(op,left,rhs,host_,compareMode_,!jetEval_);}catch(const VbaRuntimeError& failure) {if(!jetEval_) throw;lhs=VbaValue::errorValue(failure.number);}
                 if(jetEval_ && lhs.kind==VbaValue::Kind::Boolean && (op=="and" || op=="or") && (left.kind==VbaValue::Kind::Null || rhs.kind==VbaValue::Kind::Null)) {const auto& known=left.kind==VbaValue::Kind::Null ? rhs : left;if(known.kind==VbaValue::Kind::Number && known.numericType==VbaValue::NumericType::Integer) lhs=VbaValue::integer(lhs.boolean ? -1 : 0);}
                 const auto integral=[](const VbaValue& value) {return value.kind==VbaValue::Kind::Number && (value.numericType==VbaValue::NumericType::Long || value.numericType==VbaValue::NumericType::Integer || value.numericType==VbaValue::NumericType::Byte);};
                 if(jetEval_ && (op=="+" || op=="-" || op=="*") && integral(left) && integral(rhs) && lhs.kind==VbaValue::Kind::Number && lhs.number>=-2147483648.0 && lhs.number<=2147483647.0 && std::trunc(lhs.number)==lhs.number) lhs=VbaValue::longInteger(static_cast<std::int32_t>(lhs.number));
