@@ -5587,6 +5587,7 @@ End Sub
     const auto typedRedim=executeVbaProcedure("Option Explicit\nFunction TypedRedim() As Long\nReDim values%(0 To 1)\nvalues%(1)=6\nTypedRedim=values%(1)\nEnd Function","TypedRedim",host);
     assert(typedRedim.status==VbaExecutionStatus::Completed && typedRedim.returnValue=="6");
     const auto typedControls=executeVbaProcedure(R"VBA(
+DefStr A-Z
 Private invoked As Long
 Function TouchTyped%(ByVal value%)
 invoked=invoked+value%
@@ -5612,6 +5613,66 @@ End Sub
     assert(typedControls.status==VbaExecutionStatus::Completed && host.fields["TypedControls"]=="9:5:   y" && host.fields["TypedMid"]=="aXcd");
     const auto typedDoubleColon=executeVbaProcedure("Sub DoubleColon()\nDim value#: value#=2#: Me!TypedDoubleColon=value#: Me!TypedDateColon=Hour(#1/2/2000 12:34:00#)\nEnd Sub","DoubleColon",host);
     assert(typedDoubleColon.status==VbaExecutionStatus::Completed && host.fields["TypedDoubleColon"]=="2" && host.fields["TypedDateColon"]=="12");
+    const auto typedConstants=executeVbaProcedure(R"VBA(
+Const First%=2
+Const Last%=First%+2
+Const Caption$="typed"
+Enum TypedEnum
+TypedMember=Last%
+End Enum
+Function DefaultTyped%(Optional value%=Last%)
+DefaultTyped%=value%
+End Function
+Sub TypedConstants()
+Const Local%=Last%+1
+Dim items%(First% To Local%)
+Dim fixed As String * Last%
+fixed=Caption$
+Me!TypedConstantWidth=Len(fixed)
+items%(Local%)=DefaultTyped%()
+Me!TypedConstants=Caption$ & ":" & CStr(LBound(items)) & ":" & CStr(UBound(items)) & ":" & CStr(items%(Local%)) & ":" & CStr(TypedEnum.TypedMember&)
+End Sub
+)VBA","TypedConstants",host);
+    assert(typedConstants.status==VbaExecutionStatus::Completed && host.fields["TypedConstants"]=="typed:2:5:4:4" && host.fields["TypedConstantWidth"]=="4");
+    const auto wrongTypedConstant=executeVbaProcedure("Const First%=2\nConst Wrong&=First&+1\nSub WrongTypedConstant()\nEnd Sub","WrongTypedConstant",host);
+    assert(wrongTypedConstant.status!=VbaExecutionStatus::Completed && wrongTypedConstant.errorNumber==13);
+    const auto variantTypedConstant=executeVbaProcedure("Const First As Variant=2\nConst Wrong%=First%+1\nSub VariantTypedConstant()\nEnd Sub","VariantTypedConstant",host);
+    assert(variantTypedConstant.status!=VbaExecutionStatus::Completed && variantTypedConstant.errorNumber==13);
+    const auto typedProperties=executeVbaProcedure(R"VBA(
+Private propertyText As String
+Property Get TypedCaption$()
+TypedCaption$=propertyText
+End Property
+Property Let TypedCaption(ByVal value$)
+propertyText=value$
+End Property
+Property Get TypedNumber&()
+TypedNumber&=4
+End Property
+Sub TypedProperties()
+TypedCaption$="abc"
+Me!TypedProperties=TypedCaption$ & ":" & CStr(TypedNumber&())
+On Error Resume Next
+TypedCaption%=7
+Me!TypedPropertyMismatch=Err.Number
+On Error GoTo 0
+Me!TypedPropertyRetained=TypedCaption
+End Sub
+)VBA","TypedProperties",host);
+    if(typedProperties.status!=VbaExecutionStatus::Completed || host.fields["TypedProperties"]!="abc:4" || host.fields["TypedPropertyMismatch"]!="13" || host.fields["TypedPropertyRetained"]!="abc")
+        std::cerr << "Typed property fixture: " << typedProperties.errorNumber << "/" << typedProperties.line << " " << typedProperties.explanation << " values=" << host.fields["TypedProperties"].value_or("<Null>") << "/" << host.fields["TypedPropertyMismatch"].value_or("<Null>") << "/" << host.fields["TypedPropertyRetained"].value_or("<Null>") << "\n";
+    assert(typedProperties.status==VbaExecutionStatus::Completed && host.fields["TypedProperties"]=="abc:4" && host.fields["TypedPropertyMismatch"]=="13" && host.fields["TypedPropertyRetained"]=="abc");
+    const auto typedConstantWrite=executeVbaProcedure(R"VBA(
+Function ConstSideEffect() As Long
+Me!TypedConstantSideEffect=1
+ConstSideEffect=2
+End Function
+Sub TypedConstantWrite()
+Const counter%=1
+counter%=ConstSideEffect()
+End Sub
+)VBA","TypedConstantWrite",host);
+    assert(typedConstantWrite.status==VbaExecutionStatus::Unsupported && typedConstantWrite.errorNumber==3251 && !host.fields.contains("TypedConstantSideEffect"));
     testVbaDebugger();
     testVbaDebugOutput();
     testVbaProperties();

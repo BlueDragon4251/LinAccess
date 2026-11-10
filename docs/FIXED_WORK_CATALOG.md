@@ -160,7 +160,7 @@ keine Tests oder Teilpunkte allein zur Erhöhung einer Fortschrittszahl anlegen.
 - [x] **F037** — Procedure-wide Dim binding, local/control/global lookup precedence and standard-module Me restrictions; complete compiler/class scope remains open.
 - [ ] **F040** — Replace statement regex dispatch with a complete lexer/parser, AST and bound runtime. Bounded native identifier type characters: [scope](VBA_IDENTIFIER_TYPES.md); this does not replace the complete parser requirement.
 - [ ] **F042** — Modules/classes/CodeBehind, scope/lifetime, static/module variables and references. Bounded native conditional compilation is in VBA_CONDITIONAL_COMPILATION.md and static procedure lifetimes in STATIC_LOCAL_RUNTIME.md and bounded authored class instances in NATIVE_VBA_CLASSES.md; the complete requirement remains open. Native project Rnd/Randomize: [scope](NATIVE_RANDOM_GENERATOR.md).
-- [ ] **F043** — Calls/returns, ByRef/ByVal, Optional/ParamArray, arrays, properties and collections. Bounded native Property Get/Let/Set is documented in NATIVE_VBA_PROPERTIES.md and source-local Enum type aliases in VBA_ENUM_TYPE_BINDINGS.md and closed native object arrays in NATIVE_OBJECT_ARRAYS.md and ReDim declarations in REDIM_DECLARATIONS.md, with bounded actual ParamArray aliases in PARAMARRAY_ALIASES.md and named Let/Set indices in NAMED_PROPERTY_SETTERS.md, with native Set RHS ordering in SET_EVALUATION_ORDER.md; the complete requirement remains open.
+- [ ] **F043** — Calls/returns, ByRef/ByVal, Optional/ParamArray, arrays, properties and collections. Native identifier/constant/property type characters: [scope](VBA_IDENTIFIER_TYPES.md). Bounded native Property Get/Let/Set is documented in NATIVE_VBA_PROPERTIES.md and source-local Enum type aliases in VBA_ENUM_TYPE_BINDINGS.md and closed native object arrays in NATIVE_OBJECT_ARRAYS.md and ReDim declarations in REDIM_DECLARATIONS.md, with bounded actual ParamArray aliases in PARAMARRAY_ALIASES.md and named Let/Set indices in NAMED_PROPERTY_SETTERS.md, with native Set RHS ordering in SET_EVALUATION_ORDER.md; the complete requirement remains open.
 - [ ] **F118** — Full Access Eval grammar/scope, Unicode identifier validation and locale case folding; full surrounding original record-copy handlers and Access oracle.
 - [x] **F127** — Per-module Option Compare for relational strings; native Qt folding and explicit generic-host non-ASCII limits; original table-existence case failure fixed.
 - [x] **F131** — Native OpenForm continuation with persistent target, same-project unique instance reuse, canonical catalog Name, actual continuing Forms writes/save; imported Modal blocks UI without blocking VBA (OPEN_FORM_RUNTIME.md).
@@ -744,3 +744,15 @@ Kein neues CTest/Katalog-Item.456/386/70. Vorstufe88fdf1f0b8a26c9e6769172dc34e9b
 Baum158eeec6c3759bd7be7aae583255916945dfdb24 privat verifiziert; App/Kern/DAO
 auf dieser Vorstufe2/2 in3,54s. Nächster Paket-/Original-/Inventarbeleg folgt,
 danach typisierte Konstanteninitialisierer und weitere offene native Anforderungen.
+
+
+Konstanten-/Property-Typzeichen (2026-11-10): VBA_IDENTIFIER_TYPES.md ergänzt.
+Getrennte quellgebundene Konstantentypen für Initialisierer/Enums/Optional/
+Arraygrenzen/Stringlängen, mit Inline-Kontext und ohne Variant-Subtype-Inferenz.
+Get-Namenssuffix und passende Let-Werttypen; kanonische Referenzen/Selektoren.
+Schreibschutz typisierter Konstanten vor RHS-Effekten; Loop-Vorprüfung verwendet
+kanonische Namen/Suffixtyp vor Def. Bestehendes core_tests1/1 in0,54s bestanden;
+gezielte Fixes für Property-Inventarfilter und Syntax von Name&() enthalten.
+Keine neue CTest-/Katalog-ID;456/386/70. F040/F042/F043/F122 bleiben breit offen.
+Paketbeleg bleibt53e91932 (Original115,97/Inventar46,72s;2/2 in162,70s,7Hash gleich).
+Weiter mit deklarationsbasierter Typbindung zwischen Standardmodulen.

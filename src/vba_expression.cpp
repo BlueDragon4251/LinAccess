@@ -1226,23 +1226,28 @@ private:
             const auto literal=vbaIdentifierName(word);
             if(literal=="true" || literal=="false" || literal=="null" || literal=="empty" || literal=="nothing") {word=literal;tok.value=literal;}
         }
-        // A Long function call is distinguishable from adjacent string concatenation
-        // only after its declaration is known. Keep tokenization independent of frames.
-        if(host_ && !accessExpression_ && nextSymbol("&") && tokens_[index_].offset==tok.offset+tok.value.size()
-            && index_+1<tokens_.size() && tokens_[index_+1].value=="(" && resolver_.argumentSignature) {
-            const auto signature=resolver_.argumentSignature(word);
-            const auto local=locals_.find(word);
-            const bool array=local!=locals_.end() && isVbaArray(local->second);
-            if((signature && signature->localProcedure && signature->function && signature->resultType=="long") || array) {
-                consume();word+='&';tok.value+='&';
+        // An adjacent ampersand before arguments can be a Long type character.
+        // Syntax-only validation accepts that form; execution binds it only to
+        // a proven Long function or a declared array, preserving concatenation.
+        if(!accessExpression_ && nextSymbol("&") && tokens_[index_].offset==tok.offset+tok.value.size()
+            && index_+1<tokens_.size() && tokens_[index_+1].value=="(") {
+            bool typed=!host_;
+            if(host_ && resolver_.argumentSignature) {
+                const auto signature=resolver_.argumentSignature(word);
+                const auto local=locals_.find(word);
+                typed=(signature && signature->localProcedure && signature->function && signature->resultType=="long")
+                    || (local!=locals_.end() && isVbaArray(local->second));
             }
+            if(typed) {consume();word+='&';tok.value+='&';}
         }
         if(host_ && !accessExpression_ && resolver_.typedIdentifier && !vbaIdentifierType(word).empty()) {
             if(auto canonical=resolver_.typedIdentifier(word)) {word=*canonical;tok.value=*canonical;}
         }
         if(!accessExpression_ && nextSymbol(".") && index_+1<tokens_.size() && tokens_[index_+1].type==Token::Type::Word
             && !locals_.contains(word) && (!host_ || !host_->hasInstanceIdentifier(word))) {
-            const auto qualified=word+"."+lower(tokens_[index_+1].value);
+            auto qualified=word+"."+lower(tokens_[index_+1].value);
+            if(host_ && resolver_.typedIdentifier && !vbaIdentifierType(qualified).empty())
+                if(auto canonical=resolver_.typedIdentifier(qualified)) qualified=*canonical;
             if(const auto found=locals_.find(qualified);found!=locals_.end()) {
                 consume(); consume(); return bindArithmeticValue(found->second,VbaValue::ArithmeticBinding::Unbound);
             }

@@ -20,8 +20,8 @@ Der Access-/Jet-Ausdrucksmodus wird dadurch nicht auf VBA-Typzeichen umgestellt.
 Bestehende String-Intrinsics mit `$` bleiben eigenständige Intrinsics, sofern
 keine deklarierte lokale Variable die Namensauflösung übernimmt.
 
-Noch offen sind insbesondere Typzeichen an Property-Accessoren, vollständige typisierte Konstanteninitialisierer und die
-vollständige frühe Bindung qualifizierter Projekt-/Objektmitglieder. `^`/LongLong
+Noch offen sind insbesondere die vollständige frühe Bindung aller Projekt-/Library-/Objektnamensräume und
+sämtliche Compiler-/Deklarationsregeln. `^`/LongLong
 gehört nicht zum hier unterstützten Access-2003-Profil. Dies ist kein Nachweis
 vollständiger VBA- oder Access-Parität. Die feste Katalogzahl bleibt 456;
 Teilarbeiten ändern die 386 bestätigten Teilumfänge/70 offenen Vollanforderungen
@@ -89,3 +89,33 @@ von einem Datumsliteral. Doppelpunkt-Anweisungen nach Bezeichnern und Zahlen mit
 `#` werden getrennt; Uhrzeit-Doppelpunkte innerhalb echter Datumsliterale bleiben
 im Literal. Vorhandenes core_tests nach Korrektur des lokalen Signaturfilters:
 1/1 in0,53s. Keine neuen CTest-Einträge und kein vollständiger Compilernachweis.
+
+
+## Konstanten und Properties
+
+Konstantenwerte besitzen in der quellgebundenen Übersetzung getrennte
+Deklarationsmetadaten. Typzeichen in lokalen/Modul-Konstanteninitialisierern,
+Enum-Werten, Optional-Standardwerten, festen Arraygrenzen und Stringlängen
+werden dagegen geprüft. Auch ein momentan integraler Variant-Konstantenwert
+begründet keine Integer-Deklaration. Inline-Übersetzungen übernehmen Werte und
+Typmetadaten gemeinsam; es wird kein veränderlicher Rahmen im Syntaxcache
+abgelegt. Bekannte qualifizierte Enum-Konstanten verwenden denselben Abgleich.
+
+Property Get kann einen typisierten Funktionsnamen deklarieren; Property Let
+verwendet weiterhin einen untypisierten Deklarationsnamen und den tatsächlichen
+Typ des Wertparameters. Passende Get-/Let-Signaturen und Referenztypzeichen
+werden geprüft. Kanonische interne Selektoren erhalten den Rückgabewert und die
+Zuweisung an dieselbe Property. Der Schreibpfad prüft das echte Inventar unter
+diesem kanonischen Namen. Die reine Syntaxprüfung akzeptiert auch `Name&()`;
+erst die Laufzeit bindet diese Form an eine nachgewiesene Long-Signatur/Arraybindung.
+
+Der Konstantenschreibschutz erkennt auch typisierte einfache Ziele und Mid$-
+Ziele vor der Ausführung; ein rechter Funktionsausdruck wird dabei nicht erst
+ausgeführt. Die Loop-Vorprüfung verwendet dieselben Namen/Typen wie die Laufzeit,
+einschließlich Integer-Steuerungen unter DefStr A-Z.
+
+Bestehendes core_tests nach gezielter Korrektur des Property-Inventarfilters und
+der Syntaxprüfung parameterloser Long-Aufrufe1/1 in0,54s bestanden. Es wurden
+keine CTest-/Katalog-IDs ergänzt. Der Paket-/Original-/Inventarbeleg des vorherigen
+veröffentlichten Stands53e91932 ist in CODEX_HANDOFF.md dokumentiert; er liegt
+vor dieser Konstanten-/Property-Erweiterung.

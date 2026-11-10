@@ -5400,3 +5400,15 @@ Kein neues CTest/Katalog-Item.456/386/70. Vorstufe88fdf1f0b8a26c9e6769172dc34e9b
 Baum158eeec6c3759bd7be7aae583255916945dfdb24 privat verifiziert; App/Kern/DAO
 auf dieser Vorstufe2/2 in3,54s. Nächster Paket-/Original-/Inventarbeleg folgt,
 danach typisierte Konstanteninitialisierer und weitere offene native Anforderungen.
+
+
+Konstanten-/Property-Typzeichen (2026-11-10): VBA_IDENTIFIER_TYPES.md ergänzt.
+Getrennte quellgebundene Konstantentypen für Initialisierer/Enums/Optional/
+Arraygrenzen/Stringlängen, mit Inline-Kontext und ohne Variant-Subtype-Inferenz.
+Get-Namenssuffix und passende Let-Werttypen; kanonische Referenzen/Selektoren.
+Schreibschutz typisierter Konstanten vor RHS-Effekten; Loop-Vorprüfung verwendet
+kanonische Namen/Suffixtyp vor Def. Bestehendes core_tests1/1 in0,54s bestanden;
+gezielte Fixes für Property-Inventarfilter und Syntax von Name&() enthalten.
+Keine neue CTest-/Katalog-ID;456/386/70. F040/F042/F043/F122 bleiben breit offen.
+Paketbeleg bleibt53e91932 (Original115,97/Inventar46,72s;2/2 in162,70s,7Hash gleich).
+Weiter mit deklarationsbasierter Typbindung zwischen Standardmodulen.

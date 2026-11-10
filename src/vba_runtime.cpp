@@ -503,7 +503,8 @@ VbaCompareMode moduleCompareMode(std::string_view module) {
     while(std::getline(stream,line)) { std::smatch match; if(std::regex_match(line,match,option)) mode=lower(match[1].str())=="text" ? VbaCompareMode::Text : lower(match[1].str())=="database" ? VbaCompareMode::Database : VbaCompareMode::Binary; }
     return mode;
 }
-VbaValue constantExpression(const std::string& expression,const VbaVariables& values,VbaCompareMode mode) {
+using ConstantTypes=std::unordered_map<std::string,std::string>;
+VbaValue constantExpression(const std::string& expression,const VbaVariables& values,VbaCompareMode mode,const ConstantTypes& types={}) {
     static const std::regex number(R"((?:&[Hh][0-9A-Fa-f]+|&[Oo][0-7]+|(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[Ee][+-]?[0-9]+)?)[%&!#@]?)");
     const auto word=[](unsigned char ch) { return std::isalnum(ch) || ch=='_' || ch>=128; };
     const std::unordered_set<std::string> operators{"not","and","or","xor","eqv","imp","mod","like"};
@@ -536,6 +537,7 @@ VbaValue constantExpression(const std::string& expression,const VbaVariables& va
                 const auto qualified=name+"."+lower(expression.substr(member,end-member));
                 if(values.contains(qualified)) { name=qualified; i=end; }
             }
+            if(i<expression.size() && !vbaIdentifierType(std::string_view(expression).substr(0,i+1)).empty()) ++i;
             if(name=="date" || name=="time" || name=="now" || name=="timer") throw VbaRuntimeError(3251,"Clock reads are not constant expressions");
             auto next=i; while(next<expression.size() && std::isspace(static_cast<unsigned char>(expression[next]))) ++next;
             if((next<expression.size() && expression[next]=='(' && !operators.contains(name))
@@ -548,27 +550,37 @@ VbaValue constantExpression(const std::string& expression,const VbaVariables& va
         ++i;
     }
     ConstantExpressionHost host;
-    auto value=evaluateVbaExpression(expression,host,values,{},nullptr,mode);
+    VbaFunctionResolver resolver;
+    resolver.typedIdentifier=[&](std::string_view name) -> std::optional<std::string> {
+        const auto suffix=vbaIdentifierType(name);if(suffix.empty()) return {};
+        const auto key=lower(vbaIdentifierName(name));
+        if(!values.contains(key)) return {};
+        const auto declared=types.find(key);
+        if(declared==types.end()) throw VbaRuntimeError(3251,"Typed constant requires known declaration metadata");
+        if(declared->second!=suffix) throw VbaRuntimeError(13,"Constant type character does not match its declaration");
+        return key;
+    };
+    auto value=evaluateVbaExpression(expression,host,values,resolver,nullptr,mode);
     if(value.kind==VbaValue::Kind::Null || value.kind==VbaValue::Kind::Empty || value.kind==VbaValue::Kind::Error
         || value.kind==VbaValue::Kind::Object || value.kind==VbaValue::Kind::Missing || isVbaArray(value))
         throw VbaRuntimeError(3251,"Only scalar non-Null constants are implemented");
     if(value.kind==VbaValue::Kind::Number && !std::isfinite(value.number)) throw VbaRuntimeError(6,"Constant overflow");
     return value;
 }
-std::string declaredScalarType(const std::string& base,const std::string& length,const VbaVariables& constants,const std::unordered_set<std::string>& enums={}) {
+std::string declaredScalarType(const std::string& base,const std::string& length,const VbaVariables& constants,const std::unordered_set<std::string>& enums={},const ConstantTypes& types={}) {
     auto type=bindModuleDeclaredType(nativeDeclaredType(lower(base)),enums);if(length.empty()) return type;
     if(type!="string") throw VbaRuntimeError(3251,"Only String has a fixed scalar length");
-    const auto found=constants.find(lower(length));
+    const auto found=constants.find(lower(vbaIdentifierName(length)));
     const bool digits=std::all_of(length.begin(),length.end(),[](unsigned char c){return c>='0' && c<='9';});
     if(!digits && found==constants.end()) throw VbaRuntimeError(3251,"Fixed String length requires an explicitly known constant");
-    const auto value=digits ? constantExpression(length,{},VbaCompareMode::Binary) : found->second;
+    const auto value=digits || !vbaIdentifierType(length).empty() ? constantExpression(length,constants,VbaCompareMode::Binary,types) : found->second;
     const auto width=coerceVbaModuleValue(value,"long").number;
     if(width<1 || width>65526) throw VbaRuntimeError(5,"Fixed String length must be1..65526");
     return "string*"+std::to_string(static_cast<int>(width));
 }
 struct ConstantDeclaration { std::string name,type; VbaValue value; };
 std::unordered_set<std::string> moduleEnumNames(std::string_view module);
-std::vector<ConstantDeclaration> constantDeclarations(const std::string& text,VbaVariables& known,VbaCompareMode mode,const std::unordered_set<std::string>& enums={}) {
+std::vector<ConstantDeclaration> constantDeclarations(const std::string& text,VbaVariables& known,VbaCompareMode mode,const std::unordered_set<std::string>& enums,ConstantTypes& knownTypes) {
     static const std::regex declaration(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?)(?:\s+As\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*(?:\.[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)*))?\s*=\s*(.+)$)",std::regex::icase);
     std::vector<ConstantDeclaration> result; std::unordered_set<std::string> names;
     for(const auto& entry:splitArguments(text)) {
@@ -580,14 +592,14 @@ std::vector<ConstantDeclaration> constantDeclarations(const std::string& text,Vb
         if(!names.insert(name).second) throw VbaRuntimeError(5,"Duplicate constant");
         if(!type.empty() && type!="variant" && type!="byte" && type!="integer" && type!="long" && type!="single" && type!="double"
             && type!="currency" && type!="date" && type!="boolean" && type!="string") throw VbaRuntimeError(3251,"Unsupported constant type");
-        auto value=constantExpression(match[3].str(),known,mode);
+        auto value=constantExpression(match[3].str(),known,mode,knownTypes);
         if(!type.empty()) value=coerceVbaModuleValue(value,type);
         else if(value.kind==VbaValue::Kind::Text) type="string";
         else if(value.kind==VbaValue::Kind::Boolean) type="boolean";
         else if(value.kind==VbaValue::Kind::Currency) type="currency";
         else if(value.kind==VbaValue::Kind::Date) type="date";
         else type=value.numericType==VbaValue::NumericType::Byte ? "byte" : value.numericType==VbaValue::NumericType::Integer ? "integer" : value.numericType==VbaValue::NumericType::Long ? "long" : value.numericType==VbaValue::NumericType::Single ? "single" : "double";
-        known[name]=value; result.push_back({name,type,std::move(value)});
+        known[name]=value; knownTypes[name]=type; result.push_back({name,type,std::move(value)});
     }
     if(result.empty()) throw VbaRuntimeError(3251,"Empty Const declaration");
     return result;
@@ -600,13 +612,13 @@ std::vector<ModuleConstantDeclaration> moduleConstantDeclarations(std::string_vi
     static const std::regex enumStart(R"(^\s*(?:(Public|Private)\s+)?Enum\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*$)",std::regex::icase);
     static const std::regex enumEnd(R"(^\s*End\s+Enum\s*$)",std::regex::icase);
     static const std::regex enumMember(R"(^\s*([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s*=\s*(.+))?\s*$)");
-    VbaVariables values; std::unordered_set<std::string> names,enumTypes;const auto declaredEnumTypes=moduleEnumNames(module);
+    VbaVariables values; ConstantTypes types; std::unordered_set<std::string> names,enumTypes;const auto declaredEnumTypes=moduleEnumNames(module);
     std::vector<ModuleConstantDeclaration> result; const auto mode=moduleCompareMode(module);
     bool inEnum=false,enumPublic=false,hasMembers=false; std::int64_t nextValue=0; std::string enumName;
     const auto append=[&](ConstantDeclaration value,bool visible,int line,std::string qualified={}) {
         if(!names.insert(value.name).second) throw VbaRuntimeError(5,"Duplicate module constant or Enum member");
-        values[value.name]=value.value;
-        if(!qualified.empty()) values[qualified]=value.value;
+        values[value.name]=value.value; types[value.name]=value.type;
+        if(!qualified.empty()) {values[qualified]=value.value;types[qualified]=value.type;}
         result.push_back({std::move(value),visible,line,std::move(qualified)});
     };
     std::istringstream source{std::string(module)}; std::string line; int number=0;
@@ -625,7 +637,7 @@ std::vector<ModuleConstantDeclaration> moduleConstantDeclarations(std::string_vi
             if(!std::regex_match(line,match,enumMember)) throw VbaRuntimeError(3251,"Enum member requires a name and optional integer constant");
             std::int64_t value=nextValue;
             if(match[2].matched) {
-                const auto folded=constantExpression(trim(match[2].str()),values,mode);
+                const auto folded=constantExpression(trim(match[2].str()),values,mode,types);
                 if(folded.kind!=VbaValue::Kind::Number || std::trunc(folded.number)!=folded.number)
                     throw VbaRuntimeError(3251,"Enum values require integral numeric constants");
                 if(folded.number<std::numeric_limits<std::int32_t>::min() || folded.number>std::numeric_limits<std::int32_t>::max())
@@ -645,23 +657,27 @@ std::vector<ModuleConstantDeclaration> moduleConstantDeclarations(std::string_vi
         if(std::regex_match(line,enumEnd)) throw VbaRuntimeError(3251,"End Enum without Enum");
         if(!std::regex_match(line,match,declaration)) continue;
         const bool visible=lower(match[1].str())=="public";
-        for(auto value:constantDeclarations(match[2].str(),values,mode,declaredEnumTypes)) append(std::move(value),visible,number);
+        for(auto value:constantDeclarations(match[2].str(),values,mode,declaredEnumTypes,types)) append(std::move(value),visible,number);
     }
     if(inEnum) throw VbaRuntimeError(3251,"Enum declaration is not closed");
     return result;
 }
-VbaVariables moduleConstantValues(std::string_view module) {
+VbaVariables moduleConstantValues(std::string_view module,ConstantTypes* types=nullptr) {
     VbaVariables values;
     for(const auto& item:moduleConstantDeclarations(module)) {
         values.emplace(item.value.name,item.value.value);
-        if(!item.qualifiedName.empty()) values.emplace(item.qualifiedName,item.value.value);
+        if(types) types->emplace(item.value.name,item.value.type);
+        if(!item.qualifiedName.empty()) {
+            values.emplace(item.qualifiedName,item.value.value);
+            if(types) types->emplace(item.qualifiedName,item.value.type);
+        }
     }
     return values;
 }
-std::optional<std::vector<VbaArrayDimension>> literalArrayBounds(const std::string& text,int base,const VbaVariables& values={},VbaCompareMode mode=VbaCompareMode::Binary) {
+std::optional<std::vector<VbaArrayDimension>> literalArrayBounds(const std::string& text,int base,const VbaVariables& values={},VbaCompareMode mode=VbaCompareMode::Binary,const ConstantTypes& types={}) {
     const auto dimensions=splitArguments(text); if(dimensions.empty() || dimensions.size()>60) return {};
     const auto bound=[&](const std::string& expression) {
-        const auto value=constantExpression(trim(expression),values,mode);
+        const auto value=constantExpression(trim(expression),values,mode,types);
         if(value.kind!=VbaValue::Kind::Number || std::trunc(value.number)!=value.number) throw VbaRuntimeError(3251,"Array bounds require integral constants");
         return static_cast<int>(coerceVbaModuleValue(value,"long").number);
     };
@@ -745,7 +761,7 @@ std::unordered_set<std::string> moduleEnumNames(std::string_view module) {
     return names;
 }
 struct ProcedureDeclarationContext {
-    const std::unordered_set<std::string>& enums;const VbaVariables& constants;const ImplicitTypes& implicit;int arrayBase;VbaCompareMode compare;
+    const std::unordered_set<std::string>& enums;const VbaVariables& constants;const ConstantTypes& constantTypes;const ImplicitTypes& implicit;int arrayBase;VbaCompareMode compare;
 };
 VbaExecutionResult parseProcedure(std::string_view module, std::string_view name,
                                   std::vector<Statement>& statements, bool& isFunction, bool& hasCancel,
@@ -760,7 +776,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
         const auto prefix=std::string("property ")+kind+" ";
         if(selector.starts_with(prefix)) {accessor=kind;requestedName=std::string(name.substr(prefix.size()));break;}
     }
-    static const std::regex propertyBegin(R"(^\s*(?:(Public|Private|Friend)\s+)?(?:Static\s+)?Property\s+(Get|Let|Set)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*(.*)$)",std::regex::icase);
+    static const std::regex propertyBegin(R"(^\s*(?:(Public|Private|Friend)\s+)?(?:Static\s+)?Property\s+(Get|Let|Set)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?)\s*(.*)$)",std::regex::icase);
     std::string activeSource;
     try {activeSource=preprocessVbaConditional(module);module=activeSource;}
     catch(const VbaConditionalError& error) {VbaExecutionResult result{VbaExecutionStatus::Unsupported,error.what(),error.line};result.errorNumber=error.number;return result;}
@@ -769,7 +785,11 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
     try {implicitTypes=inherited ? inherited->implicit : moduleImplicitTypes(module);declarationArrayBase=inherited ? inherited->arrayBase : moduleArrayBase(module);}
     catch(const VbaRuntimeError& error) {VbaExecutionResult failure{VbaExecutionStatus::Unsupported,error.what(),0};failure.errorNumber=error.number;return failure;}
     VbaVariables declarationConstants; const auto constantMode=inherited ? inherited->compare : moduleCompareMode(module);
-    try { declarationConstants=inherited ? inherited->constants : moduleConstantValues(module); }
+    ConstantTypes declarationTypes;
+    try {
+        if(inherited) {declarationConstants=inherited->constants;declarationTypes=inherited->constantTypes;}
+        else declarationConstants=moduleConstantValues(module,&declarationTypes);
+    }
     catch(const VbaRuntimeError& error) { VbaExecutionResult result{VbaExecutionStatus::Unsupported,"Module constant declaration unsupported",0}; result.errorNumber=error.number; return result; }
     std::unordered_set<std::string> localConstants;
     static const std::regex begin(
@@ -785,7 +805,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
     static const std::regex ifThen(R"(^If\b\s*(.+)\bThen\s*$)", std::regex::icase);
     static const std::regex assignment(R"(^Me\s*([!.])\s*([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*|\[[^\]]+\])\s*=\s*(.+)$)", std::regex::icase);
     static const std::regex variableAssignment(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?)\s*=\s*(.+)$)", std::regex::icase);
-    static const std::regex arrayElementType(R"(^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)(?:\s*\*\s*([0-9]+|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))?$)",std::regex::icase);
+    static const std::regex arrayElementType(R"(^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)(?:\s*\*\s*([0-9]+|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?))?$)",std::regex::icase);
     static const std::regex midDollarTarget(R"(^Mid\$\s*\((.*)\)$)",std::regex::icase);
     static const std::regex stringAlignment(R"(^(LSet|RSet)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?)\s*=\s*(.+)$)",std::regex::icase);
     static const std::regex message(R"(^MsgBox(?:\s+(.+)|\((.*)\))$)", std::regex::icase);
@@ -825,7 +845,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
     static const std::regex withKeyword(R"(^With\b\s*(.+)$)",std::regex::icase);
     static const std::regex exitDoKeyword(R"(^Exit\s+Do$)",std::regex::icase);
     static const std::regex dim(R"(^(?:Dim|Static)\s+(.+)$)", std::regex::icase);
-    static const std::regex declaration(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?)(?:\s+As\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_.\x80-\xFF]*)(?:\s*\*\s*([0-9]+|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))?)?$)", std::regex::icase);
+    static const std::regex declaration(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?)(?:\s+As\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_.\x80-\xFF]*)(?:\s*\*\s*([0-9]+|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?))?)?$)", std::regex::icase);
     static const std::regex forStart(R"(^For\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?)\s*=\s*(.+?)\s+To\s+(.+?)(?:\s+Step\s+(.+))?$)", std::regex::icase);
     static const std::regex forEach(R"(^For\s+Each\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?)\s+In\s+(.+)$)", std::regex::icase);
     static const std::regex next(R"(^Next(?:\s+(.+))?$)", std::regex::icase);
@@ -915,7 +935,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
         }
         if(!accessor.empty()) {
             if(!within) {
-                if(!std::regex_match(source,match,propertyBegin) || lower(match[2].str())!=accessor || lower(match[3].str())!=lower(requestedName)) continue;
+                if(!std::regex_match(source,match,propertyBegin) || lower(match[2].str())!=accessor || lower(vbaIdentifierName(match[3].str()))!=lower(vbaIdentifierName(requestedName))) continue;
                 const auto visibility=match[1].matched ? match[1].str()+" " : "";
                 const auto propertyName=match[3].str();auto tail=trim(match[4].str());
                 if(accessor=="get" && !tail.starts_with('(')) tail="()"+(tail.empty() ? std::string{} : " "+tail);
@@ -991,7 +1011,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                     if(!defaultExpression.empty()) {
                         try {
                             const auto folded=lower(defaultExpression)=="null" ? VbaValue{} : lower(defaultExpression)=="empty" ? VbaValue::empty()
-                                : objectDefault ? VbaValue::reference(nullptr) : constantExpression(defaultExpression,declarationConstants,constantMode);
+                                : objectDefault ? VbaValue::reference(nullptr) : constantExpression(defaultExpression,declarationConstants,constantMode,declarationTypes);
                             defaultValue=std::make_shared<const VbaValue>(folded);
                         } catch(const VbaRuntimeError& error) { VbaExecutionResult result{VbaExecutionStatus::Unsupported,"Optional constant default unsupported",line}; result.errorNumber=error.number; return result; }
                     }
@@ -1134,7 +1154,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                 const auto wrapper=wrapperHeader+"\nIf "+condition+" Then\n"+inlineStatementLines(yes,true)
                     +(otherwise==std::string::npos ? "" : "\nElse\n"+inlineStatementLines(no,true))+"\nEnd If\n"+(accessor.empty() ? "End Sub\n" : "End Property\n");
                 std::vector<Statement> body; bool function=false,cancel=false;
-                const ProcedureDeclarationContext declarationContext{enumTypes,declarationConstants,implicitTypes,declarationArrayBase,constantMode};
+                const ProcedureDeclarationContext declarationContext{enumTypes,declarationConstants,declarationTypes,implicitTypes,declarationArrayBase,constantMode};
                 auto parsed=parseProcedureUncached(wrapper,accessor.empty() ? "__la_inline" : "property "+accessor+" __la_inline",body,function,cancel,nullptr,false,nullptr,withActive(),&declarationContext);
                 if (parsed.status!=VbaExecutionStatus::Completed) { parsed.line=line; return parsed; }
                 const auto offset=static_cast<int>(statements.size());
@@ -1499,7 +1519,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                 if(const auto as=outsideKeyword(entry,"as");as!=std::string::npos) {
                     const auto spec=trim(entry.substr(as+2));std::smatch declared;
                     if(!std::regex_match(spec,declared,arrayElementType)) return {VbaExecutionStatus::Unsupported,"ReDim element specification unsupported",line};
-                    try{elementType=declaredScalarType(declared[1].str(),declared[2].str(),declarationConstants,enumTypes);}
+                    try{elementType=declaredScalarType(declared[1].str(),declared[2].str(),declarationConstants,enumTypes,declarationTypes);}
                     catch(const VbaRuntimeError& error){VbaExecutionResult result{VbaExecutionStatus::Unsupported,"ReDim fixed String specification unsupported",line};result.errorNumber=error.number;return result;}
                     entry=trim(entry.substr(0,as));
                     if(elementType!="variant" && elementType!="byte" && elementType!="integer" && elementType!="long" && elementType!="single"
@@ -1535,7 +1555,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
             statements.push_back({Statement::Type::EraseArray,std::move(names),{},line});
         } else if(lower(source).starts_with("const ") || lower(source).starts_with("const\t")) {
             try {
-                for(auto& constant:constantDeclarations(trim(source.substr(5)),declarationConstants,constantMode,enumTypes)) {
+                for(auto& constant:constantDeclarations(trim(source.substr(5)),declarationConstants,constantMode,enumTypes,declarationTypes)) {
                     if(!localConstants.insert(constant.name).second) return {VbaExecutionStatus::Unsupported,"Duplicate local constant",line};
                     Statement declaration{Statement::Type::Dim,constant.name,constant.type,line};
                     declaration.constantValue=std::make_shared<const VbaValue>(std::move(constant.value)); statements.push_back(std::move(declaration));
@@ -1543,7 +1563,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
             } catch(const VbaRuntimeError& error) { VbaExecutionResult result{VbaExecutionStatus::Unsupported,"Const declaration unsupported",line}; result.errorNumber=error.number; return result; }
         } else if (std::regex_match(source, match, dim)) {
             const bool persistent=lower(source.substr(0,6))=="static";
-            static const std::regex dynamicArray(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?)\s*\(\s*(.*)\s*\)\s*(?:As\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)(?:\s*\*\s*([0-9]+|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))?)?$)",std::regex::icase);
+            static const std::regex dynamicArray(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?)\s*\(\s*(.*)\s*\)\s*(?:As\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)(?:\s*\*\s*([0-9]+|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?))?)?$)",std::regex::icase);
             for (auto entry:splitArguments(match[1].str())) {
                 std::smatch declared;
                 entry = trim(entry);
@@ -1555,7 +1575,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                     try{
                         const auto suffix=vbaIdentifierType(declared[1].str());
                         if(!suffix.empty() && declared[3].matched) throw VbaRuntimeError(5,"Typed array cannot also specify As");
-                        type=suffix.empty() ? declaredScalarType(declared[3].str(),declared[4].str(),declarationConstants,enumTypes) : std::string(suffix);
+                        type=suffix.empty() ? declaredScalarType(declared[3].str(),declared[4].str(),declarationConstants,enumTypes,declarationTypes) : std::string(suffix);
                     }
                     catch(const VbaRuntimeError& error){VbaExecutionResult result{VbaExecutionStatus::Unsupported,"Fixed array element declaration unsupported",line};result.errorNumber=error.number;return result;}
                     if(type.empty()) type=implicitTypes.forName(declared[1].str()); if(type.empty()) type="variant";
@@ -1563,7 +1583,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                         && type!="currency" && type!="date" && type!="boolean" && type!="string" && !type.starts_with("string*") && type!="object" && !isDeclaredObjectType(type))
                         return {VbaExecutionStatus::Unsupported,"Dynamic array element type unsupported",line};
                     const auto bounds=trim(declared[2].str());
-                    const auto dimensions=bounds.empty() ? std::optional<std::vector<VbaArrayDimension>>{} : literalArrayBounds(bounds,declarationArrayBase,declarationConstants,constantMode);
+                    const auto dimensions=bounds.empty() ? std::optional<std::vector<VbaArrayDimension>>{} : literalArrayBounds(bounds,declarationArrayBase,declarationConstants,constantMode,declarationTypes);
                     if(!bounds.empty() && !dimensions) return {VbaExecutionStatus::Unsupported,"Fixed array bounds require supported constant expressions",line};
                     Statement declaration{Statement::Type::Dim,vbaIdentifierName(declared[1].str()),type+"()",line,bounds,bounds.empty() ? "" : "fixed"};
                     declaration.persistent=persistent;
@@ -1576,7 +1596,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                 try{
                     const auto suffix=vbaIdentifierType(declared[1].str());
                     if(!suffix.empty() && declared[2].matched) throw VbaRuntimeError(5,"Typed identifier cannot also specify As");
-                    type=suffix.empty() ? declaredScalarType(declared[2].str(),declared[3].str(),declarationConstants,enumTypes) : std::string(suffix);
+                    type=suffix.empty() ? declaredScalarType(declared[2].str(),declared[3].str(),declarationConstants,enumTypes,declarationTypes) : std::string(suffix);
                 }
                 catch(const VbaRuntimeError& error){VbaExecutionResult result{VbaExecutionStatus::Unsupported,"Fixed scalar declaration unsupported",line};result.errorNumber=error.number;return result;}
                 if(type.empty()) type=implicitTypes.forName(declared[1].str());
@@ -1755,13 +1775,15 @@ std::optional<VbaArgumentSignature> nativeVbaProcedureSignature(std::string_view
 
 namespace {
 std::string propertySelector(std::string_view name,VbaPropertyAccess access) {
-    return std::string("property ")+(access==VbaPropertyAccess::Get ? "get " : access==VbaPropertyAccess::Let ? "let " : "set ")+std::string(name);
+    return std::string("property ")+(access==VbaPropertyAccess::Get ? "get " : access==VbaPropertyAccess::Let ? "let " : "set ")+vbaIdentifierName(name);
 }
 }
 std::optional<VbaArgumentSignature> nativeVbaPropertySignature(std::string_view module,std::string_view name,VbaPropertyAccess access,bool publicOnly) {
     if(module.size()>1024*1024) throw VbaRuntimeError(3035,"Property module exceeds one MiB");
+    const auto requestedType=std::string(vbaIdentifierType(name));
+    const auto canonicalName=vbaIdentifierName(name);name=canonicalName;
     const auto active=preprocessVbaConditional(module);
-    static const std::regex header(R"(^\s*(?:(Public|Private|Friend)\s+)?(?:Static\s+)?Property\s+(Get|Let|Set)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?=\s|\(|$))",std::regex::icase);
+    static const std::regex header(R"(^\s*(?:(Public|Private|Friend)\s+)?(?:Static\s+)?Property\s+(Get|Let|Set)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?)(?=\s|\(|$))",std::regex::icase);
     const auto kind=access==VbaPropertyAccess::Get ? "get" : access==VbaPropertyAccess::Let ? "let" : "set";
     std::istringstream source(active);std::string line;bool found=false,visible=false;
     std::unordered_set<std::string> accessors;
@@ -1772,7 +1794,7 @@ std::optional<VbaArgumentSignature> nativeVbaPropertySignature(std::string_view 
             line+=withoutComment(following);
         }
         std::smatch match;
-        if(!std::regex_search(line,match,header) || lower(match[3].str())!=lower(std::string(name))) continue;
+        if(!std::regex_search(line,match,header) || lower(vbaIdentifierName(match[3].str()))!=lower(std::string(name))) continue;
         const auto declared=lower(match[2].str());
         if(!accessors.insert(declared).second) throw VbaRuntimeError(5,"Ambiguous property accessor");
         if(declared==kind) {found=true;visible=!publicOnly || !match[1].matched || lower(match[1].str())=="public";}
@@ -1820,6 +1842,10 @@ std::optional<VbaArgumentSignature> nativeVbaPropertySignature(std::string_view 
         if(access==VbaPropertyAccess::Let && object)
             throw VbaRuntimeError(3251,"Property Let requires a scalar or Variant value parameter");
     }
+    if(!requestedType.empty()) {
+        const auto declared=access==VbaPropertyAccess::Get ? resultType : parameters.back().type;
+        if(declared!=requestedType) throw VbaRuntimeError(13,"Property type character does not match its declaration");
+    }
     return signature;
 }
 VbaExecutionResult executeVbaProperty(std::string_view module,std::string_view name,VbaPropertyAccess access,VbaHost& host,std::vector<VbaValue>& arguments,bool publicOnly) {
@@ -1854,11 +1880,11 @@ std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module) {
     state->procedures=moduleProcedureNames(module); state->procedureInventoryComplete=true;
     static const std::regex procedure(R"(^\s*(?:(?:Public|Private|Friend)\s+)?(?:Static\s+)?(?:Sub|Function|Property)\s+)",std::regex::icase);
     static const std::regex declaration(R"(^\s*(Dim|Private|Public|Global)\s+(.+)$)",std::regex::icase);
-    static const std::regex variable(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?)(?:\s+As\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_.\x80-\xFF]*)(?:\s*\*\s*([0-9]+|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))?)?$)",std::regex::icase);
-    static const std::regex dynamicArray(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?)\s*\(\s*(.*)\s*\)\s*(?:As\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)(?:\s*\*\s*([0-9]+|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))?)?$)",std::regex::icase);
+    static const std::regex variable(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?)(?:\s+As\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_.\x80-\xFF]*)(?:\s*\*\s*([0-9]+|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?))?)?$)",std::regex::icase);
+    static const std::regex dynamicArray(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?)\s*\(\s*(.*)\s*\)\s*(?:As\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)(?:\s*\*\s*([0-9]+|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?))?)?$)",std::regex::icase);
     const auto scalarConstants=moduleConstantDeclarations(module); std::size_t constantIndex=0; int sourceLine=0;
     VbaVariables knownConstants; const auto constantMode=moduleCompareMode(module);
-    const auto lengthConstants=moduleConstantValues(module);
+    ConstantTypes lengthTypes;const auto lengthConstants=moduleConstantValues(module,&lengthTypes);
     std::istringstream stream{std::string(module)}; std::string line;
     while (std::getline(stream,line)) {
         ++sourceLine;
@@ -1897,7 +1923,7 @@ std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module) {
                 const auto name=lower(vbaIdentifierName(field[1].str()));
                 const auto suffix=vbaIdentifierType(field[1].str());
                 if(!suffix.empty() && field[3].matched) throw VbaRuntimeError(5,"Typed module array cannot also specify As");
-                auto type=suffix.empty() ? declaredScalarType(field[3].str(),field[4].str(),lengthConstants,enumNames) : std::string(suffix);
+                auto type=suffix.empty() ? declaredScalarType(field[3].str(),field[4].str(),lengthConstants,enumNames,lengthTypes) : std::string(suffix);
                 if(type.empty()) type=implicitTypes.forName(name);if(type.empty()) type="variant";
                 if(type!="variant" && type!="byte" && type!="integer" && type!="long" && type!="single" && type!="double"
                     && type!="currency" && type!="date" && type!="boolean" && type!="string" && !type.starts_with("string*") && type!="object" && !isDeclaredObjectType(type))
@@ -1906,7 +1932,7 @@ std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module) {
                 if(state->values.contains(name)) throw VbaRuntimeError(5,"Duplicate module field");
                 const auto bounds=trim(field[2].str()); auto value=makeUnallocatedVbaArray(type);
                 if(!bounds.empty()) {
-                    const auto dimensions=literalArrayBounds(bounds,moduleArrayBase(module),knownConstants,constantMode);
+                    const auto dimensions=literalArrayBounds(bounds,moduleArrayBase(module),knownConstants,constantMode,lengthTypes);
                     if(!dimensions) throw VbaRuntimeError(3251,"Fixed module array bounds require supported decimal literals");
                     value=resizeVbaArrayWithBounds(value,*dimensions,false,type); state->fixedArrays.insert(name);
                 }
@@ -1918,7 +1944,7 @@ std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module) {
             const auto name=lower(vbaIdentifierName(field[1].str()));
             const auto suffix=vbaIdentifierType(field[1].str());
             if(!suffix.empty() && field[2].matched) throw VbaRuntimeError(5,"Typed module field cannot also specify As");
-            auto type=suffix.empty() ? declaredScalarType(field[2].str(),field[3].str(),lengthConstants,enumNames) : std::string(suffix);
+            auto type=suffix.empty() ? declaredScalarType(field[2].str(),field[3].str(),lengthConstants,enumNames,lengthTypes) : std::string(suffix);
             if(type.empty()) type=implicitTypes.forName(name);
             if (!type.empty() && type!="variant" && type!="boolean" && type!="string" && !type.starts_with("string*") && type!="integer" && type!="long" && type!="single" && type!="double" && type!="currency" && type!="date" && type!="byte" && type!="collection" && type!="object" && nativeScriptingObjectType(type).empty() && !nativeDaoType(type) && nativeAccessObjectType(type).empty() && !isDeclaredObjectType(type))
                 throw VbaRuntimeError(3251,"Module field type unsupported");
@@ -2457,7 +2483,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
             const auto indices=splitArguments(instruction.endExpression);
             const bool omitted=indices.empty() || std::any_of(indices.begin(),indices.end(),[](const auto& value){return trim(value).empty();});
             if(omitted && instruction.argument!="mid$") {
-                const auto name=lower(instruction.argument);
+                const auto name=lower(vbaIdentifierName(instruction.argument));
                 const auto access=instruction.stepExpression=="object" ? VbaPropertyAccess::Set : VbaPropertyAccess::Let;
                 if(locals.contains(name) || (!nativeVbaPropertySignature(module,instruction.argument,access,false)
                     && !nativeVbaPropertySignature(module,instruction.argument,VbaPropertyAccess::Get,false))) {
@@ -2465,10 +2491,10 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                 }
             }
         }
-        bool constantTarget=constantNames.contains(lower(instruction.argument));
-        if(instruction.type==Statement::Type::IndexedAssign && lower(instruction.argument)=="mid" && !locals.contains("mid") && instruction.stepExpression!="object") {
+        bool constantTarget=constantNames.contains(lower(vbaIdentifierName(instruction.argument)));
+        if(instruction.type==Statement::Type::IndexedAssign && (lower(instruction.argument)=="mid$" || (lower(instruction.argument)=="mid" && !locals.contains("mid"))) && instruction.stepExpression!="object") {
             const auto arguments=splitArguments(instruction.endExpression);
-            if(!arguments.empty()) constantTarget=constantNames.contains(lower(trim(arguments[0])));
+            if(!arguments.empty()) constantTarget=constantNames.contains(lower(vbaIdentifierName(trim(arguments[0]))));
         }
 
         if(instruction.type==Statement::Type::ObjectAssign) {
@@ -2482,16 +2508,17 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
             }
         }
         if(instruction.type==Statement::Type::EraseArray)
-            for(const auto& target:splitArguments(instruction.argument)) if(constantNames.contains(lower(target))) constantTarget=true;
+            for(const auto& target:splitArguments(instruction.argument)) if(constantNames.contains(lower(vbaIdentifierName(target)))) constantTarget=true;
         if(instruction.type==Statement::Type::ResizeArray)
-            for(const auto& target:instruction.resizeTargets) if(constantNames.contains(lower(target.name))) constantTarget=true;
+            for(const auto& target:instruction.resizeTargets) if(constantNames.contains(lower(vbaIdentifierName(target.name)))) constantTarget=true;
         if(constantTarget && (instruction.type==Statement::Type::ObjectAssign || instruction.type==Statement::Type::SetVar || instruction.type==Statement::Type::StringAlign || instruction.type==Statement::Type::ObjectSet
             || instruction.type==Statement::Type::IndexedAssign || instruction.type==Statement::Type::ResizeArray || instruction.type==Statement::Type::EraseArray
             || instruction.type==Statement::Type::For || instruction.type==Statement::Type::ForEach)) {
             VbaExecutionResult result{VbaExecutionStatus::Unsupported,"Assignment to a constant is not permitted",instruction.line}; result.errorNumber=3251; return result;
         }
-        const auto targetName=lower(instruction.argument);
+        const auto targetName=lower(vbaIdentifierName(instruction.argument));
         auto type=variableType(targetName);
+        if(type.empty() && !locals.contains(targetName)) type=std::string(vbaIdentifierType(instruction.argument));
         if((instruction.type==Statement::Type::For || instruction.type==Statement::Type::ForEach || instruction.type==Statement::Type::ObjectSet)
             && type.empty() && !explicitVariables && !locals.contains(targetName)) {
             const auto inferred=implicitTypes.forName(targetName);
@@ -2623,7 +2650,10 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         std::string declared;
         if(locals.contains(key)) declared=variableType(key);
         else {
-            const auto signature=localProcedureSignature(module,key);
+            const auto& owner=stateOwners.front();
+            if(owner->procedureInventoryComplete && !owner->procedures.contains(key)) return {};
+            auto signature=localProcedureSignature(module,key);
+            if(!signature) signature=nativeVbaPropertySignature(module,key,VbaPropertyAccess::Get,false);
             if(!signature) return {};
             if(!signature->function) throw VbaRuntimeError(13,"Sub cannot have a type character");
             declared=signature->resultType;
@@ -2842,7 +2872,8 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         const auto& names=state->procedureInventoryComplete ? state->procedures : *fallbackProcedures;
         if(!names.contains(key)) return {};
         if(!vbaIdentifierType(name).empty()) {
-            const auto typed=localProcedureSignature(module,name);
+            auto typed=localProcedureSignature(module,name);
+            if(!typed) typed=nativeVbaPropertySignature(module,name,VbaPropertyAccess::Get,false);
             if(!typed || !typed->function) throw VbaRuntimeError(13,"Typed call signature mismatch");
         }
         const auto found=signatureCache.find(key);
@@ -2893,7 +2924,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                 loops.pop_back();
     };
     const auto writeProperty=[&](std::string_view name,VbaPropertyAccess access,std::vector<VbaValue> arguments,const VbaArgumentReferences& indexReferences=VbaArgumentReferences{}) {
-        if(!stateOwners.front()->procedures.contains(lower(std::string(name)))) return false;
+        if(!stateOwners.front()->procedures.contains(lower(vbaIdentifierName(name)))) return false;
         const bool setter=nativeVbaPropertySignature(module,name,access,false).has_value();
         std::vector<VbaValue> defaultIndices;VbaValue value;auto references=indexReferences;
         if(!setter) {
@@ -3561,7 +3592,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                 loop.frameDepth = frames.size(); loop.withDepth=withFrames.size();
                 if (loop.items.empty()) ip = static_cast<std::size_t>(instruction.partner);
                 else {
-                    assignVariable(lower(instruction.argument),loop.items.front());
+                    assignVariable(loopVariableName(instruction.argument),loop.items.front());
                     loops.push_back(std::move(loop));
                 }
                 break;
