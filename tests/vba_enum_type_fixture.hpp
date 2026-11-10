@@ -78,3 +78,11 @@ Public Function EnumSqlIdentity(ByVal value As SqlState_2) As SqlState_2
 EnumSqlIdentity=value
 End Function
 )VBA";
+
+inline std::string qualifyLocalEnumFixture(std::string source,const std::string& module,const std::string& type) {
+    const auto from="As "+type,to="As "+module+"."+type;
+    std::size_t at=0;while((at=source.find(from,at))!=std::string::npos) {source.replace(at,from.size(),to);at+=to.size();}
+    return "Attribute VB_Name = \""+module+"\"\n"+source;
+}
+inline const std::string qualifiedEnumTypeFixture=qualifyLocalEnumFixture(enumTypeFixture,"EnumTypeScope","NativeState_2");
+inline const std::string qualifiedEnumSqlFixture=qualifyLocalEnumFixture(enumTypeSqlFixture,"EnumTypeScope","SqlState_2");

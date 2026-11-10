@@ -34,3 +34,25 @@ Final core/GUI2/2 passed23.08s (4.60/18.48). App built. Original event target pa
 1/1 in121.37s, retaining its known missing-macro boundary; seven upload/fixture
 hashes are unchanged. No Windows oracle or full-suite/DEB refresh for this scope.
 Fixed catalog456/386/70 remains unchanged; complete F040/F042/F043 stay open.
+
+
+## Same-source qualified Enum type names
+
+An actual source Attribute VB_Name now supplies the owning module qualifier for
+that source's Enum As-type aliases. Both EnumName and ModuleName.EnumName bind to
+Long in the existing declaration paths, including typed Const, fields, parameters,
+results, scalar/array Dim/ReDim and inline wrappers. The scanner reads only the
+preprocessed declaration section, rejects duplicate module identity attributes,
+and does not infer a module identity from a filename, class guess or database
+label. Without an identity attribute no module-qualified alias is invented.
+Other.ModuleEnum and project-wide visibility/ambiguity/reference libraries remain
+open. This does not add project-global aliases, inject source declarations or
+make an Enum constructible as a class. Source-only parse plans remain source-only;
+no database/host type environment leaks into their cache key.
+
+App/core/mainwindow built. One existing core+GUI bundle2/2 passed25.29s:
+core5.51s, mainwindow19.78s, unchanged precise20s watchdog. The complete existing
+Enum fixture is also executed with real same-source qualified As clauses; the
+actual owned SQL module registers its qualified Enum return as Long and executes
+EnumSqlIdentity(1234). Foreign qualified type is rejected. No new CTest/catalog
+IDs;456/386/70 unchanged. No Windows Access execution-oracle claim.

@@ -6470,3 +6470,17 @@ typisiertes VBA, tatsächliche/ausdrücklich fehlende Erstellzeit und Löschgren
 Keine neuen Test-/Katalog-IDs;456/386/70 unverändert. Vorstufe1da6ad45 privat
 remote/Baum geprüft. Geprüftes DEB weiterhin ad42eada vor späteren Umfängen.
 Ohne Zwischenabschluss weitere allgemeine offene Anforderungen umsetzen.
+
+
+Quelllokale qualifizierte Enum-As-Typen: VBA_ENUM_TYPE_BINDINGS.md dokumentiert
+Modulname.Enumname nur aus tatsächlichem Attribute VB_Name derselben Quelle,
+inklusive Const-/Feld-/Parameter-/Rückgabe-/Array-/Inline-Bindungen alsLong.
+Keine erfundene Modulidentität oder projektweite Sichtbarkeit; fremde Qualifier
+bleiben abgewiesen. Quellreine Parsercache-Identität bleibt unverändert. App/Core/
+GUI gebaut; einmaliges bestehendes Bündel2/2 in25,29s (5,51/19,78), unveränderter
+präziser20s-GUI-Watchdog. Echte SQL-Funktion mit qualifiziertem Enum-Resultat
+registriert Long und liefert1234. Keine neuen Test-/Katalog-IDs;456/386/70.
+Vorstufef4e44eb2 privat remote/Baum geprüft; DEB weiterhinad42eada vor späteren
+Umfängen. Projektweite Enum-Bindung benötigt sichtbarkeitsabhängiges Typumfeld
+und dessen Cache-/Modulzustandsidentität; keine Klassenheuristik einbauen.
+Ohne Zwischenabschluss weitere echte offene Anforderungen fortsetzen.

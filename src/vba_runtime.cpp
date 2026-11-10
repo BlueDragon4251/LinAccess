@@ -557,7 +557,7 @@ std::string declaredScalarType(const std::string& base,const std::string& length
 struct ConstantDeclaration { std::string name,type; VbaValue value; };
 std::unordered_set<std::string> moduleEnumNames(std::string_view module);
 std::vector<ConstantDeclaration> constantDeclarations(const std::string& text,VbaVariables& known,VbaCompareMode mode,const std::unordered_set<std::string>& enums={}) {
-    static const std::regex declaration(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s+As\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))?\s*=\s*(.+)$)",std::regex::icase);
+    static const std::regex declaration(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s+As\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*(?:\.[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)*))?\s*=\s*(.+)$)",std::regex::icase);
     std::vector<ConstantDeclaration> result; std::unordered_set<std::string> names;
     for(const auto& entry:splitArguments(text)) {
         std::smatch match; if(!std::regex_match(entry,match,declaration)) throw VbaRuntimeError(3251,"Unsupported Const declaration");
@@ -715,9 +715,18 @@ ImplicitTypes moduleImplicitTypes(std::string_view module) {
 }
 std::unordered_set<std::string> moduleEnumNames(std::string_view module) {
     static const std::regex declaration(R"(^\s*(?:(?:Public|Private)\s+)?Enum\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*$)",std::regex::icase);
-    std::istringstream source(preprocessVbaConditional(module));std::string line;std::unordered_set<std::string> names;std::smatch match;
+    static const std::regex identity(R"enum(^\s*Attribute\s+VB_Name\s*=\s*"([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)"\s*$)enum",std::regex::icase);
+    std::istringstream source(preprocessVbaConditional(module));std::string line,moduleName;std::unordered_set<std::string> names;std::smatch match;
     static const std::regex procedure(R"(^\s*(?:(?:Public|Private|Friend)\s+)?(?:Static\s+)?(?:Sub|Function|Property)\s+)",std::regex::icase);
-    while(std::getline(source,line)) {const auto stripped=withoutComment(line);if(std::regex_search(stripped,procedure)) break;if(std::regex_match(stripped,match,declaration)) names.insert(lower(match[1].str()));}
+    while(std::getline(source,line)) {
+        const auto stripped=withoutComment(line);if(std::regex_search(stripped,procedure)) break;
+        if(std::regex_match(stripped,match,identity)) {
+            const auto name=lower(match[1].str());
+            if(!moduleName.empty()) throw VbaRuntimeError(5,"Duplicate module identity attribute");
+            moduleName=name;
+        } else if(std::regex_match(stripped,match,declaration)) names.insert(lower(match[1].str()));
+    }
+    if(!moduleName.empty()) {const auto localNames=names;for(const auto& name:localNames) names.insert(moduleName+"."+name);}
     return names;
 }
 struct ProcedureDeclarationContext {
