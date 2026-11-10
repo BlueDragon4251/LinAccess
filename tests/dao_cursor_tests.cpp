@@ -168,4 +168,23 @@ void testDaoCursors() {
         peer->member("Close",{});rows->member("Close",{});
     }
 
+    assert(query.exec("CREATE TABLE source_scope(id INTEGER PRIMARY KEY,value INTEGER)"));
+    assert(query.exec("INSERT INTO source_scope VALUES(1,10),(2,20)"));query.finish();
+    auto scoped=database->member("OpenRecordset",{VbaValue::string("source_scope"),VbaValue::integer(2)}).object;
+    scoped->member("Edit",{});scoped->assignItem("value",VbaValue::longInteger(11));
+    assert(query.exec("CREATE TEMP TABLE source_scope(id INTEGER,value INTEGER)"));assert(query.exec("INSERT INTO temp.source_scope VALUES(1,900)"));query.finish();
+    expect(3251,[&] {scoped->member("Update",{});});assert(scoped->member("EditMode",{}).asNumber()==1 && scoped->item("value").asNumber()==11);
+    assert(scoped->member("Fields",{VbaValue::string("value")}).object->member("SourceTable",{}).asText()=="source_scope");
+    assert(query.exec("SELECT main.source_scope.value,temp.source_scope.value FROM main.source_scope,temp.source_scope WHERE main.source_scope.id=1") && query.next() && query.value(0).toInt()==10 && query.value(1).toInt()==900);query.finish();
+    assert(query.exec("DROP TABLE temp.source_scope"));scoped->member("Update",{});
+    assert(query.exec("SELECT value FROM main.source_scope WHERE id=1") && query.next() && query.value(0).toInt()==11);query.finish();
+    assert(query.exec("CREATE TEMP TABLE source_scope(id INTEGER,value INTEGER)"));assert(query.exec("INSERT INTO temp.source_scope VALUES(1,901)"));query.finish();
+    for(const auto* method:{"Edit","AddNew","Delete","Requery"}) expect(3251,[&] {scoped->member(method,{});});
+    expect(3251,[&] {database->member("OpenRecordset",{VbaValue::string("source_scope")});});
+    assert(query.exec("SELECT value FROM temp.source_scope") && query.next() && query.value(0).toInt()==901);query.finish();
+    assert(query.exec("DROP TABLE temp.source_scope"));
+    assert(query.exec("CREATE TEMP TABLE temporary_only(id INTEGER)"));
+    expect(3251,[&] {database->member("OpenRecordset",{VbaValue::string("temporary_only")});});
+    assert(query.exec("DROP TABLE temp.temporary_only"));scoped->member("Close",{});
+
 }

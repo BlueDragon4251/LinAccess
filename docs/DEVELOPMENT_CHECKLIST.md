@@ -4777,3 +4777,20 @@ Delete-/Orakelparität bleibt offen. Vorstufe32d4a49d privat remote/Baum geprüf
 Geprüftes DEB4ebc3f6c liegt vor Feldherkunft/DAO-Zustands-/Ordnungsänderungen;
 anschließend gesammelte Änderungen gebündelt paketieren/Original prüfen und
 weitere Anforderungen ohne Zwischenabschluss fortsetzen.
+
+
+Physische DAO-Quellbindung: DAO_PHYSICAL_SOURCE_SCOPE.md dokumentiert tatsächliche
+main-Qualifikation der Tabellen-Lese-/INSERT-/UPDATE-/DELETE-Pfade und explizite
+Prüfung auf TEMP-Namensüberlagerung vor Laden/Reload und Mutationsbeginn. Verhindert
+Mischen echter main-Metadaten mit anderen TEMP-Zeilen/-Zieltabellen. Verweigerung3251
+vor SQL erhält Entwurf; nach Entfernen der Kollision wird beabsichtigtes main-
+Update möglich. Cached main-Herkunft bleibt tatsächlich zu cached main-Werten.
+App/DAO gebaut; einmaliges bestehendes DAO-Bündel1/1 in3,42s (gesamt3,43) bestanden,
+unabhängige SQL-Belege für beide unveränderten Tabellen und TEMP-only-Grenze.
+Keine neuen CTest-/Katalog-IDs;456/386/70. Vorstufea4bbf4a4 privat remote/Baum geprüft:
+neues DEB/Paketprüfung und gebündelter Originaltest1/1 in118,03s, sieben geschützte
+Hashes unverändert, Makrogrenze bleibt. Bereits bestandene GUI-/Inventarläufe nicht
+wiederholt; tatsächlicher letzter Inventarbeleg4ebc3f6c100/78/22. Dieses DEB liegt
+vor physischer Quellbindung. Danach weitere allgemeine offene Anforderungen ohne
+Zwischenabschluss fortsetzen; keine umfassende roheSQL-/Provider-/Crossconnection-
+Schattierungs-/Generationsparität behaupten.

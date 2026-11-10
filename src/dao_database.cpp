@@ -548,6 +548,15 @@ public:
     }
     void retainQueryDefinition(const QString& source) { queryDefinitionSource_=source; }
     ~Recordset() override { if (cloneCounted_) --data_->workspace->clones; data_->cursors.remove(this); }
+    void checkPhysicalSource() const {
+        if(!table_) return;
+        QSqlQuery query(db_);query.prepare("SELECT 1 FROM temp.sqlite_schema WHERE name=? COLLATE NOCASE AND type IN ('table','view')");query.addBindValue(source_);
+        if(!query.exec()) queryFailure(query);
+        if(query.next()) throw VbaRuntimeError(3251,"DAO: Physical main table source is shadowed by TEMP");query.finish();
+        query.prepare("SELECT 1 FROM main.sqlite_schema WHERE name=? COLLATE NOCASE AND type='table'");query.addBindValue(source_);
+        if(!query.exec()) queryFailure(query);
+        if(!query.next()) throw VbaRuntimeError(3420,"DAO: Physical main table source is unavailable");
+    }
     void checkTableGeneration() const {
         data_->workspace->check();
         if(tableGeneration_ && *tableGeneration_!=data_->workspace->tableGenerations.value(source_.toCaseFolded()))
@@ -761,6 +770,7 @@ public:
             return {};
         }
         if (key == "edit" || key == "addnew") {
+            checkPhysicalSource();
             require(!readOnly_, "DAO: Recordset is read-only");
             require(mode_ == Mode::Browse, "DAO: Edit already in progress");
             changed_.clear();chunkFields_.clear();
@@ -790,10 +800,11 @@ public:
         if (key == "cancelupdate") { pending_.clear(); changed_.clear(); chunkFields_.clear(); mode_ = Mode::Browse; return {}; }
         if (key == "update") { update(); return {}; }
         if (key == "delete") {
+            checkPhysicalSource();
             require(!readOnly_ && mode_ == Mode::Browse, "DAO: Cannot delete this Recordset");
             current();
             QSqlQuery query(db_);
-            require(query.prepare("DELETE FROM " + quote(source_) + " WHERE "+data_->rowIdentity+"=?"), "DAO: Delete prepare failed");
+            require(query.prepare("DELETE FROM main." + quote(source_) + " WHERE "+data_->rowIdentity+"=?"), "DAO: Delete prepare failed");
             query.addBindValue(data_->ids[position_]);
             require(query.exec() && query.numRowsAffected() == 1, "DAO: Delete failed or record changed");
             reload(false);
@@ -1070,6 +1081,7 @@ private:
     }
     void reload(bool invalidate=true) {
         if (frozen_) throw VbaRuntimeError(3251,"DAO: Form snapshot requires form Requery");
+        checkPhysicalSource();
         const auto original=*data_;
         const auto fieldRevision=table_ ? data_->workspace->tableFieldRevisions.value(source_.toCaseFolded()) : 0;
         const bool schemaChanged=table_ && data_->fieldRevision!=fieldRevision;
@@ -1146,7 +1158,7 @@ private:
         SqliteExecutionBudget budget(db_);
         QSqlQuery query(db_);
         data_->rowIdentity=physicalRowIdentity(db_,source_);std::optional<NativeRecordsetIndex> selected;QString order;if(!indexName_.isEmpty()) {selected=checkedRecordsetIndex(db_,source_,indexName_);QStringList terms;for(int field=0;field<selected->fields.size();++field) terms.append(quote(selected->fields[field])+(selected->descending[field] ? " DESC" : " ASC"));terms.append(data_->rowIdentity+" ASC");order=" ORDER BY "+terms.join(',');}
-        exec(query,"SELECT "+data_->rowIdentity+",* FROM " + quote(source_)+order);data_->selectedIndex=std::move(selected);
+        exec(query,"SELECT "+data_->rowIdentity+",* FROM main." + quote(source_)+order);data_->selectedIndex=std::move(selected);
         const int offset = table_ ? 1 : 0;
         data_->columns.clear(); data_->rows.clear(); data_->ids.clear(); position_ = 0;
         const int end = query.record().count();
@@ -1175,6 +1187,7 @@ private:
     }
     void update() {
         require(!closed_ && !readOnly_ && mode_ != Mode::Browse, "DAO: No editable record buffer");
+        checkPhysicalSource();
         const bool adding = mode_ == Mode::Add;
         const auto previousCurrent=adding && position_>=0 && position_<data_->ids.size() ? data_->ids[position_] : QVariant{};
         SqliteExecutionBudget budget(db_);
@@ -1188,11 +1201,11 @@ private:
             columns << quote(data_->columns[i]); values << "?"; assignments << quote(data_->columns[i]) + "=?";
         }
         QSqlQuery query(db_);
-        if (adding && columns.empty()) { if (!query.exec("INSERT INTO " + quote(source_) + " DEFAULT VALUES")) queryFailure(query); }
+        if (adding && columns.empty()) { if (!query.exec("INSERT INTO main." + quote(source_) + " DEFAULT VALUES")) queryFailure(query); }
         else if (!columns.empty()) {
-            require(query.prepare(adding ? "INSERT INTO " + quote(source_) + " (" + columns.join(',')
+            require(query.prepare(adding ? "INSERT INTO main." + quote(source_) + " (" + columns.join(',')
                         + ") VALUES (" + values.join(',') + ")"
-                    : "UPDATE " + quote(source_) + " SET " + assignments.join(',') + " WHERE "+data_->rowIdentity+"=? RETURNING "+data_->rowIdentity),
+                    : "UPDATE main." + quote(source_) + " SET " + assignments.join(',') + " WHERE "+data_->rowIdentity+"=? RETURNING "+data_->rowIdentity),
                     "DAO: Update prepare failed");
             for (const int i : indices) query.addBindValue(pending_[i]);
             if (!adding) query.addBindValue(id);
