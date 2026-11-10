@@ -26,6 +26,7 @@ public:
     Q_INVOKABLE void focusDatabaseWindow();
     Q_INVOKABLE void cycleDocument(bool backwards);
     Q_INVOKABLE int activateOpenTable(const QString& name);
+    Q_INVOKABLE int activateOpenModule(const QString& name);
     Q_INVOKABLE int activateOpenQuery(const QString& name);
     Q_INVOKABLE int openTableDocument(const QString& name,int view,int mode);
     Q_INVOKABLE QVariantMap openModuleDocument(const QString& name,const QString& procedure);

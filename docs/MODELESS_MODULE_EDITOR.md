@@ -45,3 +45,20 @@ predates this modeless editor work.
 
 Public method contract, not an execution oracle:
 https://learn.microsoft.com/en-us/office/vba/api/access.docmd.openmodule
+
+## Open module selection and repaint
+
+DoCmd.SelectObject(acModule,name,False) now activates an already-open current-
+project module through both real hosts. It does not reopen a closed window,
+replace its draft or set a false datasheet context. Connection/database/
+generation checks, ambiguity and modal/closing guards remain. Activation clears
+only minimization, retaining maximized/fullscreen state. Explicit/default repaint
+recognizes active modeless module windows, using existing guarded widget paint
+paths. Database-window selection and other object families retain their bounds.
+
+App/GUI built; existing mainwindow_documents passed1/1 in13.18s with20s watchdog
+unchanged. Actual form VBA and standard-module service verify selection,
+minimize/maximize preservation, unchanged drafts, repaint and closed-window
+refusal. An initial13.65s pass was followed by a focused correction/check for
+window-state preservation found during review. No new CTest/catalog identity;
+456/386/70. Latest checked DEB is still5c82c365, before OpenModule and this scope.

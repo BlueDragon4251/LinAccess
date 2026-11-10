@@ -4146,3 +4146,16 @@ work/sql-case-reverse/package-proof/package/linaccess-0.7.0-Linux.deb bestanden;
 Original118,77/Inventar46,44s, Bündel2/2 in165,21s,7Hash gleich.100/78/22 mit
 Kategorien73/5/3/9/10, kein Access-Ergebnisoracle; bekannte Original-Grenzen bleiben.
 Dieses Paket liegt vor OpenModule. Ohne Zwischenabschluss weiterprogrammieren.
+
+
+Offene native Modulfenster auswählen/neuzeichnen (2026-11-10):
+MODELESS_MODULE_EDITOR.md. SelectObject acModule mit explizitem offenem Namen
+über Formular-/Standardmodul-Hosts; keine Wiederöffnung oder Entwurfsersetzung,
+kein falscher Datenblattkontext. Verbindungs-/Datei-/Generations-/Modal-/Closing-
+Guards. Minimierung entfernen, maximierten/Vollbildzustand erhalten; explizites/
+aktives Repaint erkennt modellose Module. App/GUI gebaut; vorhandenes
+mainwindow_documents1/1 in13,18s bestanden (20s unverändert); tatsächliche VBA-/
+Servicepfade, Zustand/Entwürfe/Neuzeichnen/geschlossenes Ziel geprüft. Keine neuen
+CTest-/Katalog-IDs;456/386/70. Vorstufe65844569 privat/Baum geprüft. DEB bislang
+5c82c365 (118,77/46,44s,7Hash gleich); neue Paket-/Original-/Inventarprüfung folgt.
+Weiter mit der dokumentierten VBA-Bezeichner-Typzeichenlücke; keine Zwischenabschlüsse.

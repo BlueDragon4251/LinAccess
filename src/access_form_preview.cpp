@@ -815,7 +815,7 @@ public:
         throw linaccess::VbaRuntimeError(2046,"Sorting requires an active bound field control");
     }
     void selectObject(int type,const QString& name,bool inDatabase) {
-        if(type<0 || type>5 || (!inDatabase && type>3)) throw linaccess::VbaRuntimeError(3251,"SelectObject object type/window context is not implemented");
+        if(type<0 || type>5 || (!inDatabase && type>3 && type!=5)) throw linaccess::VbaRuntimeError(3251,"SelectObject object type/window context is not implemented");
         if(!inDatabase && name.isEmpty()) throw linaccess::VbaRuntimeError(450,"SelectObject requires an open object name");
         QWidget* owner=nullptr;
         for(auto* ancestor=preview_.parentWidget();ancestor;ancestor=ancestor->parentWidget())
@@ -829,14 +829,14 @@ public:
         QPointer<AccessFormPreview> selected;
         if(inDatabase) selectDatabase(false);
         else {
-            if(type==0 || type==1) {
+            if(type==0 || type==1 || type==5) {
                 if(QApplication::activeModalWidget()) throw linaccess::VbaRuntimeError(2046,"SelectObject is blocked by a modal window");
                 int error=0;
-                const char* method=type==0 ? "activateOpenTable" : "activateOpenQuery";
+                const char* method=type==0 ? "activateOpenTable" : type==1 ? "activateOpenQuery" : "activateOpenModule";
                 if(!owner || !QMetaObject::invokeMethod(owner,method,Qt::DirectConnection,Q_RETURN_ARG(int,error),Q_ARG(QString,name)))
                     throw linaccess::VbaRuntimeError(3251,"Native open-datasheet selection is unavailable");
                 if(error) throw linaccess::VbaRuntimeError(error,"Open datasheet selection failed");
-                preview_.setProperty("la_explicit_table_context",true);
+                if(type!=5) preview_.setProperty("la_explicit_table_context",true);
                 return;
             }
             for(auto* widget:QApplication::topLevelWidgets()) {

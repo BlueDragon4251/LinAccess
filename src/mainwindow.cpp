@@ -1017,9 +1017,9 @@ QVariantMap MainWindow::repaintDatabaseObject(int type,const QString& name) {
     if(!db_.isOpen()) return tableCommandFailure(3420,"Projekt ist geschlossen.");if(queryExecutionDepth_>0) return tableCommandFailure(2046,"Neuzeichnen während einer laufenden Abfrage ist nicht verfügbar.");
     const QStringList kinds{"table","query","form","report","macro","module"};QPointer<QWidget> target;
     const auto belongs=[&](QWidget* widget) {return widget && widget->property("la_project_object_connection").toString()==db_.connectionName() && widget->property("la_project_object_database").toString()==db_.databaseName() && widget->property("la_project_object_generation")==property("la_project_generation");};
-    if(type==-1) {auto* modal=QApplication::activeModalWidget();if(belongs(modal) && kinds.contains(modal->property("la_project_object_kind").toString())) target=modal;else if(!activePreviewDocument() && AccessFormPreview::databaseWindowActive(this) && activeDataPage_ && tabs_->currentWidget()==activeDataPage_) target=activeDataPage_;else return {};}
+    if(type==-1) {auto* modal=QApplication::activeModalWidget();auto* active=QApplication::activeWindow();if(belongs(modal) && kinds.contains(modal->property("la_project_object_kind").toString())) target=modal;else if(belongs(active) && active->property("la_project_object_kind").toString()=="module") target=active;else if(!activePreviewDocument() && AccessFormPreview::databaseWindowActive(this) && activeDataPage_ && tabs_->currentWidget()==activeDataPage_) target=activeDataPage_;else return {};}
     else if(type==0 || type==1) {target=name.isEmpty() ? activeDataPage_.data() : type==0 ? findOpenTable(name) : findOpenQuery(name);if(!target || tabs_->indexOf(target)<0 || target->property("la_project_object_kind").toString()!=kinds[type]) return tableCommandFailure(3251,"Angefordertes Datenblatt ist nicht geöffnet.");}
-    else if(type==4 || type==5) {for(auto* widget:QApplication::allWidgets()) if(belongs(widget) && widget->isVisible() && widget->property("la_project_object_kind").toString()==kinds[type] && (name.isEmpty() ? widget==QApplication::activeModalWidget() : widget->property("la_project_object_name").toString().compare(name,Qt::CaseInsensitive)==0)) {if(target) return tableCommandFailure(5,"Entwurfsziel ist mehrdeutig.");target=widget;}if(!target) return tableCommandFailure(3251,"Angeforderter Entwurf ist nicht geöffnet.");}
+    else if(type==4 || type==5) {for(auto* widget:QApplication::allWidgets()) if(belongs(widget) && widget->isVisible() && widget->property("la_project_object_kind").toString()==kinds[type] && (name.isEmpty() ? widget==QApplication::activeModalWidget() || (type==5 && widget==QApplication::activeWindow()) : widget->property("la_project_object_name").toString().compare(name,Qt::CaseInsensitive)==0)) {if(target) return tableCommandFailure(5,"Entwurfsziel ist mehrdeutig.");target=widget;}if(!target) return tableCommandFailure(3251,"Angeforderter Entwurf ist nicht geöffnet.");}
     else return tableCommandFailure(3251,"Neuzeichnen dieses Objekttyps ist nicht implementiert.");
     target->repaint();if(!target) return tableCommandFailure(2501,"Dokument wurde beim Neuzeichnen geschlossen.");
     QVector<QPointer<QAbstractScrollArea>> areas;for(auto* area:target->findChildren<QAbstractScrollArea*>()) areas.push_back(area);for(const auto& area:areas) if(area && area->viewport()) area->viewport()->repaint();
@@ -1259,6 +1259,23 @@ int MainWindow::openTableDocument(const QString& name,int view,int mode) {
     for(const auto& candidate:tableNames()) if(candidate.compare(name,Qt::CaseInsensitive)==0) { canonical=candidate; break; }
     if(canonical.isEmpty()) return 7874;
     return showTable(canonical,mode==2,false);
+}
+
+int MainWindow::activateOpenModule(const QString& name) {
+    if(!db_.isOpen()) return 3420;if(name.isEmpty()) return 450;
+    if(AccessFormPreview::projectIsClosing(db_) || property("la_module_project_closing").toBool()) return 2501;
+    QPointer<QDialog> selected;
+    for(auto* editor:findChildren<QDialog*>("native-module-editor")) if(editor->isVisible()
+        && editor->property("la_project_object_connection").toString()==db_.connectionName()
+        && editor->property("la_project_object_database").toString()==db_.databaseName()
+        && editor->property("la_project_object_generation")==property("la_project_generation")
+        && editor->property("la_project_object_name").toString().compare(name,Qt::CaseInsensitive)==0) {
+        if(selected) return 5;selected=editor;
+    }
+    if(!selected) return 3251;
+    if(QApplication::activeModalWidget() && QApplication::activeModalWidget()!=selected) return 2046;
+    selected->setWindowState(selected->windowState() & ~Qt::WindowMinimized);selected->show();selected->raise();selected->activateWindow();QApplication::setActiveWindow(selected);
+    if(!selected) return 2501;if(auto* source=selected->findChild<QPlainTextEdit*>("native-module-source")) source->setFocus(Qt::OtherFocusReason);return 0;
 }
 
 int MainWindow::activateOpenQuery(const QString& name) {

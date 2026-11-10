@@ -2952,6 +2952,11 @@ End Sub
 Sub OpenOwnedEditor()
 DoCmd.OpenModule ProcedureName:="NativeHaltProbe"
 Me.Tag="module-call-returned"
+End Sub
+Sub SelectOwnedEditor()
+DoCmd.SelectObject ObjectType:=acModule,ObjectName:="nativemath",InDatabaseWindow:=False
+DoCmd.RepaintObject acModule,"NativeMath"
+Me.Tag="module-selected"
 End Sub)VBA",db,&window);context.show();QApplication::processEvents();
     auto application=makePreviewApplicationObject(context);auto modules=application->member("CurrentProject",{}).object->member("AllModules",{}).object;const auto baseline=modules->member("Count",{}).number;
     std::shared_ptr<linaccess::VbaObject> descriptor;
@@ -2966,9 +2971,12 @@ End Sub)VBA",db,&window);context.show();QApplication::processEvents();
         QPointer<QDialog> editor=editorFor("NativeMath");assert(editor && !editor->isModal() && !QApplication::activeModalWidget() && descriptor->member("IsLoaded",{}).truthy());
         auto* text=editor->findChild<QPlainTextEdit*>("native-module-source");assert(text && text->toPlainText()==QString::fromUtf8(body));
         int line=0;for(const auto& procedure:linaccess::analyzeVba(body.toStdString()).procedures) if(procedure.name=="NativeHaltProbe") line=procedure.line;assert(line>0 && text->textCursor().blockNumber()+1==line);
+        editor->showMaximized();QApplication::processEvents();assert(editor->isMaximized());QApplication::setActiveWindow(&context);const auto selected=context.executeProcedure("SelectOwnedEditor",openArguments);assert(selected.status==linaccess::VbaExecutionStatus::Completed && editor->isMaximized() && QApplication::activeWindow()==editor && makePreviewFormObject(context)->member("Tag",{}).asText()=="module-selected");
         text->appendPlainText("' pending editor draft");assert(editor->isWindowModified());
         linaccess::NativeStandardModuleHost moduleHost(&window,db,[]{});auto moduleCommands=moduleHost.applicationObject()->member("DoCmd",{}).object;
         moduleCommands->member("OpenModule",{VbaValue::string("nativemath"),VbaValue::string("NativeCounter")});assert(editorFor("NativeMath")==editor && text->toPlainText().endsWith("' pending editor draft"));
+        editor->showMinimized();QApplication::processEvents();assert(editor->isMinimized());QApplication::setActiveWindow(&context);moduleCommands->member("SelectObject",{VbaValue::integer(5),VbaValue::string("NativeMath"),VbaValue::logical(false)});assert(!editor->isMinimized() && editor->isMaximized() && QApplication::activeWindow()==editor);moduleCommands->member("RepaintObject",{});assert(text->toPlainText().endsWith("' pending editor draft") && editor->isWindowModified());
+
         QTimer::singleShot(0,&window,[] {auto* question=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(question);question->button(QMessageBox::Cancel)->click();});assert(!editor->close() && editor->isVisible() && editor->isWindowModified());
         QSqlQuery revision(db);assert(revision.exec("SELECT definition FROM main._la_objects WHERE kind='module' AND name='NativeMath'") && revision.next());const auto previous=revision.value(0);revision.finish();
         const auto external=QString::fromUtf8(QJsonDocument(QJsonObject{{"version",1},{"vba",QString::fromUtf8(body)+"\n' external revision"}}).toJson(QJsonDocument::Compact));
@@ -2981,6 +2989,7 @@ End Sub)VBA",db,&window);context.show();QApplication::processEvents();
         revision.prepare("UPDATE main._la_objects SET definition=? WHERE kind='module' AND name='NativeMath'");revision.addBindValue(previous);assert(revision.exec());revision.finish();
         moduleCommands->member("OpenModule",{VbaValue::string("NativeMath")});auto* discard=editorFor("NativeMath");assert(discard);discard->findChild<QPlainTextEdit*>("native-module-source")->appendPlainText("' discard this draft");moduleCommands->member("Close",{VbaValue::integer(5),VbaValue::string("NativeMath"),VbaValue::integer(2)});QApplication::processEvents();assert(!descriptor->member("IsLoaded",{}).truthy());
 
+        int closedSelection=0;try{moduleCommands->member("SelectObject",{VbaValue::integer(5),VbaValue::string("NativeMath"),VbaValue::logical(false)});}catch(const linaccess::VbaRuntimeError& error){closedSelection=error.number;}assert(closedSelection==3251 && !editorFor("NativeMath"));
         const auto failure=[&](std::vector<VbaValue> args,int expected) {int actual=0;try{moduleCommands->member("OpenModule",args);}catch(const linaccess::VbaRuntimeError& error){actual=error.number;}assert(actual==expected);};failure({},5);failure({VbaValue{}},94);failure({VbaValue::string("missing module")},3251);
         // A temporary technical import is viewed without modifying its archived source.
         const QByteArray imported="Public Sub ViewerOnly()\nErr.Raise 7099\nEnd Sub";const int id=artifact(db,"vba","ImportedModuleViewer",imported);const auto importedArchive=archive();
