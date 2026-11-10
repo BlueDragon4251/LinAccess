@@ -2159,6 +2159,40 @@ FROM calendar_inputs WHERE marker=1)SQL");
             int actual=0;try{(void)database->member("OpenRecordset",{linaccess::VbaValue::string(failure.first)});}catch(const linaccess::VbaRuntimeError& error){actual=error.number;}
             if(actual!=failure.second) std::cerr<<"Typed format error actual="<<actual<<" expected="<<failure.second<<"\n";assert(actual==failure.second);
         }
+        calendarPhase="typed characters and base conversions";
+        const auto characterSource=QStringLiteral("SELECT Hex(CInt(-1)),Oct(CInt(-1)),Hex(CLng(-1)),Oct(CLng(-1)),Hex(offset_date),Oct(offset_date),Space(offset_date),String(offset_date,65),Asc(enabled),AscW(enabled),Chr(offset_date),ChrW(offset_date),Hex$(CInt(-1)),Oct$(CInt(-1)),Space$(offset_date),String$(offset_date,65),Chr$(offset_date),ChrW$(offset_date),Hex$(1),String$(2,'x'),Len(offset_date),Len(enabled) FROM calendar_inputs WHERE marker=1");
+        const auto characterValues=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery(characterSource),{});
+        assert(characterValues.rows.size()==1 && characterValues.columnTypes.size()==22);
+        const QStringList characterExpected{"FFFF","177777","FFFFFFFF","37777777777","2","2","  ","AA","84","84",QString(QChar(2)),QString(QChar(2)),"FFFF","177777","  ","AA",QString(QChar(2)),QString(QChar(2)),"1","xx","8","4"};
+        for(int index=0;index<22;++index) {
+            assert(characterValues.rows[0][index].toString()==characterExpected[index]);
+            assert(characterValues.columnTypes[index]==(index==8 || index==9 ? "INTEGER2" : index>=20 ? "INTEGER4" : "TEXT"));
+        }
+        const auto characterFields=database->member("OpenRecordset",{linaccess::VbaValue::string("SELECT Asc(enabled) AS code,Hex(CInt(-1)) AS word FROM calendar_inputs WHERE marker=1")}).object;
+        assert(characterFields->member("Fields",{linaccess::VbaValue::string("code")}).object->member("Type",{}).asNumber()==3 && characterFields->item("word").text=="FFFF");characterFields->member("Close",{});
+        const auto characterFilter=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT marker FROM calendar_inputs WHERE marker=1 AND Asc(enabled)=84 AND String$(offset_date,65)='AA'"),{});
+        assert(characterFilter.rows.size()==1 && characterFilter.rows[0][0].toInt()==1);
+        const auto characterGroups=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT Hex(offset_date) AS serial,Count(*) AS tally FROM calendar_inputs GROUP BY Hex(offset_date) ORDER BY Hex(offset_date) DESC"),{});
+        assert(characterGroups.rows.size()==1 && characterGroups.rows[0][0].toString()=="2" && characterGroups.rows[0][1].toInt()==2);
+        const auto characterNulls=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT Hex(enabled),Oct(enabled),String(offset_date,enabled),Len(stamp),LenB(stamp) FROM calendar_inputs WHERE marker=2"),{});
+        assert(characterNulls.rows.size()==1);for(const auto& value:characterNulls.rows[0]) assert(value.isNull());
+        for(const auto& failure:std::vector<std::pair<std::string,int>>{
+            {"SELECT LenB(offset_date) FROM calendar_inputs WHERE marker=1",3251},
+            {"SELECT LenB(enabled) FROM calendar_inputs WHERE marker=1",3251},
+            {"SELECT Chr(enabled) FROM calendar_inputs WHERE marker=2",94},
+            {"SELECT Asc(enabled) FROM calendar_inputs WHERE marker=2",94},
+            {"SELECT Space(enabled) FROM calendar_inputs WHERE marker=2",94},
+            {"SELECT Hex$(enabled) FROM calendar_inputs WHERE marker=2",94},
+            {"SELECT Oct$(enabled) FROM calendar_inputs WHERE marker=2",94},
+            {"SELECT Space$(enabled) FROM calendar_inputs WHERE marker=2",94},
+            {"SELECT String$(offset_date,enabled) FROM calendar_inputs WHERE marker=2",94},
+            {"SELECT Chr$(enabled) FROM calendar_inputs WHERE marker=2",94},
+            {"SELECT ChrW$(enabled) FROM calendar_inputs WHERE marker=2",94},
+            {"SELECT Space(enabled) FROM calendar_inputs WHERE marker=1",5},
+            {"SELECT String(offset_date,enabled) FROM calendar_inputs WHERE marker=1",5}}) {
+            int actual=0;try{(void)database->member("OpenRecordset",{linaccess::VbaValue::string(failure.first)});}catch(const linaccess::VbaRuntimeError& error){actual=error.number;}
+            if(actual!=failure.second) std::cerr<<"Typed character error actual="<<actual<<" expected="<<failure.second<<"\n";assert(actual==failure.second);
+        }
         calendarPhase="DAO fields";
         const auto calendarFields=database->member("OpenRecordset",{linaccess::VbaValue::string(calendarSource.toStdString())}).object;
         assert(calendarFields->member("Fields",{linaccess::VbaValue::string("shifted")}).object->member("Type",{}).asNumber()==8);

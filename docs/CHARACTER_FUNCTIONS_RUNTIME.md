@@ -44,3 +44,28 @@ is recorded in PROGRESS.md.
 References:
 - https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/asc-function
 - https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/chr-function
+
+
+Typisierte SQL-Zeichen-, Wiederholungs- und Basisumwandlungen (2026-11-10)
+-----------------------------------------------------------------------
+Hex/Oct, Space/String und Asc/AscW/Chr/ChrW erhalten in nachgewiesenen einfachen
+Quellen die tatsächlichen Argumenttypen. Integer- und Long-Eingaben behalten
+insbesondere ihre unterschiedliche Hex-/Oktalbreite; Boolean und Date werden
+nicht als rohe SQLite-Integer bzw. ISO-Texte interpretiert. Asc/AscW-Ergebnisse
+tragen INTEGER2 und tatsächliches DAO dbInteger. Textausgaben bleiben Text-
+Variants ohne geratenen Text/Memo-DAO-Typ.
+
+Hex$/Oct$/Space$/String$/Chr$/ChrW$ sind als echte native SQL-Aliasse mit eigener
+registrierter Null-/Arity-Behandlung verfügbar. Die Dollar-Null-Regeln stammen
+aus dem vorhandenen VBA-Kern. Varianten ohne Dollar behalten ihre vorhandenen
+Null-Regeln. Unterstützte verschachtelte Projektionen, Filter, Gruppierungen
+und Sortierungen erhalten die gleiche Typbindung. Es werden keine Datenwerte
+als Quellcode ausgeführt. ASCII-/Codepage-/Surrogat-/Größen- und komplexe
+Quellgrenzen bleiben bestehen. Keine neue Windows-Referenz oder vollständige
+BSTR-/Jet-/Locale-Parität wird behauptet; keine neue CTest-/Katalog-ID.
+
+Len/LenB übertragen dieselben nachgewiesenen Quelltypen. Len(Date) nutzt die
+bestehende native Date-Größe8; Len(Boolean) behält die vorhandene Textkonversion.
+LenB verweigert weiterhin nicht-textuelle Speicherlayouts mit3251, statt Date-
+Speicherung als ISO-String zu zählen. NULL bleibt NULL, Ergebnisse sind Long.
+Vollständige primitive/UDT-Speicherlayouts sind damit nicht implementiert.

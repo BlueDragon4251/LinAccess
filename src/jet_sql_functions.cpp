@@ -379,6 +379,8 @@ void financialSyd(sqlite3_context* context,int count,sqlite3_value** args) noexc
 void financialFv(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"FV",3,5); }
 void financialPmt(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Pmt",3,5); }
 void partitionRange(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Partition",4,4); }
+void textLengthTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Len",1,1,true);}
+void stringLenBTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"LenB",1,1,true);}
 void stringLenB(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"LenB",1,1); }
 void stringReverse(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"StrReverse",1,1,false);}
 void stringReverseTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"StrReverse",1,1,true);}
@@ -444,13 +446,33 @@ void calendarDatePart(sqlite3_context* context,int count,sqlite3_value** args) n
 void scalarChoose(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Choose",2,1000); }
 void scalarSwitch(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Switch",2,1000); }
 void stringVal(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Val",1,1); }
+void stringHexTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Hex",1,1,true);}
+void alias_hex_string(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Hex$",1,1,false);}
+void alias_hex_string_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Hex$",1,1,true);}
+void alias_oct_string(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Oct$",1,1,false);}
+void alias_oct_string_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Oct$",1,1,true);}
+void alias_space_string(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Space$",1,1,false);}
+void alias_space_string_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Space$",1,1,true);}
+void alias_string_string(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"String$",2,2,false);}
+void alias_string_string_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"String$",2,2,true);}
+void alias_chr_string(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Chr$",1,1,false);}
+void alias_chr_string_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Chr$",1,1,true);}
+void alias_chrw_string(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"ChrW$",1,1,false);}
+void alias_chrw_string_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"ChrW$",1,1,true);}
 void stringHex(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Hex",1,1); }
+void stringOctTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Oct",1,1,true);}
 void stringOct(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Oct",1,1); }
+void stringSpaceTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Space",1,1,true);}
 void stringSpace(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Space",1,1); }
+void stringRepeatTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"String",2,2,true);}
 void stringRepeat(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"String",2,2); }
+void stringAscTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Asc",1,1,true);}
 void stringAsc(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Asc",1,1); }
+void stringAscWTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"AscW",1,1,true);}
 void stringAscW(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"AscW",1,1); }
+void stringChrTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Chr",1,1,true);}
 void stringChr(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Chr",1,1); }
+void stringChrWTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"ChrW",1,1,true);}
 void stringChrW(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"ChrW",1,1); }
 void calendarFunction(sqlite3_context* context,int count,sqlite3_value** args,std::string_view name) noexcept {
     auto& native=api();
@@ -867,8 +889,11 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_ppmt",-1,&financialPpmt,nullptr,nullptr);
     ensure("linaccess_jet_round",-1,&roundNumber,nullptr,nullptr);
     ensure("linaccess_jet_asc",-1,&stringAsc,nullptr,nullptr);
+    ensure("linaccess_jet_asc_typed",-1,&stringAscTyped,nullptr,nullptr);
     ensure("linaccess_jet_ascw",-1,&stringAscW,nullptr,nullptr);
+    ensure("linaccess_jet_ascw_typed",-1,&stringAscWTyped,nullptr,nullptr);
     ensure("linaccess_jet_chr",-1,&stringChr,nullptr,nullptr);
+    ensure("linaccess_jet_chr_typed",-1,&stringChrTyped,nullptr,nullptr);
     ensure("linaccess_jet_sqr",-1,&mathSqr,nullptr,nullptr);
     ensure("linaccess_jet_sqr_typed",-1,&mathSqrTyped,nullptr,nullptr);
     ensure("linaccess_jet_exp",-1,&mathExp,nullptr,nullptr);
@@ -979,11 +1004,28 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_choose",-1,&scalarChoose,nullptr,nullptr);
     ensure("linaccess_jet_switch",-1,&scalarSwitch,nullptr,nullptr);
     ensure("linaccess_jet_val",-1,&stringVal,nullptr,nullptr);
+    ensure("linaccess_jet_hex_string",-1,&alias_hex_string,nullptr,nullptr);
+    ensure("linaccess_jet_hex_string_typed",-1,&alias_hex_string_typed,nullptr,nullptr);
+    ensure("linaccess_jet_oct_string",-1,&alias_oct_string,nullptr,nullptr);
+    ensure("linaccess_jet_oct_string_typed",-1,&alias_oct_string_typed,nullptr,nullptr);
+    ensure("linaccess_jet_space_string",-1,&alias_space_string,nullptr,nullptr);
+    ensure("linaccess_jet_space_string_typed",-1,&alias_space_string_typed,nullptr,nullptr);
+    ensure("linaccess_jet_string_string",-1,&alias_string_string,nullptr,nullptr);
+    ensure("linaccess_jet_string_string_typed",-1,&alias_string_string_typed,nullptr,nullptr);
+    ensure("linaccess_jet_chr_string",-1,&alias_chr_string,nullptr,nullptr);
+    ensure("linaccess_jet_chr_string_typed",-1,&alias_chr_string_typed,nullptr,nullptr);
+    ensure("linaccess_jet_chrw_string",-1,&alias_chrw_string,nullptr,nullptr);
+    ensure("linaccess_jet_chrw_string_typed",-1,&alias_chrw_string_typed,nullptr,nullptr);
     ensure("linaccess_jet_hex",-1,&stringHex,nullptr,nullptr);
+    ensure("linaccess_jet_hex_typed",-1,&stringHexTyped,nullptr,nullptr);
     ensure("linaccess_jet_oct",-1,&stringOct,nullptr,nullptr);
+    ensure("linaccess_jet_oct_typed",-1,&stringOctTyped,nullptr,nullptr);
     ensure("linaccess_jet_space",-1,&stringSpace,nullptr,nullptr);
+    ensure("linaccess_jet_space_typed",-1,&stringSpaceTyped,nullptr,nullptr);
     ensure("linaccess_jet_string",-1,&stringRepeat,nullptr,nullptr);
+    ensure("linaccess_jet_string_typed",-1,&stringRepeatTyped,nullptr,nullptr);
     ensure("linaccess_jet_chrw",-1,&stringChrW,nullptr,nullptr);
+    ensure("linaccess_jet_chrw_typed",-1,&stringChrWTyped,nullptr,nullptr);
     ensure("linaccess_jet_strreverse",-1,&stringReverse,nullptr,nullptr);
     ensure("linaccess_jet_instrrev",-1,&stringInStrRev,nullptr,nullptr);
     ensure("linaccess_jet_datediff",-1,&calendarDatediff,nullptr,nullptr);
@@ -1037,6 +1079,8 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_formatdatetime",-1,&formatDateTime,nullptr,nullptr,SQLITE_UTF8|SQLITE_INNOCUOUS);
     ensure("linaccess_jet_concat",2,&concatenate,nullptr,nullptr);
     ensure("linaccess_jet_len",1,&textLength,nullptr,nullptr);
+    ensure("linaccess_jet_len_typed",-1,&textLengthTyped,nullptr,nullptr);
+    ensure("linaccess_jet_lenb_typed",-1,&stringLenBTyped,nullptr,nullptr);
     ensure("linaccess_jet_default_date",0,&dateFieldDefault<0>,nullptr,nullptr,SQLITE_UTF8|SQLITE_INNOCUOUS);
     ensure("linaccess_jet_default_now",0,&dateFieldDefault<1>,nullptr,nullptr,SQLITE_UTF8|SQLITE_INNOCUOUS);
     ensure("linaccess_jet_default_time",0,&dateFieldDefault<2>,nullptr,nullptr,SQLITE_UTF8|SQLITE_INNOCUOUS);

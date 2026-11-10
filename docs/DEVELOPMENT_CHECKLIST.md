@@ -5513,3 +5513,31 @@ betroffener DAO-Lauf1/1 in3.48s bestanden. Keine neuen CTest-/Katalog-IDs;
 456/386/70 unverändert, F067/F068/F071/F121/F122 weiter offen, kein Access-Oracle.
 Vorstandf856c97fa7eadc1df38f6e80fad0784b32bc8160/Baum3bec4863b184a479dc1b92d2ad5ceb0813074925
 privat veröffentlicht/exakt verifiziert. Frisches Paket folgt; letzter Beleg9413428.
+
+
+Paketbeleg für native typisierte Scalar-Familien (2026-11-10):
+Privater veröffentlichter Stand2d7fa91e0ee8010c1bcc258bb6d84d0df829372e,
+Baum812ba0beafe3a152b033afa6a4f8d61139c53938. DEB unter
+work/typed-scalar-families/package-proof/package/linaccess-0.7.0-Linux.deb:
+Integrationsbau/CPack/check-deb bestanden; vorhandenes Original-/Inventarbündel
+2/2 in164,85s (Original118,63/Inventar46,21s). Alle7 geschützten Hashes
+unverändert. Inventar100/78/22, Kategorien73/5/3/9/10 unverändert. Die78
+Ausführungen haben weiterhin keinen Access-Ergebnisoracle; bekannte Original-
+Makro-/Ablaufgrenzen bleiben. Paket enthält Kalender-/Mathematik-/Konvertierungs-/
+Formatierungsbindung, liegt vor den neuen Zeichen-/Alias-/Längenänderungen.
+456/386/70 unverändert, keine zusätzliche Vollanforderung geschlossen.
+
+
+Typisierte Zeichen-/Basis-/Längenfamilie (2026-11-10):
+CHARACTER_FUNCTIONS_RUNTIME.md und NATIVE_SQL_STRINGS.md erweitert. Hex/Oct,
+Space/String, Asc/AscW/Chr/ChrW sowie Len/LenB binden tatsächliche Date/Boolean/
+Single/Currency/Integer/Long-Quelltypen; Integer-/Long-Basisbreiten und tatsächliches
+DAO dbInteger für Asc geprüft. Hex$/Oct$/Space$/String$/Chr$/ChrW$ mit echten
+SQL-Callbacks und getrennten Null-Regeln ergänzt. Len(Date)=8 erhalten, LenB
+nicht-textuell3251 statt ISO-Textinterpretation. Unterstützte verschachtelte
+Projektion/Filter/Gruppierung/Sortierung; ASCII/Surrogat-/Output-/Quellgrenzen
+bleiben. App/DAO/Query-Modell gebaut, bestehendes Bündel2/2 in4,54s (4,25/0,29)
+bestanden. Keine neuen IDs;456/386/70 unverändert, keine Windows-Oracle-Behauptung.
+Vorstand2d7fa91e0ee8010c1bcc258bb6d84d0df829372e/Baum812ba0beafe3a152b033afa6a4f8d61139c53938
+privat verifiziert; dessen Paketprüfung/Originalbündel164,85s/7Hash gleich siehe
+Paketbeleg oben. Neue Zeichen-/Längenbindung liegt nach diesem Paket.

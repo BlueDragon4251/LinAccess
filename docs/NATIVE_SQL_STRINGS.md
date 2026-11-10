@@ -34,3 +34,18 @@ Currency text near the supported strict2^39 bound. No new CTest/catalog IDs;
 456/386/70. Latest checked DEB is still application62d00929 plus packaging
 correction5ec76beb, before CStr/OverGroup/these adapters. No Windows/full-suite
 claim.
+
+
+The shared scalar binding also covers proven numeric/calendar/conversion/format
+arguments as described in DATE_RUNTIME.md, TYPED_SQL_ARITHMETIC.md,
+SQL_NUMERIC_CONVERSIONS.md and NATIVE_FORMAT_RUNTIME.md. The later proven-Date
+comparison/IS-NULL binding is the explicit exception to the older predicate
+Date-operator guard above; unrelated Date/Currency operators retain their bounds.
+
+The character/base/repetition family in CHARACTER_FUNCTIONS_RUNTIME.md extends
+this transport to Hex/Oct, Space/String, Asc/AscW/Chr/ChrW and the supported
+Hex$/Oct$/Space$/String$/Chr$/ChrW$ SQL aliases. Integer versus Long subtype
+matters for base conversion width; Dollar aliases preserve their own Null rules.
+Unsupported ANSI codepages, split surrogates, output limits and unproven source
+lineage are not bypassed. Generic TEXT results still do not imply a particular
+Jet Text/Memo field declaration. There is no new independent Access oracle.
