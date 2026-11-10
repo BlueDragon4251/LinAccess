@@ -4960,3 +4960,21 @@ Vorstufe verglichen, App/Core gebaut, bestehendes Core-Bündel1/1 in5,57s bestan
 Keine neue Laufzeitfunktion/CTest-/Katalog-ID und keine Laufzeit-Benchmarkbehauptung;
 456/386/70. Vorstufee8f54673 privat remote/Baum geprüft. Weiterentwickeln ohne
 Zwischenabschluss; letztes geprüftes DEB/Original weiterhina23c7009 vor Folgeänderungen.
+
+
+Native DAO-Currency-Erzeugung: DAO_NATIVE_CURRENCY_CREATION.md dokumentiert echtes
+CreateField(...,dbCurrency) für neue Tabellen und Fields.Append an bestehenden.
+CURRENCY_REAL nutzt den bestehenden verlustfreien Vierstellenpfad streng innerhalb
++/-2^39, physische CHECK erzwingt Normalisierung; MetadatenType5/Size8/Required und
+Default-Drafts/SQL werden tatsächlich genutzt. Defaults Null oder Dezimalliterale
+mit höchstens vier Stellen exakt konvertiert, überschüssige Präzision/Exponent/
+Aufrufe/Bereich vor Default-Ersatz3251. DefaultValue zeigt normalisierten Currency-
+Text statt binärer SQL-Serialisierungsziffern. Fehlendes Fixture-Include vor Checks
+korrigiert; App/DAO/Modell/Currency gebaut. Bestehendes Bündel4/5 bestanden, DAO
+fand echten physischen Typkonflikt: Speicherprotokoll verlangt REAL. Deklaration
+auf REAL korrigiert, logischer Typ CURRENCY_REAL aus Metadaten; nur DAO erneut1/1 in3,50s
+bestanden, echte SQL-/Append-/Constraint-/Metadaten-/VBA-Erzeugungsbelege. Keine
+neuen CTest-/Katalog-IDs;456/386/70. Vollständiger Jet-Tickbereich/Decimal/Currency-
+Rebuild/Validation/Provider-/Windows-Parität bleibt offen. Vorstufe2af79959 privat
+remote/Baum geprüft; letztes DEB/Originala23c7009 vor späteren Änderungen.
+Ohne Zwischenabschluss weitere allgemeine Anforderungen implementieren.

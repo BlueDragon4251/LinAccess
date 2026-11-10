@@ -16,7 +16,9 @@ bounded ambiguity guard, not complete Access/Unicode/locale identifier parity.
 Duplicate physical fields, complex/parameter/keyless targets, filtered AddNew
 and omitted generator reservations retain the previous boundaries. Aliases do
 not grant unproven original Fields.Properties or native Currency CreateField.
-The latter remains unsupported; exact Currency alias coverage uses an actual
+Native Currency CreateField was still unsupported at that stage; its subsequent
+bounded implementation is in DAO_NATIVE_CURRENCY_CREATION.md. Exact Currency
+alias coverage here uses an actual
 physical CURRENCY_TICKS table, independently checked as integer storage.
 
 The shared application/DAO/query-model/Currency/layout build passed. One existing

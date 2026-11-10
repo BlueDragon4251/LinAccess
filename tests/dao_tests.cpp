@@ -6,6 +6,7 @@
 #include "native_schema_editor.hpp"
 #include "vba_array.hpp"
 #include "vba_decimal.hpp"
+#include "vba_currency.hpp"
 #include <QFileInfo>
 #include <bit>
 #include "vba_qt_value.hpp"
@@ -1290,9 +1291,41 @@ assert(caption->member("DataUpdatable",{}).truthy() && caption->member("Properti
     assert(sql.exec("SELECT amount FROM main.AliasMoney WHERE id=1") && sql.next() && sql.value(0).toLongLong()==1234567890123456LL);sql.finish();
 }
 
+void testNativeCurrencyCreation() {
+    using namespace linaccess;auto db=QSqlDatabase::addDatabase("QSQLITE","dao-currency-create");db.setDatabaseName(":memory:");assert(db.open());QSqlQuery sql(db);auto database=makeDaoDatabase(db);
+    auto table=database->member("CreateTableDef",{VbaValue::string("NativeMoney")}).object;
+    auto id=table->member("CreateField",{VbaValue::string("ID"),VbaValue::integer(4)}).object;table->member("Fields",{}).object->member("Append",{VbaValue::reference(id)});
+    auto amount=table->member("CreateField",{VbaValue::string("Amount"),VbaValue::integer(5)}).object;amount->assign("Required",VbaValue::logical(true));amount->assign("DefaultValue",VbaValue::string("12.3456"));table->member("Fields",{}).object->member("Append",{VbaValue::reference(amount)});
+    auto primary=table->member("CreateIndex",{VbaValue::string("PrimaryKey")}).object;primary->assign("Primary",VbaValue::logical(true));primary->member("Fields",{}).object->member("Append",{primary->member("CreateField",{VbaValue::string("ID")})});table->member("Indexes",{}).object->member("Append",{VbaValue::reference(primary)});database->member("TableDefs",{}).object->member("Append",{VbaValue::reference(table)});
+    assert(amount->member("Type",{}).asNumber()==5 && amount->member("Size",{}).asNumber()==8 && amount->member("DefaultValue",{}).asText()=="12.3456" && amount->member("Required",{}).truthy());
+    auto rows=database->member("OpenRecordset",{VbaValue::string("NativeMoney")}).object;rows->member("AddNew",{});rows->assignItem("ID",VbaValue::longInteger(1));assert(rows->item("Amount").currencyUnits==123456);rows->member("Update",{});
+    assert(sql.exec("SELECT Amount,typeof(Amount) FROM main.NativeMoney WHERE ID=1") && sql.next() && currencyFromRealStorage(sql.value(0).toDouble()).currencyUnits==123456 && sql.value(1).toString()=="real");sql.finish();
+    database->member("Execute",{VbaValue::string("INSERT INTO NativeMoney(ID,Amount) VALUES(2,'1.23455')")});assert(sql.exec("SELECT Amount FROM NativeMoney WHERE ID=2") && sql.next() && currencyFromRealStorage(sql.value(0).toDouble()).currencyUnits==12346);sql.finish();
+    assert(!sql.exec("INSERT INTO main.NativeMoney VALUES(3,1.23456)"));sql.finish();
+    auto extra=table->member("CreateField",{VbaValue::string("Extra"),VbaValue::integer(5)}).object;extra->assign("DefaultValue",VbaValue::string("-0.0001"));table->member("Fields",{}).object->member("Append",{VbaValue::reference(extra)});
+    assert(sql.exec("SELECT Extra FROM NativeMoney ORDER BY ID") && sql.next() && currencyFromRealStorage(sql.value(0).toDouble()).currencyUnits==-1 && sql.next() && currencyFromRealStorage(sql.value(0).toDouble()).currencyUnits==-1);sql.finish();
+    auto rejected=database->member("CreateTableDef",{VbaValue::string("RejectedMoney")}).object->member("CreateField",{VbaValue::string("Amount"),VbaValue::integer(5)}).object;
+    for(const auto* literal:{"1.23455","549755813888","1e2","SomeFunction()"}) {int number=0;try {rejected->assign("DefaultValue",VbaValue::string(literal));}catch(const VbaRuntimeError& failure) {number=failure.number;}assert(number==3251 && rejected->member("DefaultValue",{}).asText().empty());}
+    Host host(db);const auto result=executeVbaProcedure(R"VBA(Function MakeMoney As Currency
+Dim t As DAO.TableDef,f As DAO.Field,r As DAO.Recordset
+Set t=CurrentDb.CreateTableDef("VbaMoney")
+Set f=t.CreateField("Amount",dbCurrency)
+f.DefaultValue="1.2500"
+t.Fields.Append f
+CurrentDb.TableDefs.Append t
+Set r=CurrentDb.OpenRecordset("VbaMoney")
+r.AddNew
+r.Update
+MakeMoney=r!Amount
+r.Close
+End Function)VBA","MakeMoney",host);
+    if(result.status!=VbaExecutionStatus::Completed) std::cerr<<"Currency create error="<<result.errorNumber<<" line="<<result.line<<'\n';assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->currencyUnits==12500);
+}
+
 void testOwnedQueryDefs() {
     testEditableStarQueryDynasets();
     testEditableTypedAliases();
+    testNativeCurrencyCreation();
     testRecordsetCopyQueryDef();
     auto db=QSqlDatabase::addDatabase("QSQLITE","owned-querydef-sql"); db.setDatabaseName(":memory:"); assert(db.open());
     QSqlQuery sql(db);

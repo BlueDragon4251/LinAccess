@@ -341,6 +341,8 @@ std::optional<QString> nativeFieldDefaultExpression(const TableSchemaColumn& fie
     if(!field.hasDefault) return QString{};
     if(field.sourceType==8 && field.nativeAttributes) if(const auto clock=nativeDateDefaultExpression(field.storedDefault)) return *clock;
     auto expression=field.literalDefault;
+    if(field.sourceType==5 && field.nativeAttributes && field.type=="CURRENCY_REAL" && !expression.isEmpty() && expression!="NULL")
+        return QString::fromStdString(convertCurrency(VbaValue::string(expression.toStdString())).asText());
     if(expression.isEmpty() || expression.size()>512) return {};
     if(expression=="NULL") expression="Null";
     else if(expression.startsWith(QChar(39))) {
@@ -2302,6 +2304,15 @@ private:
 };
 // Detached DAO schema objects; mutations become physical only at TableDefs.Append.
 QString schemaJetName(QString name) {return '['+name.replace("]","]]")+']';}
+QString nativeCurrencyDefaultSql(QString token) {
+    token=token.trimmed();if(token.startsWith('=')) token=token.mid(1).trimmed();
+    if(token.compare("Null",Qt::CaseInsensitive)==0) return "NULL";
+    static const QRegularExpression literal(R"(^[+-]?(?:[0-9]+(?:\.[0-9]{0,4})?|\.[0-9]{1,4})$)");
+    if(!literal.match(token).hasMatch()) throw VbaRuntimeError(3251,"Native Currency default requires a decimal literal with at most four places");
+    const auto value=convertCurrency(VbaValue::string(token.toStdString()));
+    return QString::number(currencyToRealStorage(value),'g',17);
+}
+
 struct DetachedTableState {
     QSqlDatabase db;std::shared_ptr<WorkspaceState> workspace;QString name;
     std::shared_ptr<TableDefinition> attached,existing;
@@ -2350,11 +2361,11 @@ public:
         if(key=="allowzerolength") {if(type_!=10 && type_!=12) throw VbaRuntimeError(3251,"DAO: AllowZeroLength requires Text or Memo");allowZeroLength_=coerceVbaModuleValue(value,"boolean").truthy();return;}
         if(key=="validationtext") {const auto message=text(value.asText());if(message.size()>255 || message.contains(QChar(0)) || !message.isValidUtf16() || (!message.isEmpty() && ((attributes_&16) || (type_!=1 && type_!=2 && type_!=3 && type_!=4 && type_!=6 && type_!=7 && !(type_==8 && canonicalDate_))))) throw VbaRuntimeError(3251,"DAO: ValidationText requires a native numeric or canonical Date non-counter field and at most255 valid characters");validationText_=message;return;}
         if(key=="validationrule") {const auto rule=text(value.asText()).trimmed();if(!rule.isEmpty() && ((attributes_&16) || (type_!=1 && type_!=2 && type_!=3 && type_!=4 && type_!=6 && type_!=7 && !(type_==8 && canonicalDate_)))) throw VbaRuntimeError(3251,"DAO: ValidationRule requires native numeric or canonical Date non-counter fields");(void)nativeFieldValidationPredicate(type_,rule,schemaJetName(name_));validationRule_=rule;return;}
-        if(key=="defaultvalue") {const auto token=text(value.asText());if(!token.isEmpty() && !accessLiteralDefaultSql(token) && !(type_==8 && (nativeDateDefaultSql(token) || nativeDateLiteralSql(token)))) throw VbaRuntimeError(3251,"DAO: Field default requires a supported literal or Date clock expression");default_=token;return;}
+        if(key=="defaultvalue") {const auto token=text(value.asText());if(type_==5 && !token.isEmpty()) (void)nativeCurrencyDefaultSql(token);if(!token.isEmpty() && !accessLiteralDefaultSql(token) && !(type_==8 && (nativeDateDefaultSql(token) || nativeDateLiteralSql(token)))) throw VbaRuntimeError(3251,"DAO: Field default requires a supported literal or Date clock expression");default_=token;return;}
         throw VbaRuntimeError(3251,"DAO: Detached field assignment unsupported");
     }
     QJsonObject metadata() const {
-        const auto source=type_==1 ? "BOOLEAN" : type_==2 ? "TINYINT" : type_==3 ? "SMALLINT" : type_==4 ? "INT" : type_==6 ? "SINGLE" : type_==7 ? "DOUBLE" : type_==8 ? "DATETIME" : type_==10 ? "VARCHAR" : type_==11 ? "BLOB" : "MEMO";
+        const auto source=type_==1 ? "BOOLEAN" : type_==2 ? "TINYINT" : type_==3 ? "SMALLINT" : type_==4 ? "INT" : type_==5 ? "CURRENCY" : type_==6 ? "SINGLE" : type_==7 ? "DOUBLE" : type_==8 ? "DATETIME" : type_==10 ? "VARCHAR" : type_==11 ? "BLOB" : "MEMO";
         auto object=QJsonObject{{"name",name_},{"source_type",source},{"source_origin","DAO_NATIVE"},{"source_size",type_==10 ? size_ : 0},{"native_attributes",attributes_},{"native_required",required_}};if(type_==10 || type_==12) object.insert("native_allow_zero_length",allowZeroLength_);if(type_==8) object.insert("native_date_canonical",canonicalDate_);if(!validationRule_.isEmpty()) object.insert("native_validation_rule",validationRule_);if(!validationText_.isEmpty()) object.insert("native_validation_text",validationText_);if(caption_) {object.insert("native_caption",*caption_);object.insert("native_caption_id",captionIdentity_);}if(description_) {object.insert("native_description",*description_);object.insert("native_description_id",descriptionIdentity_);}if(format_) {object.insert("native_format",*format_);object.insert("native_format_id",formatIdentity_);}return object;
     }
     QString definition(bool storedDateLiteral=false) const {
@@ -2366,7 +2377,7 @@ public:
         QString type;
         switch(type_) {
         case 1:type="BOOLEAN";break;case 2:type="INTEGER1";break;case 3:type="INTEGER2";break;case 4:type="INTEGER4";break;
-        case 6:type="SINGLE_REAL";break;
+        case 5:type="REAL";break;case 6:type="SINGLE_REAL";break;
         case 7:type="DOUBLE";break;case 8:type="DATETIME";break;case 10:
             if(size_<1 || size_>255) throw VbaRuntimeError(3251,"DAO: Text field requires an explicit supported size");
             type="VARCHAR("+QString::number(size_)+")";break;
@@ -2374,9 +2385,11 @@ public:
         default:throw VbaRuntimeError(3251,"DAO: Field type is not supported for native creation");
         }
         auto result=schemaJetName(name_)+" "+type+(required_ ? " NOT NULL" : "");
-        if(type_==8 && nativeDateDefaultSql(default_)) result+=" DEFAULT ("+*nativeDateDefaultSql(default_)+")";
+        if(type_==5 && !default_.isEmpty()) result+=" DEFAULT "+nativeCurrencyDefaultSql(default_);
+        else if(type_==8 && nativeDateDefaultSql(default_)) result+=" DEFAULT ("+*nativeDateDefaultSql(default_)+")";
         else if(type_==8 && nativeDateLiteralSql(default_)) result+=" DEFAULT "+*nativeDateLiteralSql(default_);
         else if(!default_.isEmpty()) {auto literal=*accessLiteralDefaultSql(default_);if(type_==8 && !storedDateLiteral) {QSqlQuery query(owner_->db);if(!query.exec("SELECT "+literal) || !query.next()) queryFailure(query);const auto stored=sqlFieldValue(fromSql(query.value(0)),"DATETIME");if(stored.isNull()) literal="NULL";else {auto value=stored.toString();literal="'"+value.replace("'","''")+"'";}}if(type_==6) {QSqlQuery query(owner_->db);if(!query.exec("SELECT "+literal) || !query.next()) queryFailure(query);const auto stored=sqlFieldValue(fromSql(query.value(0)),"SINGLE_REAL");literal=stored.isNull() ? "NULL" : QString::number(stored.toDouble(),'g',17);}result+=" DEFAULT "+literal;}
+        if(type_==5) result+=" CHECK ("+schemaJetName(name_)+" IS NULL OR (typeof("+schemaJetName(name_)+") IN ('integer','real') AND "+schemaJetName(name_)+"=linaccess_jet_currency_store("+schemaJetName(name_)+")))";
         if(type_==6) result+=" CHECK ("+schemaJetName(name_)+" IS NULL OR (typeof("+schemaJetName(name_)+") IN ('integer','real') AND "+schemaJetName(name_)+"=linaccess_jet_field_store('SINGLE_REAL',"+schemaJetName(name_)+")))";
         if(type_==10) result+=" CHECK (linaccess_jet_text_capacity("+schemaJetName(name_)+","+QString::number(size_)+"))";
         const auto column=schemaJetName(name_);
