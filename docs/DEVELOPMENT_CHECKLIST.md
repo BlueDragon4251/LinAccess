@@ -5371,3 +5371,18 @@ in0,57s bestanden. Property-/Projekt-/Library-Gesamtnamensräume bleiben offen.
 Privater skalarer Vorstand4aa7885f74844d3e41e95c0a2b28bb320f9a14f2,
 Baum2cb0d4f0f474adce57e6595b59e3b24ab0fb7831 verifiziert.456/386/70 unverändert.
 Weiter mit impliziten skalaren Typzeichen, danach Arrays/ReDim; kein Zwischenabschluss.
+
+
+Implizite und Array-Typzeichen (2026-11-10): VBA_IDENTIFIER_TYPES.md ergänzt.
+Skalare implizite Bindung ohne Option Explicit, Vorrang vor Def-Typen,
+Literalbezeichner-Suffixe ignoriert; deklarationsbasierter Typabgleich bleibt.
+Lokale/Modul-Arrays, ByRef-Arrayparameter, Elemente, ReDim/Preserve und Erase
+verwenden kanonische Namen/Elementtypen. Neue ReDim-Ziele auch mit Option Explicit
+prozedurweit kanonisch gebunden. Statischer Funktionszustand identisch bei
+Aufrufen mit/ohne Suffix. Bestehender alter statischer Suffix-Guardtest aktualisiert,
+weil dieses Verhalten nun implementiert ist; keine Wache pauschal entfernt.
+Anwendung/Kern/DAO gebaut; bestehendes Bündel2/2 in3,54s (Kern0,57,DAO2,97s).
+Keine neuen CTest-/Katalog-IDs, F040/F122 bleiben offene Vollanforderungen;
+456/386/70 unverändert. Funktionsvorstand4e68489b948cf8344467e94ae42c60e4e7f44421,
+Baum59d5837f3f8651ee9b31901701fbd9a7c6e9c1e4 privat verifiziert.
+Nächste Implementierung: Typzeichen an For/Next, direkten Aufrufen und Stringzielen.

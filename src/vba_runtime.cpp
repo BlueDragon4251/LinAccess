@@ -249,6 +249,16 @@ std::optional<std::pair<std::string,std::string>> objectAssignment(const std::st
     return assignment;
 }
 
+std::optional<MemberTarget> nativeVariableTarget(const std::string& source) {
+    static const std::regex root(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)([$%&!#@])(?=\s|\(|$))");
+    std::smatch match;
+    if(!std::regex_search(source,match,root)) return memberTarget(source);
+    auto normalized=source;normalized.erase(match[1].length(),1);
+    auto target=memberTarget(normalized);
+    if(target) target->name+=match[2].str();
+    return target;
+}
+
 std::string lower(std::string text) {
     std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) {
         return static_cast<char>(std::tolower(c));
@@ -927,7 +937,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                 hasCancel = accessor.empty() && std::regex_match(params, cancelParam);
                 bool optionalSeen=false,paramArraySeen=false;
                 static const std::regex paramArray(R"(^ParamArray\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*\)\s*(?:As\s+Variant)?$)",std::regex::icase);
-                static const std::regex arrayParameter(R"(^(?:ByRef\s+)?([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*\)\s*(?:As\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*))?$)",std::regex::icase);
+                static const std::regex arrayParameter(R"(^(?:ByRef\s+)?([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?)\s*\(\s*\)\s*(?:As\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*))?$)",std::regex::icase);
                 const auto declarations=splitArguments(params);
                 for (std::size_t parameterIndex=0;parameterIndex<declarations.size();++parameterIndex) {
                     const auto& declaration=declarations[parameterIndex];
@@ -943,10 +953,13 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                     }
                     if(std::regex_match(declaration,declared,arrayParameter)) {
                         if(optionalSeen && !setterValue) return {VbaExecutionStatus::Unsupported,"Required array parameter after Optional is not implemented",line};
-                        auto type=bindModuleDeclaredType(nativeDeclaredType(lower(declared[2].str())),enumTypes); if(type.empty()) type=implicitTypes.forName(declared[1].str()); if(type.empty()) type="variant";
+                        const auto suffix=vbaIdentifierType(declared[1].str());
+                        if(!suffix.empty() && declared[2].matched) return {VbaExecutionStatus::Unsupported,"Typed array parameter cannot also specify As",line};
+                        auto type=suffix.empty() ? bindModuleDeclaredType(nativeDeclaredType(lower(declared[2].str())),enumTypes) : std::string(suffix);
+                        if(type.empty()) type=implicitTypes.forName(declared[1].str()); if(type.empty()) type="variant";
                         static const std::unordered_set<std::string> allowed{"variant","byte","integer","long","single","double","currency","date","boolean","string","object"};
                         if(!allowed.contains(type) && !isDeclaredObjectType(type)) return {VbaExecutionStatus::Unsupported,"Array parameter element type unsupported",line};
-                        if(parameters) parameters->push_back({declared[1].str(),true,type+"()",false,{}});
+                        if(parameters) parameters->push_back({vbaIdentifierName(declared[1].str()),true,type+"()",false,{}});
                         continue;
                     }
                     if (!std::regex_match(declaration, declared, parameter))
@@ -1468,8 +1481,8 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
             if(entries.size()<2 || entries.size()>3 || !std::all_of(entries.begin(),entries.end(),[&](const auto& value){return !trim(value).empty() && validExpression(value);}) || !validExpression(assignment->second))
                 return {VbaExecutionStatus::Unsupported,"Mid$ assignment syntax unsupported",line};
             statements.push_back({Statement::Type::IndexedAssign,"mid$",assignment->second,line,arguments});
-        } else if (const auto assignment=topLevelAssignment(source); assignment && memberSeparator(assignment->first)==std::string::npos && memberTarget(assignment->first) && memberTarget(assignment->first)->arguments) {
-            const auto target=*memberTarget(assignment->first);
+        } else if (const auto assignment=topLevelAssignment(source); assignment && nativeVariableTarget(assignment->first) && nativeVariableTarget(assignment->first)->arguments) {
+            const auto target=*nativeVariableTarget(assignment->first);
             const auto indices=splitArguments(*target.arguments);
             if(indices.size()>60 || !std::all_of(indices.begin(),indices.end(),[&](const auto& index) { const auto argument=callArgument(index);return argument.name.empty() ? (trim(argument.expression).empty() || validExpression(argument.expression)) : (!argument.expression.empty() && validExpression(argument.expression)); }) || !validExpression(assignment->second))
                 return {VbaExecutionStatus::Unsupported,"Array assignment syntax unsupported",line};
@@ -1493,8 +1506,9 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                         && elementType!="double" && elementType!="currency" && elementType!="date" && elementType!="boolean" && elementType!="string" && !elementType.starts_with("string*") && elementType!="object" && !isDeclaredObjectType(elementType))
                         return {VbaExecutionStatus::Unsupported,"ReDim element type unsupported",line};
                 }
-                const auto target=memberTarget(entry);
+                const auto target=nativeVariableTarget(entry);
                 if(!target || !target->arguments) return {VbaExecutionStatus::Unsupported,"Invalid Variant ReDim target",line};
+                if(!vbaIdentifierType(target->name).empty() && !elementType.empty()) return {VbaExecutionStatus::Unsupported,"Typed ReDim target cannot also specify As",line};
                 const auto dimensions=splitArguments(*target->arguments);
                 if(dimensions.empty() || dimensions.size()>60) return {VbaExecutionStatus::Unsupported,"Invalid ReDim dimension count",line};
                 for(const auto& dimension:dimensions) {
@@ -1512,7 +1526,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
         } else if (lower(source).starts_with("erase ") || lower(source).starts_with("erase\t")) {
             std::string names;
             for(const auto& entry:splitArguments(trim(source.substr(5)))) {
-                const auto target=memberTarget(entry);
+                const auto target=nativeVariableTarget(entry);
                 if(!target || target->arguments) return {VbaExecutionStatus::Unsupported,"Erase requires supported named array variables",line};
                 if(!names.empty()) names+=',';
                 names+=target->name;
@@ -1529,7 +1543,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
             } catch(const VbaRuntimeError& error) { VbaExecutionResult result{VbaExecutionStatus::Unsupported,"Const declaration unsupported",line}; result.errorNumber=error.number; return result; }
         } else if (std::regex_match(source, match, dim)) {
             const bool persistent=lower(source.substr(0,6))=="static";
-            static const std::regex dynamicArray(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*(.*)\s*\)\s*(?:As\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)(?:\s*\*\s*([0-9]+|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))?)?$)",std::regex::icase);
+            static const std::regex dynamicArray(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?)\s*\(\s*(.*)\s*\)\s*(?:As\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)(?:\s*\*\s*([0-9]+|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))?)?$)",std::regex::icase);
             for (auto entry:splitArguments(match[1].str())) {
                 std::smatch declared;
                 entry = trim(entry);
@@ -1538,7 +1552,11 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                 }} catch(const VbaRuntimeError& error) {VbaExecutionResult result{VbaExecutionStatus::Unsupported,"Automatic object declaration unsupported",line};result.errorNumber=error.number;return result;}
                 if(std::regex_match(entry,declared,dynamicArray)) {
                     std::string type;
-                    try{type=declaredScalarType(declared[3].str(),declared[4].str(),declarationConstants,enumTypes);}
+                    try{
+                        const auto suffix=vbaIdentifierType(declared[1].str());
+                        if(!suffix.empty() && declared[3].matched) throw VbaRuntimeError(5,"Typed array cannot also specify As");
+                        type=suffix.empty() ? declaredScalarType(declared[3].str(),declared[4].str(),declarationConstants,enumTypes) : std::string(suffix);
+                    }
                     catch(const VbaRuntimeError& error){VbaExecutionResult result{VbaExecutionStatus::Unsupported,"Fixed array element declaration unsupported",line};result.errorNumber=error.number;return result;}
                     if(type.empty()) type=implicitTypes.forName(declared[1].str()); if(type.empty()) type="variant";
                     if(type!="variant" && type!="byte" && type!="integer" && type!="long" && type!="single" && type!="double"
@@ -1547,7 +1565,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                     const auto bounds=trim(declared[2].str());
                     const auto dimensions=bounds.empty() ? std::optional<std::vector<VbaArrayDimension>>{} : literalArrayBounds(bounds,declarationArrayBase,declarationConstants,constantMode);
                     if(!bounds.empty() && !dimensions) return {VbaExecutionStatus::Unsupported,"Fixed array bounds require supported constant expressions",line};
-                    Statement declaration{Statement::Type::Dim,declared[1].str(),type+"()",line,bounds,bounds.empty() ? "" : "fixed"};
+                    Statement declaration{Statement::Type::Dim,vbaIdentifierName(declared[1].str()),type+"()",line,bounds,bounds.empty() ? "" : "fixed"};
                     declaration.persistent=persistent;
                     if(dimensions) declaration.fixedBounds=*dimensions; statements.push_back(std::move(declaration));
                     continue;
@@ -1837,7 +1855,7 @@ std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module) {
     static const std::regex procedure(R"(^\s*(?:(?:Public|Private|Friend)\s+)?(?:Static\s+)?(?:Sub|Function|Property)\s+)",std::regex::icase);
     static const std::regex declaration(R"(^\s*(Dim|Private|Public|Global)\s+(.+)$)",std::regex::icase);
     static const std::regex variable(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?)(?:\s+As\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_.\x80-\xFF]*)(?:\s*\*\s*([0-9]+|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))?)?$)",std::regex::icase);
-    static const std::regex dynamicArray(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*(.*)\s*\)\s*(?:As\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)(?:\s*\*\s*([0-9]+|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))?)?$)",std::regex::icase);
+    static const std::regex dynamicArray(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?)\s*\(\s*(.*)\s*\)\s*(?:As\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)(?:\s*\*\s*([0-9]+|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))?)?$)",std::regex::icase);
     const auto scalarConstants=moduleConstantDeclarations(module); std::size_t constantIndex=0; int sourceLine=0;
     VbaVariables knownConstants; const auto constantMode=moduleCompareMode(module);
     const auto lengthConstants=moduleConstantValues(module);
@@ -1876,7 +1894,11 @@ std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module) {
             }
             std::smatch field;
             if(std::regex_match(entry,field,dynamicArray)) {
-                const auto name=lower(field[1].str());auto type=declaredScalarType(field[3].str(),field[4].str(),lengthConstants,enumNames);if(type.empty()) type=implicitTypes.forName(name);if(type.empty()) type="variant";
+                const auto name=lower(vbaIdentifierName(field[1].str()));
+                const auto suffix=vbaIdentifierType(field[1].str());
+                if(!suffix.empty() && field[3].matched) throw VbaRuntimeError(5,"Typed module array cannot also specify As");
+                auto type=suffix.empty() ? declaredScalarType(field[3].str(),field[4].str(),lengthConstants,enumNames) : std::string(suffix);
+                if(type.empty()) type=implicitTypes.forName(name);if(type.empty()) type="variant";
                 if(type!="variant" && type!="byte" && type!="integer" && type!="long" && type!="single" && type!="double"
                     && type!="currency" && type!="date" && type!="boolean" && type!="string" && !type.starts_with("string*") && type!="object" && !isDeclaredObjectType(type))
                     throw VbaRuntimeError(3251,"Module dynamic array element type unsupported");
@@ -2356,7 +2378,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         auto state=host.moduleState(module); stateOwners.push_back(state);
         for(const auto& instruction:instructions) if(instruction.type==Statement::Type::Dim && instruction.persistent) {
             const auto name=lower(instruction.argument);
-            auto& saved=state->procedureStatics[lower(std::string(procedure))];
+            auto& saved=state->procedureStatics[lower(vbaIdentifierName(procedure))];
             auto [slot,inserted]=saved.try_emplace(name,locals.at(name));
             locals[name]=slot->second;
             aliases.push_back({name,&slot->second,slot->second,instruction.expression});
@@ -2392,17 +2414,18 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
     try {
         for(const auto& instruction:instructions) if(instruction.type==Statement::Type::ResizeArray)
             for(const auto& target:instruction.resizeTargets) {
-                const auto name=lower(target.name);
+                const auto name=lower(vbaIdentifierName(target.name));
                 if(locals.contains(name)) continue;
                 if(host.hasInstanceIdentifier(name) || stateOwners.front()->procedures.contains(name) || host.moduleForProcedure(name))
                     throw VbaRuntimeError(3251,"ReDim target resolves to a nonlocal member or procedure");
                 if(localTypes.size()>=4096) throw VbaRuntimeError(3035,"Local declaration limit exceeded");
                 auto element=target.elementType.empty() ? implicitTypes.forName(name) : target.elementType;
+                if(const auto suffix=vbaIdentifierType(target.name); !suffix.empty()) element=std::string(suffix);
                 if(element.empty()) element="variant";
                 const auto type=element+"()";
                 auto value=makeUnallocatedVbaArray(element);
                 if(staticProcedure) {
-                    auto& saved=stateOwners.front()->procedureStatics[lower(std::string(procedure))];
+                    auto& saved=stateOwners.front()->procedureStatics[lower(vbaIdentifierName(procedure))];
                     auto [slot,inserted]=saved.try_emplace(name,std::move(value));
                     locals.emplace(name,slot->second);aliases.push_back({name,&slot->second,slot->second,type});
                 } else locals.emplace(name,std::move(value));
@@ -2503,7 +2526,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
             throw VbaRuntimeError(3251,"Unqualified cross-module properties are not implemented");
         return {};
     };
-    const auto ensureImplicitLocal=[&](const std::string& name,bool externalChecked=false,std::string_view arrayElementType={}) {
+    const auto ensureImplicitLocal=[&](const std::string& name,bool externalChecked=false,std::string_view arrayElementType={},std::string_view scalarType={}) {
         if(locals.contains(name)) return;
         if(explicitVariables) throw VbaRuntimeError(5,"Procedure variable is not declared");
         if(!name.empty() && std::string_view("$%&!#@^").find(name.back())!=std::string_view::npos)
@@ -2511,10 +2534,10 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         if(stateOwners.front()->procedures.contains(name) || host.hasInstanceIdentifier(name) || (!externalChecked && externalProcedure(name)))
             throw VbaRuntimeError(3251,"Implicit local would hide a declared instance/procedure member");
         if(implicitLocals>=4096) throw VbaRuntimeError(3035,"Implicit local limit exceeded");
-        auto implicitType=implicitTypes.forName(name);if(implicitType.empty()) implicitType="variant";
+        auto implicitType=scalarType.empty() ? implicitTypes.forName(name) : std::string(scalarType);if(implicitType.empty()) implicitType="variant";
         if(!arrayElementType.empty()) implicitType=std::string(arrayElementType)+"()";
         if(staticProcedure) {
-            auto& saved=stateOwners.front()->procedureStatics[lower(std::string(procedure))];
+            auto& saved=stateOwners.front()->procedureStatics[lower(vbaIdentifierName(procedure))];
             if(!saved.contains(name) && saved.size()>=4096) throw VbaRuntimeError(3035,"Implicit static local limit exceeded");
             auto [slot,inserted]=saved.try_emplace(name,initialLocalValue(implicitType));
             locals.emplace(name,slot->second);aliases.push_back({name,&slot->second,slot->second,implicitType});
@@ -2610,6 +2633,12 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         if(declared!=type) throw VbaRuntimeError(13,"Identifier type character does not match its declaration");
         return key;
     };
+    const auto boundVariableName=[&](std::string_view name) {
+        if(vbaIdentifierType(name).empty()) return lower(std::string(name));
+        auto canonical=typedIdentifier(name);
+        if(!canonical || !locals.contains(*canonical)) throw VbaRuntimeError(3251,"Typed array target requires an existing declaration");
+        return *canonical;
+    };
     const auto invoke = [&](std::string_view name, std::vector<VbaValue>& actuals,
                             const VbaArgumentReferences& referenceInfo, bool needsValue) -> VbaValue {
         storeAliases();
@@ -2643,9 +2672,9 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         }
         for(auto& expression:argumentRefs)
             if(auto canonical=typedIdentifier(trim(expression))) expression=*canonical;
-        for(auto& expression:argumentRefs) if(const auto target=memberTarget(expression);target && target->arguments && trim(*target->arguments).empty()) {
-            const auto variable=locals.find(lower(target->name));
-            if(variable!=locals.end() && isVbaArray(variable->second)) expression=target->name;
+        for(auto& expression:argumentRefs) if(const auto target=nativeVariableTarget(expression);target && target->arguments && trim(*target->arguments).empty()) {
+            const auto key=boundVariableName(target->name);const auto variable=locals.find(key);
+            if(variable!=locals.end() && isVbaArray(variable->second)) expression=key;
         }
         std::vector<ReferenceBinding> bindings;
         for (std::size_t argument=0;argument<argumentRefs.size();++argument) {
@@ -2816,7 +2845,14 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
             if(!signature->function) throw VbaRuntimeError(3251,"A Sub cannot be used as a value");
             std::vector<VbaValue> arguments;return invoke(name,arguments,VbaArgumentReferences{},true);
         }
-        const auto key=lower(std::string(name));ensureImplicitLocal(key,true);return locals.at(key);
+        const auto suffix=vbaIdentifierType(name);
+        const auto key=lower(vbaIdentifierName(name));
+        ensureImplicitLocal(key,true,{},suffix);
+        if(!suffix.empty()) {
+            const auto canonical=typedIdentifier(name);
+            if(!canonical) throw VbaRuntimeError(3251,"Implicit typed identifier could not be bound");
+        }
+        auto value=locals.at(key);value.arithmeticBinding=variableArithmeticBinding(key);return value;
     };
     const auto compareMode=moduleCompareMode(module);
     const auto evaluate = [&](std::string_view expression,bool statementContext=false) {
@@ -3291,7 +3327,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                 break;
             case Statement::Type::ResizeArray:
                 if(active) for(const auto& target:instruction.resizeTargets) {
-                    const auto name=lower(target.name);
+                    const auto name=boundVariableName(target.name);
                     if(!locals.contains(name)) {
                         const auto inferred=implicitTypes.forName(name);
                         if(!inferred.empty()) ensureImplicitLocal(name,false,target.elementType.empty() ? inferred : target.elementType);
@@ -3322,7 +3358,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                 break;
             case Statement::Type::EraseArray:
                 if(active) for(const auto& target:splitArguments(instruction.argument)) {
-                    const auto name=lower(target);
+                    const auto name=boundVariableName(target);
                     const auto found=locals.find(name);
                     if(found==locals.end() || !isVbaArray(found->second)) throw VbaRuntimeError(13,"Erase requires an array");
                     const auto type=variableType(name);
@@ -3334,7 +3370,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                 break;
             case Statement::Type::IndexedAssign:
                 if(active) {
-                    const auto name=lower(instruction.argument);
+                    const auto name=instruction.argument=="mid$" ? std::string("mid$") : boundVariableName(instruction.argument);
                     if(variableType(name)=="paramarray" && !references) throw VbaRuntimeError(3251,"Writable ParamArray requires actual argument bindings");
                     std::optional<VbaValue> assignedObject;
                     if(instruction.stepExpression=="object") {
@@ -3446,8 +3482,12 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                 if (active) {
                     auto name=lower(instruction.argument);
                     if(!vbaIdentifierType(name).empty()) {
-                        const auto resolved=resolver.typedIdentifier(name);
-                        if(!resolved) throw VbaRuntimeError(3251,"Typed assignment requires a declared native variable");
+                        auto resolved=resolver.typedIdentifier(name);
+                        if(!resolved) {
+                            ensureImplicitLocal(lower(vbaIdentifierName(name)),false,{},vbaIdentifierType(name));
+                            resolved=resolver.typedIdentifier(name);
+                        }
+                        if(!resolved) throw VbaRuntimeError(3251,"Typed assignment could not be bound");
                         name=*resolved;
                     }
                     if(objectType(variableType(name))) {

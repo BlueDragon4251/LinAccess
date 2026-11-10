@@ -20,8 +20,7 @@ Der Access-/Jet-Ausdrucksmodus wird dadurch nicht auf VBA-Typzeichen umgestellt.
 Bestehende String-Intrinsics mit `$` bleiben eigenständige Intrinsics, sofern
 keine deklarierte lokale Variable die Namensauflösung übernimmt.
 
-Noch offen sind insbesondere Typzeichen an Property-Accessoren, Arraydeklarationen
-und ReDim-Zielen, Schleifensteuerungen, implizite typisierte Variablen und die
+Noch offen sind insbesondere Typzeichen an Property-Accessoren, Schleifensteuerungen, vollständige typisierte Konstanteninitialisierer und die
 vollständige frühe Bindung qualifizierter Projekt-/Objektmitglieder. `^`/LongLong
 gehört nicht zum hier unterstützten Access-2003-Profil. Dies ist kein Nachweis
 vollständiger VBA- oder Access-Parität. Die feste Katalogzahl bleibt 456;
@@ -45,3 +44,31 @@ bekannte lokale Signatur das `&` als Typzeichen; die allgemeine Tokenisierung
 bleibt unabhängig vom Prozedurrahmen und erhält Stringverkettung. Keine Aussage
 zu sämtlichen Projekt-/Library-Namensräumen oder Property-Accessoren.
 Vorhandenes core_tests:1/1 in0,57s; keine zusätzlichen CTest-Einträge.
+
+
+## Implizite Variablen und Arrays
+
+Ohne Option Explicit können ungebundene skalare Namen mit Typzeichen eine
+passend typisierte lokale Variable anlegen; das Typzeichen hat Vorrang vor
+Def-Direktiven. Option Explicit bleibt wirksam. Vorhandene lokale, Modul-,
+Instanz- und Prozedurbindungen werden dabei nicht durch einen neuen Namen
+ersetzt. Statische Verfahren behalten implizite Variablen, und ein Aufruf mit
+oder ohne Funktions-Typzeichen verwendet denselben statischen Speicherbereich.
+Typzeichen nach Literalbezeichnern True/False/Null/Empty/Nothing werden gemäß
+MS-VBAL ignoriert; der Jet-/Access-Ausdruckspfad wird nicht umgestellt.
+
+Lokale und Modul-Arrays unterstützen Typzeichen bei Deklaration, Elementzugriff,
+ByRef-Arrayparametern, ReDim/Preserve und Erase. Elementtyp und kanonische
+Arraybindung werden gemeinsam verwendet; vorhandene Allokations-, Bounds-,
+Preserve-, ByRef- und Schleifenwachen bleiben erhalten. Ein bislang ungebundener
+ReDim-Name deklariert wie bisher prozedurweit ein Array, auch mit Option Explicit;
+der Typzeichenpfad verwendet nun ebenfalls dessen kanonischen Namen und Typ.
+Typzeichen zusammen mit As werden in diesen Deklarationen verweigert.
+Neue Arrayziele werden ausschließlich als einfache native Variablennamen
+analysiert; Objektmitglieder werden nicht umgeschrieben.
+
+Die bestehende Kernprüfung mit impliziten skalaren Variablen und Arrays bestand
+in0,52s. Die nachfolgende gemeinsame Anwendungs-/Kern-/DAO-Prüfung enthält
+zusätzlich die Korrekturen für statische Funktionsidentität und neue typisierte
+ReDim-Ziele; Ergebnis: Anwendung, Kern- und DAO-Ziele gebaut; core_tests0,57s und
+dao_execution2,97s, gemeinsam2/2 in3,54s bestanden.

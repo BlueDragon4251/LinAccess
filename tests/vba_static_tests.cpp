@@ -43,7 +43,7 @@ void testVbaStaticProcedures(){using namespace linaccess;StaticHost host,other;
     result=executeVbaProcedure("Option Explicit\nStatic Function Guarded() As Long\nGuarded=missing\nEnd Function","Guarded",host);assert(result.status==VbaExecutionStatus::Error && result.errorNumber==5);
     result=executeVbaProcedure("Option Explicit\nFunction Ordinary() As Long\nOrdinary=missing\nEnd Function","Ordinary",host);assert(result.status==VbaExecutionStatus::Error && result.errorNumber==5);
     result=executeVbaProcedure("DefLngLng A-Z\nStatic Sub GuardedType()\nMsgBox \"unreached\"\nEnd Sub","GuardedType",host);assert(result.status==VbaExecutionStatus::Unsupported && result.errorNumber==3251);
-    result=executeVbaProcedure("Static Function Suffix() As Long\nSuffix=VarType(undeclared$)\nEnd Function","Suffix",host);assert(result.status==VbaExecutionStatus::Error && result.errorNumber==3251);
+    result=executeVbaProcedure("Static Function Suffix() As Long\nSuffix=VarType(undeclared$)\nEnd Function","Suffix",host);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==8);
     const auto inventory=analyzeVba(nativeStaticFixture);assert(!inventory.procedures.empty() && inventory.procedures.front().name=="Retained");
 
     auto transient=nativeStaticFixture;const auto modifier=transient.find("Static Function Implicit()");assert(modifier!=std::string::npos);transient.erase(modifier,7);

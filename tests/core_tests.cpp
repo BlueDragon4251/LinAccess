@@ -5540,6 +5540,52 @@ End Function
     assert(wrongDirect.status!=VbaExecutionStatus::Completed && wrongDirect.errorNumber==13);
     const auto typedAnalysis=analyzeVba(typedFunctions);
     assert(typedAnalysis.procedures.size()==3 && typedAnalysis.procedures[0].name=="TypedText" && typedAnalysis.procedures[1].name=="TypedLong");
+    const auto implicitTyped=executeVbaProcedure(R"VBA(
+DefStr A-Z
+Sub ImplicitTyped()
+count%=count%+2
+value&=7
+amount@=0.125
+label$="typed"
+Me!ImplicitTyped=CStr(VarType(count)) & ":" & CStr(count) & ":" & CStr(value& And 3) & ":" & CStr(amount@) & ":" & label$
+End Sub
+)VBA","ImplicitTyped",host);
+    assert(implicitTyped.status==VbaExecutionStatus::Completed && host.fields["ImplicitTyped"]=="2:2:3:0.125:typed");
+    const auto explicitTyped=executeVbaProcedure("Option Explicit\nSub ExplicitTyped()\ncount%=1\nEnd Sub","ExplicitTyped",host);
+    assert(explicitTyped.status!=VbaExecutionStatus::Completed);
+    const auto implicitMismatch=executeVbaProcedure("Sub ImplicitMismatch()\ncount%=1\ncount$=\"bad\"\nEnd Sub","ImplicitMismatch",host);
+    assert(implicitMismatch.status==VbaExecutionStatus::Error && implicitMismatch.errorNumber==13);
+    assert(evaluate("True% And True&").truthy());
+    assert(evaluate("IsNull(Null$)").truthy());
+    const auto typedArrays=executeVbaProcedure(R"VBA(
+Private stored@(0 To 1)
+Sub FillTyped(ByRef values%())
+values%(0)=values%(0)+5
+End Sub
+Sub TypedArrays()
+Dim values%(0 To 1), totals&(), singles!(0 To 0)
+values%(0)=2
+FillTyped values%()
+ReDim totals&(0 To 1)
+totals&(0)=values%(0)
+ReDim Preserve totals&(0 To 2)
+totals&(2)=9
+singles!(0)=1.5
+stored@(0)=0.125
+Me!TypedArrays=CStr(values%(0)) & ":" & CStr(totals&(0)) & ":" & CStr(totals&(2)) & ":" & CStr(singles!(0)) & ":" & CStr(stored@(0))
+Erase values%, totals&
+Me!ErasedTyped=CStr(values%(0)) & ":" & CStr(VarType(totals))
+End Sub
+)VBA","TypedArrays",host);
+    assert(typedArrays.status==VbaExecutionStatus::Completed);
+    assert(host.fields["TypedArrays"]=="7:7:9:1.5:0.125" && host.fields["ErasedTyped"]=="0:8195");
+    const std::string typedStaticSource="Static Function TypedStatic%()\ncount%=count%+1\nTypedStatic%=count%\nEnd Function";
+    const auto typedStaticFirst=executeVbaProcedure(typedStaticSource,"TypedStatic%",host);
+    const auto typedStaticSecond=executeVbaProcedure(typedStaticSource,"TypedStatic",host);
+    assert(typedStaticFirst.status==VbaExecutionStatus::Completed && typedStaticFirst.returnValue=="1");
+    assert(typedStaticSecond.status==VbaExecutionStatus::Completed && typedStaticSecond.returnValue=="2");
+    const auto typedRedim=executeVbaProcedure("Option Explicit\nFunction TypedRedim() As Long\nReDim values%(0 To 1)\nvalues%(1)=6\nTypedRedim=values%(1)\nEnd Function","TypedRedim",host);
+    assert(typedRedim.status==VbaExecutionStatus::Completed && typedRedim.returnValue=="6");
     testVbaDebugger();
     testVbaDebugOutput();
     testVbaProperties();

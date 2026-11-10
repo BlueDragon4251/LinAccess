@@ -321,7 +321,10 @@ std::vector<Token> tokenize(std::string_view input,bool accessExpression=false,b
             } else if(!accessExpression && numericSuffixes && pos<input.size() && input[pos]=='&') {
                 // Preserve adjacent concatenation. A terminator or operator is unambiguous.
                 auto after=pos+1; while(after<input.size() && std::isspace(static_cast<unsigned char>(input[after]))) ++after;
-                if(after==input.size() || std::string_view(",)+-*/\\^=<>:").find(input[after])!=std::string_view::npos) ++pos;
+                auto end=after;while(end<input.size() && std::isalpha(static_cast<unsigned char>(input[end]))) ++end;
+                const auto following=lower(std::string(input.substr(after,end-after)));
+                if(after==input.size() || std::string_view(",)+-*/\\^=<>:").find(input[after])!=std::string_view::npos
+                    || following=="and" || following=="or" || following=="xor" || following=="eqv" || following=="imp" || following=="mod" || following=="is" || following=="like") ++pos;
             }
             tokens.push_back({Token::Type::Word, std::string(input.substr(start, pos - start))});
         } else if(ch=='&' && pos+2<input.size()
@@ -1219,12 +1222,18 @@ private:
         if (tok.type != Token::Type::Word)
             throw error("Ungültiger VBA-Ausdruck: " + tok.value);
         auto word = lower(tok.value);
+        if(!accessExpression_ && !vbaIdentifierType(word).empty()) {
+            const auto literal=vbaIdentifierName(word);
+            if(literal=="true" || literal=="false" || literal=="null" || literal=="empty" || literal=="nothing") {word=literal;tok.value=literal;}
+        }
         // A Long function call is distinguishable from adjacent string concatenation
         // only after its declaration is known. Keep tokenization independent of frames.
         if(host_ && !accessExpression_ && nextSymbol("&") && tokens_[index_].offset==tok.offset+tok.value.size()
             && index_+1<tokens_.size() && tokens_[index_+1].value=="(" && resolver_.argumentSignature) {
             const auto signature=resolver_.argumentSignature(word);
-            if(signature && signature->localProcedure && signature->function && signature->resultType=="long") {
+            const auto local=locals_.find(word);
+            const bool array=local!=locals_.end() && isVbaArray(local->second);
+            if((signature && signature->localProcedure && signature->function && signature->resultType=="long") || array) {
                 consume();word+='&';tok.value+='&';
             }
         }
@@ -1557,11 +1566,15 @@ private:
                     if(!references.back().empty() && host_ && !accessExpression_ && resolver_.typedIdentifier)
                         if(auto canonical=resolver_.typedIdentifier(references.back())) references.back()=*canonical;
                     if(host_ && index_==start+3 && tokens_[start].type==Token::Type::Word && tokens_[start+1].value=="(" && tokens_[start+2].value==")") {
-                        const auto variable=locals_.find(lower(tokens_[start].value));
-                        if(variable!=locals_.end() && isVbaArray(variable->second)) references.back()=tokens_[start].value;
+                        auto root=lower(tokens_[start].value);
+                        if(!accessExpression_ && resolver_.typedIdentifier) if(auto canonical=resolver_.typedIdentifier(root)) root=*canonical;
+                        const auto variable=locals_.find(root);
+                        if(variable!=locals_.end() && isVbaArray(variable->second)) references.back()=root;
                     }
                     if(host_ && index_>start+3 && tokens_[start].type==Token::Type::Word && tokens_[start+1].value=="(" && tokens_[index_-1].value==")") {
-                        const auto variable=locals_.find(lower(tokens_[start].value));
+                        auto root=lower(tokens_[start].value);
+                        if(!accessExpression_ && resolver_.typedIdentifier) if(auto canonical=resolver_.typedIdentifier(root)) root=*canonical;
+                        const auto variable=locals_.find(root);
                         int depth=0; bool whole=true;
                         for(auto cursor=start+1;cursor<index_;++cursor) {
                             if(tokens_[cursor].value=="(") ++depth;

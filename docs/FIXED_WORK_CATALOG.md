@@ -134,7 +134,7 @@ keine Tests oder Teilpunkte allein zur Erhöhung einer Fortschrittszahl anlegen.
 - [ ] **F055** — Edit/AddNew/Update/Delete, QueryDefs/Parameters/TableDefs and Requery. Currency field editor/type changes: [scope](CURRENCY_FIELD_DESIGNER.md). Native bounded Currency field creation: [scope](DAO_NATIVE_CURRENCY_CREATION.md). Physical-field aliases: [scope](DAO_EDITABLE_QUERY_ALIASES.md). Physical subset/reordered projections: [scope](DAO_EDITABLE_QUERY_PROJECTIONS.md). Bounded editable star-query dynasets: [scope](DAO_EDITABLE_STAR_QUERIES.md). Bounded actual Recordset.CopyQueryDef: [scope](DAO_COPYQUERYDEF.md); AddNew current/LastModified: [scope](DAO_ADDNEW_CURRENT.md).
 - [x] **F108** — Native QueryDef.Parameters Count/Item/For Each, stable object identity, generation/close invalidation and original six-query collection regression.
 - [ ] **F121** — Complete DAO catalog Fields/Indexes/Relations, Refresh/Append/Delete, linked-table metadata and immutable generation identity across drop/recreate. Bounded actual field origins: [scope](DAO_FIELD_ORIGINS.md). Native Currency relationship keys: [scope](DAO_NATIVE_CURRENCY_RELATIONS.md). Currency Index/Seek and relationship designer: [scope](NATIVE_CURRENCY_INDEX_AND_RELATION_UI.md).
-- [ ] **F122** — Full declared result/local/argument type enforcement and Access DAO oracle.
+- [ ] **F122** — Full declared result/local/argument type enforcement and Access DAO oracle. Native identifier type character binding: [scope](VBA_IDENTIFIER_TYPES.md); the full requirement remains open.
 - [x] **F123** — Bounded nested With, once-only object evaluation, relative DAO writes, Resume recovery and Exit For scope restoration; native CodeContextObject.
 - [x] **F158** — DAO clone cursor isolation, typed byte-array bookmarks, bounded Find methods/ NoMatch, shared writes, deletion/rowid-reuse and stale/foreign token checks. Includes bounded Recordset.Move with Long Rows and optional native Start bookmark.
 - [x] **F167** — Bounded native single-record selection/deletion, AllowDeletions, actual confirmation and Delete/BeforeDelConfirm/AfterDelConfirm cancellation, rollback, bookmark/FK/reentrancy and active-document regression; one original delete procedure via explicit invocation and bound native click on synthetic rows.
@@ -158,7 +158,7 @@ keine Tests oder Teilpunkte allein zur Erhöhung einer Fortschrittszahl anlegen.
 - [x] **F031** — Native MsgBox button groups/results, optional positional arguments and real SQL branching; unchanged Kassa missing-input handler opens its dialog and focuses the actual control. See MESSAGE_BOX_RUNTIME.md.
 - [x] **F036** — Bounded persistent CodeBehind instance fields and connection-owned standard-module fields; real original public declarations bind across native forms, with recursion, typed alias recovery, visibility and reset tests. See MODULE_STATE_RUNTIME.md.
 - [x] **F037** — Procedure-wide Dim binding, local/control/global lookup precedence and standard-module Me restrictions; complete compiler/class scope remains open.
-- [ ] **F040** — Replace statement regex dispatch with a complete lexer/parser, AST and bound runtime.
+- [ ] **F040** — Replace statement regex dispatch with a complete lexer/parser, AST and bound runtime. Bounded native identifier type characters: [scope](VBA_IDENTIFIER_TYPES.md); this does not replace the complete parser requirement.
 - [ ] **F042** — Modules/classes/CodeBehind, scope/lifetime, static/module variables and references. Bounded native conditional compilation is in VBA_CONDITIONAL_COMPILATION.md and static procedure lifetimes in STATIC_LOCAL_RUNTIME.md and bounded authored class instances in NATIVE_VBA_CLASSES.md; the complete requirement remains open. Native project Rnd/Randomize: [scope](NATIVE_RANDOM_GENERATOR.md).
 - [ ] **F043** — Calls/returns, ByRef/ByVal, Optional/ParamArray, arrays, properties and collections. Bounded native Property Get/Let/Set is documented in NATIVE_VBA_PROPERTIES.md and source-local Enum type aliases in VBA_ENUM_TYPE_BINDINGS.md and closed native object arrays in NATIVE_OBJECT_ARRAYS.md and ReDim declarations in REDIM_DECLARATIONS.md, with bounded actual ParamArray aliases in PARAMARRAY_ALIASES.md and named Let/Set indices in NAMED_PROPERTY_SETTERS.md, with native Set RHS ordering in SET_EVALUATION_ORDER.md; the complete requirement remains open.
 - [ ] **F118** — Full Access Eval grammar/scope, Unicode identifier validation and locale case folding; full surrounding original record-copy handlers and Access oracle.
@@ -715,3 +715,18 @@ in0,57s bestanden. Property-/Projekt-/Library-Gesamtnamensräume bleiben offen.
 Privater skalarer Vorstand4aa7885f74844d3e41e95c0a2b28bb320f9a14f2,
 Baum2cb0d4f0f474adce57e6595b59e3b24ab0fb7831 verifiziert.456/386/70 unverändert.
 Weiter mit impliziten skalaren Typzeichen, danach Arrays/ReDim; kein Zwischenabschluss.
+
+
+Implizite und Array-Typzeichen (2026-11-10): VBA_IDENTIFIER_TYPES.md ergänzt.
+Skalare implizite Bindung ohne Option Explicit, Vorrang vor Def-Typen,
+Literalbezeichner-Suffixe ignoriert; deklarationsbasierter Typabgleich bleibt.
+Lokale/Modul-Arrays, ByRef-Arrayparameter, Elemente, ReDim/Preserve und Erase
+verwenden kanonische Namen/Elementtypen. Neue ReDim-Ziele auch mit Option Explicit
+prozedurweit kanonisch gebunden. Statischer Funktionszustand identisch bei
+Aufrufen mit/ohne Suffix. Bestehender alter statischer Suffix-Guardtest aktualisiert,
+weil dieses Verhalten nun implementiert ist; keine Wache pauschal entfernt.
+Anwendung/Kern/DAO gebaut; bestehendes Bündel2/2 in3,54s (Kern0,57,DAO2,97s).
+Keine neuen CTest-/Katalog-IDs, F040/F122 bleiben offene Vollanforderungen;
+456/386/70 unverändert. Funktionsvorstand4e68489b948cf8344467e94ae42c60e4e7f44421,
+Baum59d5837f3f8651ee9b31901701fbd9a7c6e9c1e4 privat verifiziert.
+Nächste Implementierung: Typzeichen an For/Next, direkten Aufrufen und Stringzielen.
