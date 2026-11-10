@@ -23,3 +23,27 @@ The existing access_query_model and dao_execution targets jointly check all six
 functions, exact independent rounding/range expectations, raw Boolean -1/0,
 nesting, typed parameters, actual filtering and precise errors, plus real DAO
 type/size/Variant subtypes. No new test target or catalog ID is introduced.
+
+
+Proven native argument binding (2026-11-10)
+-----------------------------------------
+The six functions additionally preserve proven Date, Boolean, Single, Currency
+and integral/Double source declarations through the shared native scalar adapter.
+A Date input is its actual OLE Date Variant; Boolean True retains -1 despite a
+physical1, Single values are rounded before conversion, Currency keeps the
+existing bounded exact conversion. ISO text in a TEXT source is not inferred to
+be a Date. Nested conversions carry their declared result type into enclosing
+functions and real DAO Fields.Type/Value metadata. Supported simple filters,
+grouping and ordering use the same typed calls. Source/locale/complex-binding
+limits remain; this does not establish full coercion or Windows parity.
+
+The original raw callbacks remain available. Their unproven input transport and
+large-integer limits are not changed by this extension. NULL94, overflow6 and
+invalid-type13 remain checked by the native coercion implementation. The earlier
+paragraph describing an exclusively raw scalar transport is superseded only for
+these proven typed expressions. CDec, full Decimal storage, reference libraries
+and all other open F068/F071/F105/F122 scopes remain open.
+
+The existing explicit Boolean-to-Byte coercion is preserved: CByte(True) is255,
+while CInt(True), CLng(True), CSng(True), CDbl(True) use -1. A physical BOOLEAN1
+therefore must reach the native Boolean conversion rather than raw integer1.

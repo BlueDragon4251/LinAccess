@@ -348,11 +348,17 @@ void stringLCaseString(sqlite3_context* context,int count,sqlite3_value** args) 
 void stringLCaseStringTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"LCase$",1,1,true);}
 void stringUCaseString(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"UCase$",1,1,false);}
 void stringUCaseStringTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"UCase$",1,1,true);}
+void convert_cbool_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"CBool",1,1,true);}
 void convert_cbool(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"CBool",1,1);}
+void convert_cbyte_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"CByte",1,1,true);}
 void convert_cbyte(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"CByte",1,1);}
+void convert_cint_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"CInt",1,1,true);}
 void convert_cint(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"CInt",1,1);}
+void convert_clng_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"CLng",1,1,true);}
 void convert_clng(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"CLng",1,1);}
+void convert_csng_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"CSng",1,1,true);}
 void convert_csng(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"CSng",1,1);}
+void convert_cdbl_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"CDbl",1,1,true);}
 void convert_cdbl(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"CDbl",1,1);}
 void financialDdb(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"DDB",4,5); }
 void financialIpmt(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"IPmt",4,6); }
@@ -908,11 +914,17 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_strreverse_typed",-1,&stringReverseTyped,nullptr,nullptr);
     ensure("linaccess_jet_instrrev_typed",-1,&stringInStrRevTyped,nullptr,nullptr);
     ensure("linaccess_jet_cbool",-1,&convert_cbool,nullptr,nullptr);
+    ensure("linaccess_jet_cbool_typed",-1,&convert_cbool_typed,nullptr,nullptr);
     ensure("linaccess_jet_cbyte",-1,&convert_cbyte,nullptr,nullptr);
+    ensure("linaccess_jet_cbyte_typed",-1,&convert_cbyte_typed,nullptr,nullptr);
     ensure("linaccess_jet_cint",-1,&convert_cint,nullptr,nullptr);
+    ensure("linaccess_jet_cint_typed",-1,&convert_cint_typed,nullptr,nullptr);
     ensure("linaccess_jet_clng",-1,&convert_clng,nullptr,nullptr);
+    ensure("linaccess_jet_clng_typed",-1,&convert_clng_typed,nullptr,nullptr);
     ensure("linaccess_jet_csng",-1,&convert_csng,nullptr,nullptr);
+    ensure("linaccess_jet_csng_typed",-1,&convert_csng_typed,nullptr,nullptr);
     ensure("linaccess_jet_cdbl",-1,&convert_cdbl,nullptr,nullptr);
+    ensure("linaccess_jet_cdbl_typed",-1,&convert_cdbl_typed,nullptr,nullptr);
 
     ensure("linaccess_jet_tan",-1,&mathTan,nullptr,nullptr);
     ensure("linaccess_jet_tan_typed",-1,&mathTanTyped,nullptr,nullptr);

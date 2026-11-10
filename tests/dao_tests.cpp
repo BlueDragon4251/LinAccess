@@ -2100,7 +2100,34 @@ FROM calendar_inputs WHERE marker=1)SQL");
             {"SELECT Exp(elapsed) FROM calendar_inputs WHERE marker=1",6},
             {"SELECT Sqr(offset_text) FROM calendar_inputs WHERE marker=1",13}}) {
             int actual=0;try{(void)database->member("OpenRecordset",{linaccess::VbaValue::string(failure.first)});}catch(const linaccess::VbaRuntimeError& error){actual=error.number;}
-            assert(actual==failure.second);
+            if(actual!=failure.second) std::cerr<<"Typed numeric scalar error actual="<<actual<<" expected="<<failure.second<<"\n";assert(actual==failure.second);
+        }
+        calendarPhase="typed numeric conversions";
+        const auto conversionSource=QStringLiteral("SELECT CBool(offset_date) AS truth,CByte(offset_date) AS octet,CInt(offset_date) AS short_value,CLng(offset_date) AS long_value,CSng(offset_date) AS single_value,CDbl(offset_date) AS double_value,CInt(enabled) AS logical_integer,CLng(elapsed) AS single_integer,CInt(amount) AS rounded_money,CDbl(CBool(offset_date)) AS nested_truth,CByte(enabled) AS logical_byte FROM calendar_inputs WHERE marker=1");
+        const auto conversionValues=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery(conversionSource),{});
+        assert(conversionValues.rows.size()==1 && conversionValues.columnTypes==QVector<QString>({"BOOLEAN","INTEGER1","INTEGER2","INTEGER4","SINGLE_REAL","DOUBLE","INTEGER2","INTEGER4","INTEGER2","DOUBLE","INTEGER1"}));
+        const double conversionExpected[]{-1,2,2,2,2,2,-1,16777216,2,-1,255};
+        for(int index=0;index<11;++index) assert(conversionValues.rows[0][index].toDouble()==conversionExpected[index]);
+        const auto conversionFields=database->member("OpenRecordset",{linaccess::VbaValue::string(conversionSource.toStdString())}).object;
+        const int conversionTypes[]{1,2,3,4,6,7,3,4,3,7,2};
+        for(int index=0;index<11;++index) assert(conversionFields->member("Fields",{linaccess::VbaValue::numeric(index)}).object->member("Type",{}).asNumber()==conversionTypes[index]);
+        assert(conversionFields->item("truth").kind==linaccess::VbaValue::Kind::Boolean && conversionFields->item("single_value").numericType==linaccess::VbaValue::NumericType::Single);conversionFields->member("Close",{});
+        const auto conversionFilter=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT marker FROM calendar_inputs WHERE marker=1 AND CInt(enabled)=-1 AND CDbl(offset_date)=2"),{});
+        assert(conversionFilter.rows.size()==1 && conversionFilter.rows[0][0].toInt()==1);
+        const auto conversionGroups=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT CLng(offset_date) AS serial,Count(*) AS tally FROM calendar_inputs GROUP BY CLng(offset_date) ORDER BY CLng(offset_date) DESC"),{});
+        assert(conversionGroups.rows.size()==1 && conversionGroups.rows[0][0].toInt()==2 && conversionGroups.rows[0][1].toInt()==2 && conversionGroups.columnTypes[0]=="INTEGER4");
+        for(const auto& failure:std::vector<std::pair<std::string,int>>{
+            {"SELECT CBool(enabled) FROM calendar_inputs WHERE marker=2",94},
+            {"SELECT CByte(enabled) FROM calendar_inputs WHERE marker=2",94},
+            {"SELECT CInt(enabled) FROM calendar_inputs WHERE marker=2",94},
+            {"SELECT CLng(enabled) FROM calendar_inputs WHERE marker=2",94},
+            {"SELECT CSng(enabled) FROM calendar_inputs WHERE marker=2",94},
+            {"SELECT CDbl(enabled) FROM calendar_inputs WHERE marker=2",94},
+            {"SELECT CByte(elapsed) FROM calendar_inputs WHERE marker=1",6},
+            {"SELECT CInt(elapsed) FROM calendar_inputs WHERE marker=1",6},
+            {"SELECT CDbl(offset_text) FROM calendar_inputs WHERE marker=1",13}}) {
+            int actual=0;try{(void)database->member("OpenRecordset",{linaccess::VbaValue::string(failure.first)});}catch(const linaccess::VbaRuntimeError& error){actual=error.number;}
+            if(actual!=failure.second) std::cerr<<"Typed numeric scalar error actual="<<actual<<" expected="<<failure.second<<"\n";assert(actual==failure.second);
         }
         calendarPhase="DAO fields";
         const auto calendarFields=database->member("OpenRecordset",{linaccess::VbaValue::string(calendarSource.toStdString())}).object;

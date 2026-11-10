@@ -6609,3 +6609,16 @@ Query-Modell gebaut; Modell0,25s bestanden, betroffener abschließender DAO-Lauf
 Produktregel dafür gelockert. Keine neuen IDs;456/386/70, F067/F068/F071 offen.
 Vorstand51b8e75ce1ee55827a3c7da243671a821d645fd5/Baumaa57c12dd3cdc7046009a39076fde7c00a7168f6
 privat veröffentlicht und exakt verifiziert. Letzter Paketbeleg weiterhin9413428.
+
+
+Typisierte SQL-Konvertierungen (2026-11-10): SQL_NUMERIC_CONVERSIONS.md.
+CBool/CByte/CInt/CLng/CSng/CDbl erhalten nachgewiesene Date/Boolean/Single/
+Currency/integrale Argumente, verschachtelte Ergebnistypen und echte DAO-
+Metadaten. Projektion/Filter/Gruppierung/Sortierung geprüft; Null94/Overflow6/
+Typ13 erhalten. CByte(True)=255 gemäß bestehendem VBA-Kern, nicht roher
+SQLite-Integer1; technische Fehlererwartung dazu korrigiert, Produktregel
+unverändert. App/DAO/Query-Modell gebaut; Modell0,29s bestanden, betroffener
+abschließender DAO-Lauf 1/1 in3.35s bestanden. Keine neuen IDs;
+456/386/70 und offene F068/F071/F105/F122 bleiben. Kein neuer Access-Oracle.
+Vorstand82c0e230ad72024b7fd5a1df44fd0dae0ebde989/Baum9c6ffccfacd6d23f2afae0ddd119c295d28cb380
+privat veröffentlicht und exakt verifiziert; Paket weiterhin9413428.
