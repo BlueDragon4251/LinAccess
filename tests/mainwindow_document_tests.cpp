@@ -607,8 +607,16 @@ void exerciseTableMultiDelete(MainWindow& window,QSqlDatabase db) {
     };
     selectRecords(); QTest::keyClick(view,Qt::Key_Minus,Qt::ControlModifier); assert(model->isDirty());
     assert(sql.exec("SELECT COUNT(*) FROM delete_many") && sql.next() && sql.value(0).toInt()==3); sql.finish();
+    assert(model->canUndoBlock() && !model->canRedoBlock());
+    QTest::keyClick(view,Qt::Key_Z,Qt::ControlModifier);
+    assert(!model->isDirty() && !model->canUndoBlock() && model->canRedoBlock());
+    assert(model->rowCount()==3 && model->index(0,0).data().toInt()==1 && model->index(2,0).data().toInt()==3);
+    QTest::keyClick(view,Qt::Key_Y,Qt::ControlModifier);
+    assert(model->isDirty() && model->hasPendingRecord(0) && !model->hasPendingRecord(1) && model->hasPendingRecord(2));
     assert(window.dispatchTableCommand(97).value("error").toInt()==3146);
     assert(sql.exec("SELECT COUNT(*) FROM delete_many") && sql.next() && sql.value(0).toInt()==3); sql.finish();
+    assert(model->canUndoBlock() && model->undoBlock() && !model->isDirty());
+    assert(model->redoBlock() && model->hasPendingRecord(0) && model->hasPendingRecord(2));
     model->revertAll(); assert(!model->isDirty());
     assert(sql.exec("DELETE FROM delete_many_child")); sql.finish();
     selectRecords(); QTest::keyClick(view,Qt::Key_Minus,Qt::ControlModifier);

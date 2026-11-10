@@ -17,6 +17,7 @@ public:
     void revertRow(int row) override;
     bool insertRows(int row,int count,const QModelIndex& parent={}) override;
     bool removeRows(int row,int count,const QModelIndex& parent={}) override;
+    bool stageRecordDeletions(const QVector<int>& rows);
     bool submitTransactionally();
     bool submitExistingRecord(int row);
     bool replaceAllWholeText(int column,const QString& search,const QString& replacement,Qt::CaseSensitivity sensitivity,int* count);
@@ -86,6 +87,7 @@ private:
     bool restoreUpdates(const QVector<CachedUpdate>& updates,int originalRows);
     struct BlockHistory {
         int firstRow{},firstColumn{},originalRows{};bool applied{},skipGenerated{};
+        QVector<int> deletions;
         QVector<QVector<QVariant>> values;QVector<int> columns;QMap<QString,QVariant> dateDefaults;QVector<CachedUpdate> before;QSet<int> suppliedColumns;
     };
     std::optional<BlockHistory> blockHistory_;

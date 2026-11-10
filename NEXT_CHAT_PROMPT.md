@@ -3068,3 +3068,15 @@ unverändert. Vorstufe d618eaf privat remote/Baum geprüft. Letztes geprüftes
 DEB9affc5a unter /workspace/work/error-text-functions/package/linaccess-0.7.0-Linux.deb
 liegt vor ParamArray/benannten Settern/Set-Reihenfolge. Ohne Zwischenabschluss
 mit echtem Undo/Redo vorgemerkter nativer Mehrfachlöschungen weiterprogrammieren.
+
+
+Undo/Redo vorgemerkter Mehrfachlöschungen: TABLE_DELETE_HISTORY.md beschreibt die
+bestehende Einzelaktionshistorie für saubere gespeicherte Schlüsselzeilen.
+Strg+Z/Strg+Y ändern nur den Cache; genaue nicht zusammenhängende Löschmarkierungen
+und Rücknahme/Wiederholung nach transaktionalem Fremdschlüsselfehler geprüft.
+App gebaut; bestehendes GUI-/Währungsfeld-Bündel2/2 in19,17s (18,68/0,49).
+Keine neuen Tests/IDs, keine Aussage zu Windows-Ereignissen oder committed SQL
+Undo.456/386/70 unverändert. Vorstufe ba256ac privat remote/Baum geprüft.
+Letztes Original118,41s/DAO2,75s/7Hashes liegt vor diesem Modellumfang; geprüftes
+DEB9affc5a bleibt älter. Ohne Zwischenabschluss mit sauberer gespeicherter
+Einzeldatensatzlöschung und Invalidierung der Aktionshistorie weiterarbeiten.

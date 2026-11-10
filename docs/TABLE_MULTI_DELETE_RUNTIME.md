@@ -31,3 +31,7 @@ DeleteRecord now stages the real selection and can be discarded. Target1/1
 (2.80 s), full current desktop48/48 (84.19 s), updated Debian/build-ID/pinned
 SQLite3.54.1 and four original hashes pass. Core runtime unchanged from fresh
 GUI-free payment-components1/1 (1.79 s). No new target/ID; fixed456/384/72.
+
+Pending multi-record Undo/Redo is now implemented within the bounded clean keyed
+path; TABLE_DELETE_HISTORY.md supersedes that earlier limitation. Full Access
+confirmation/event/selection and committed-deletion undo remain unproved.

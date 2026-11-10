@@ -356,19 +356,9 @@ public:
         for(const auto& anchor:anchors) if(!anchor.isValid() || anchor.model()!=typed) return refuse(2501,"Die Datensatzauswahl wurde während der Validierung geändert.");
         std::sort(anchors.begin(),anchors.end(),[](const auto& left,const auto& right) { return left.row()>right.row(); });
         const int column=currentIndex().column(),first=anchors.back().row();
-        for(const auto& anchor:anchors) {
-            const bool removed=typed->removeRow(anchor.row());
-            if(!self || !typed) return false;
-            if(removed) continue;
-            const auto problem=typed->lastError();
-            for(const auto& staged:anchors) {
-                if(!self || !typed) return false;
-                if(staged.isValid() && typed->hasPendingRecord(staged.row())) (void)typed->undoPendingRecord(staged.row());
-            }
-            if(!self || !typed) return false;
-            bool valid=false; const int number=problem.nativeErrorCode().toInt(&valid);
-            return typed->rejectEdit(problem.driverText()=="LinAccess" && valid ? number : 2501,problem.text());
-        }
+        QVector<int> deletionRows;deletionRows.reserve(anchors.size());
+        for(const auto& anchor:anchors) deletionRows.push_back(anchor.row());
+        if(!typed->stageRecordDeletions(deletionRows)) return false;
         if(!self || !typed) return false;
         clearSelection();
         if(typed->rowCount()) setCurrentIndex(typed->index(qMin(first,typed->rowCount()-1),qMax(0,column)));
