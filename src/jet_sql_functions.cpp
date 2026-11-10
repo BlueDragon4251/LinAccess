@@ -262,7 +262,7 @@ void double_subtract(sqlite3_context* context,int count,sqlite3_value** args) no
 void double_multiply(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"*",2,2,0,true);}
 void double_divide(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"/",2,2,0,true);}
 void numericPower(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"^",2,2,0,true);}
-void boundScalarSqlFunction(sqlite3_context* context,int count,sqlite3_value** args,std::string_view builtin,int minimum,int maximum,bool typed,bool dateComparison=false) noexcept {
+void boundScalarSqlFunction(sqlite3_context* context,int count,sqlite3_value** args,std::string_view builtin,int minimum,int maximum,bool typed,bool dateComparison=false,bool booleanOperator=false) noexcept {
     auto& native=api();
     try {
         const int offset=typed ? 1 : 0,arguments=count-offset;
@@ -280,7 +280,11 @@ void boundScalarSqlFunction(sqlite3_context* context,int count,sqlite3_value** a
             if(native.type(args[offset+1])==SQLITE_NULL) throw VbaRuntimeError(94,"Format mask is Null");
             if(native.type(args[offset+1])!=SQLITE_TEXT) throw VbaRuntimeError(13,"Format mask requires text");
         }
-        VbaVariables values;std::string expression=dateComparison ? std::string{} : std::string(builtin)+"(";
+        if(booleanOperator) for(int index=0;index<arguments;++index) {
+            if(declared[index]!="BOOL" && declared[index]!="BOOLEAN" && !(declared[index].isEmpty() && native.type(args[index+offset])==SQLITE_NULL)) throw VbaRuntimeError(13,"Boolean SQL operator requires proven Boolean or NULL operands");
+        }
+        const bool infix=dateComparison || booleanOperator;
+        VbaVariables values;std::string expression=infix ? std::string{} : std::string(builtin)+"(";
         for(int index=0;index<arguments;++index) {
             auto* argument=args[index+offset];QVariant storage;
             switch(native.type(argument)) {
@@ -301,9 +305,10 @@ void boundScalarSqlFunction(sqlite3_context* context,int count,sqlite3_value** a
             // A proven source declaration still goes through checked field decoding.
             const bool exactFormatInteger=index==0 && builtin.starts_with("Format") && declared.value(index).isEmpty() && native.type(argument)==SQLITE_INTEGER;
             values.emplace(name,exactFormatInteger ? decimalLiteral(std::to_string(native.integer(argument))) : qtFieldValue(storage,declared.value(index)));
-            if(index) expression+=dateComparison ? std::string(builtin) : ",";expression+=name;
+            if(index) expression+=infix ? std::string(builtin) : ",";expression+=name;
         }
-        if(!dateComparison) expression+=')';ScalarStringHost host;
+        if(booleanOperator && arguments==1) expression=std::string(builtin)+" "+expression;
+        if(!infix) expression+=')';ScalarStringHost host;
         const auto result=evaluateVbaExpression(expression,host,values);
         if(result.kind==VbaValue::Kind::Null) native.nullResult(context);
         else if(result.kind==VbaValue::Kind::Boolean) native.integerResult(context,result.boolean ? -1 : 0);
@@ -338,6 +343,25 @@ void inspect_vartype(sqlite3_context* context,int count,sqlite3_value** args) no
 void inspect_vartype_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"VarType",1,1,true);}
 void inspect_typename(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"TypeName",1,1,false);}
 void inspect_typename_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"TypeName",1,1,true);}
+void booleanResult(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
+    auto& native=api();
+    if(count!=1) {functionError(context,VbaRuntimeError(450,"Boolean result requires one argument"));return;}
+    if(native.type(args[0])==SQLITE_NULL) {native.nullResult(context);return;}
+    if(native.type(args[0])!=SQLITE_INTEGER || (native.integer(args[0])!=0 && native.integer(args[0])!=1)) {functionError(context,VbaRuntimeError(13,"SQL comparison result must be0/1 or NULL"));return;}
+    native.integerResult(context,native.integer(args[0]) ? -1 : 0);
+}
+void boolean_and(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args," And ",2,2,true,false,true);}
+void boolean_or(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args," Or ",2,2,true,false,true);}
+void boolean_xor(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args," Xor ",2,2,true,false,true);}
+void boolean_eqv(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args," Eqv ",2,2,true,false,true);}
+void boolean_imp(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args," Imp ",2,2,true,false,true);}
+void boolean_not(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Not",1,1,true,false,true);}
+void boolean_equal(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"=",2,2,true,false,true);}
+void boolean_not_equal(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"<>",2,2,true,false,true);}
+void boolean_less(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"<",2,2,true,false,true);}
+void boolean_less_equal(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"<=",2,2,true,false,true);}
+void boolean_greater(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,">",2,2,true,false,true);}
+void boolean_greater_equal(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,">=",2,2,true,false,true);}
 void stringCStr(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"CStr",1,1,false);}
 void stringCStrTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"CStr",1,1,true);}
 void stringStr(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Str",1,1,false);}
@@ -905,6 +929,21 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_next_counter",2,&nextAccessCounter,nullptr,nullptr);
     ensure("linaccess_jet_iif",3,&iif,nullptr,nullptr);
     ensure("linaccess_jet_rgb",-1,&rgbColor,nullptr,nullptr);
+    ensure("linaccess_jet_boolean_result",-1,&booleanResult,nullptr,nullptr);
+    ensure("linaccess_jet_bool_equal",-1,&boolean_equal,nullptr,nullptr);
+    ensure("linaccess_jet_bool_not_equal",-1,&boolean_not_equal,nullptr,nullptr);
+    ensure("linaccess_jet_bool_less",-1,&boolean_less,nullptr,nullptr);
+    ensure("linaccess_jet_bool_less_equal",-1,&boolean_less_equal,nullptr,nullptr);
+    ensure("linaccess_jet_bool_greater",-1,&boolean_greater,nullptr,nullptr);
+    ensure("linaccess_jet_bool_greater_equal",-1,&boolean_greater_equal,nullptr,nullptr);
+
+    ensure("linaccess_jet_bool_and",-1,&boolean_and,nullptr,nullptr);
+    ensure("linaccess_jet_bool_or",-1,&boolean_or,nullptr,nullptr);
+    ensure("linaccess_jet_bool_xor",-1,&boolean_xor,nullptr,nullptr);
+    ensure("linaccess_jet_bool_eqv",-1,&boolean_eqv,nullptr,nullptr);
+    ensure("linaccess_jet_bool_imp",-1,&boolean_imp,nullptr,nullptr);
+    ensure("linaccess_jet_bool_not",-1,&boolean_not,nullptr,nullptr);
+
     ensure("linaccess_jet_isnumeric",-1,&inspect_isnumeric,nullptr,nullptr);
     ensure("linaccess_jet_isnumeric_typed",-1,&inspect_isnumeric_typed,nullptr,nullptr);
     ensure("linaccess_jet_vartype",-1,&inspect_vartype,nullptr,nullptr);

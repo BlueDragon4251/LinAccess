@@ -7401,3 +7401,22 @@ Vorstand9f73a8c5f86f6cb1a28f2e86989c27f264f49245/Baumebea651f8afd1f1db9e6689c4db
 privat veröffentlicht/exakt verifiziert, Paketbeleg167,90s/7Hashes gleich oben.
 SQL-Typabfragen liegen nach diesem Paket. Kontinuierlich weitere Anforderungen
 implementieren; kein Zwischenabschluss oder Abschlussanruf.
+
+
+Native SQL-Boolean-Ausdrücke (2026-11-10): NATIVE_TYPED_LOGIC.md.
+Nachgewiesene Boolean/NULL And/Or/Xor/Eqv/Imp/Not und Boolean-Vergleiche verwenden
+native Werte (-1 auch bei physischerBOOLEAN1), deklarierte Boolean-Ergebnisse
+und tatsächliche DAO Boolean/dbBoolean. Imp/Eqv/Xor/Or/And-Rangfolge und Not
+unter Vergleichen/über And gebunden. Gewöhnliche Vergleichsprojektionen sowie
+Gruppier-/Sortierausdrücke kodieren -1/0/NULL; einfache numerische Predicate und
+predicate And/Or/Not behalten SQL-Struktur/den vorhandenen ID-Indexpfad.
+Date/Currency-Operator-/Quellgrenzen, gemischte Bitlogik und ungemessene Imp/Null-
+Windows-Semantik bleiben offen. Vier vorhandene Access-Null-And/Or-Beobachtungen
+beibehalten; neue Fälle sind native technische Belege, kein neuer Oracle.
+App/DAO/Modell gebaut; Modell0,31s bestanden. Fehler im strikten CBool(NULL)-Weg
+für neue Vergleichsprojektionen behoben durch eigenen NULL-erhaltenden0/1-
+Encoder; CBool(NULL) selbst unverändert94. Betroffener finaler DAO-Lauf1/1 in4,63s
+bestanden. Keine neuen IDs,456/386/70 unverändert. Gezielter UI-Lauf folgt.
+Vorstandc4c4af5945328bb99d3ce8254ab4952936d06a6e/Baum86fb8ce6124c1aaf788931a01b79a765d7cc6dec
+privat veröffentlicht/exakt verifiziert; letzter Paketbeleg9f73a8c5 liegt vor
+SQL-Typabfragen/Boolean-Ausdrücken (167,90s,7Hashes gleich).

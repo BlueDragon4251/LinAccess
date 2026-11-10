@@ -37,3 +37,36 @@ passed. Its bundled GUI19.97/inventory46.77/original118.66 passed3/3 in185.40s;
 query inventory100/78/22 and all seven original/fixture hashes unchanged.
 The missing original macro-source boundary remains; this is not a positive
 initialized original sale/report comparison or a complete Windows query oracle.
+
+
+Native SQL Boolean expressions (2026-11-10)
+-----------------------------------------
+Proven Boolean/NULL And/Or/Xor/Eqv/Imp and Not bind their actual native values.
+True stays logical -1 even when an imported physical BOOLEAN value is1. Their
+result metadata is BOOLEAN, with actual DAO dbBoolean and Boolean values. Native
+Boolean comparisons likewise decode both operands. Ordinary comparison results
+in projections/grouping/sort keys are encoded as Boolean -1/0 with NULL retained.
+Thus sorting a computed true/false expression uses its logical values rather
+than SQLite's true1. The existing native Null paths remain unchanged, including
+the four stored Access observations for Null And/Or True/False.
+
+The binder distinguishes Imp, Eqv, Xor, Or and And precedence, and handles Not
+below comparisons and above And. Boolean expressions can be nested in supported
+scalar calls and simple grouping/sort expressions. This does not add arbitrary
+mixed numeric bitwise typing or remove source/locale/comparison/Null limitations.
+The unmeasured Imp/Null boundary is not newly established as Access-equivalent.
+
+Ordinary numeric comparison predicates and predicate And/Or/Not retain their
+SQL operator structure, preserving the existing SQLite indexed-ID predicate
+path. Proven Boolean field comparisons need their native logical-value decoder;
+there is no blanket claim that every expression or Boolean predicate is indexed.
+Grouping/sort and predicate contexts are tracked separately. Date/Currency
+arithmetic guards remain; retained bound comparison children do not establish
+complete Jet coercion/collation or indexed complex expressions. No new Windows
+oracle or general Jet Boolean-expression equivalence is claimed.
+
+Die erste DAO-Prüfung deckte einen fehlerhaften strikten CBool-Weg für nullable
+Vergleichsergebnisse auf. Der eigene interne Boolean-Ergebnisencoder erhält NULL
+und normalisiert ausschließlich SQLite0/1; CBool(NULL) selbst bleibt unverändert94.
+Native NULL-Vergleiche, Not und Or über Vergleichsergebnisse sind damit im
+vorhandenen DAO-Ziel geprüft. Keine zusätzliche CTest-Registrierung.
