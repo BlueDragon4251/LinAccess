@@ -357,7 +357,19 @@ int main(int argc, char** argv) {
     assert(model.index(0,0).data().toDouble()==100 && model.index(0,1).data().toDouble()==10);
     model.execute(db,"PARAMETERS minimum LONG; SELECT Var(value) FROM statistical_values WHERE group_id=1 AND value>[minimum]",{{"minimum",10}});
     assert(model.index(0,0).data().toDouble()==50);
-    for(const auto& invalid:QStringList{"SELECT Var(label) FROM samples","SELECT StDev(value) FROM aggregate_blobs","SELECT Var(value) FROM (SELECT -1e308 AS value UNION ALL SELECT 1e308)"}) {
+    model.execute(db,"SELECT group_id,VarP(value),StDevP(value) FROM statistical_values GROUP BY group_id ORDER BY group_id");
+    assert(model.rowCount()==4 && model.columnCount()==3);
+    assert(qAbs(model.index(0,1).data().toDouble()-200.0/3)<1e-10 && qAbs(model.index(0,2).data().toDouble()-std::sqrt(200.0/3))<1e-10);
+    assert(qAbs(model.index(1,1).data().toDouble()-2.0/3)<1e-10);
+    assert(model.index(2,1).data().isNull() && model.index(2,2).data().isNull());
+    assert(!model.index(3,1).data().isNull() && model.index(3,1).data().toDouble()==0 && model.index(3,2).data().toDouble()==0);
+    model.execute(db,"SELECT VarP(value),StDevP(value) FROM statistical_values WHERE 1=0");
+    assert(model.index(0,0).data().isNull() && model.index(0,1).data().isNull());
+    model.execute(db,"PARAMETERS minimum LONG; SELECT VarP(DISTINCT value),StDevP(DISTINCT value) FROM statistical_values WHERE group_id=1 AND value>[minimum]",{{"minimum",10}});
+    assert(model.index(0,0).data().toDouble()==25 && model.index(0,1).data().toDouble()==5);
+    model.execute(db,"SELECT StDevP(value) FROM (SELECT -1e308 AS value UNION ALL SELECT 1e308)");
+    assert(model.index(0,0).data().toDouble()==1e308);
+    for(const auto& invalid:QStringList{"SELECT VarP(label) FROM samples","SELECT VarP(value) FROM (SELECT -1e308 AS value UNION ALL SELECT 1e308)","SELECT Var(label) FROM samples","SELECT StDev(value) FROM aggregate_blobs","SELECT Var(value) FROM (SELECT -1e308 AS value UNION ALL SELECT 1e308)"}) {
         int error=0;try{model.execute(db,invalid);}catch(const linaccess::VbaRuntimeError& failure){error=failure.number;}
         // A BLOB fixture is added below; the missing table remains a dependency error.
         assert(error==(invalid.contains("aggregate_blobs") ? 3078 : invalid.contains("label") ? 13 : 6));

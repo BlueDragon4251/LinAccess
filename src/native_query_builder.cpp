@@ -54,7 +54,7 @@ std::optional<QJsonArray> editParameters(QWidget* parent,const QJsonArray& initi
     QObject::connect(buttons,&QDialogButtonBox::rejected,&connections,[&]{dialog.reject();});QObject::connect(buttons,&QDialogButtonBox::accepted,&connections,[&]{try{checkProject();auto values=capture();(void)compileAccessQuery(parameterHeader(values)+"SELECT 1");result=values;dialog.accept();}catch(const std::exception& error){status->setText(QString::fromUtf8(error.what()));}});
     dialog.resize(480,360);if(dialog.exec()!=QDialog::Accepted)return {};return result;
 }
-const QStringList totalModes{"Group By","Where","Count","Sum","Avg","Min","Max","Var","StDev"};
+const QStringList totalModes{"Group By","Where","Count","Sum","Avg","Min","Max","Var","StDev","VarP","StDevP"};
 struct TotalsDesign {bool enabled;QStringList modes;};
 std::optional<TotalsDesign> editTotals(QWidget* parent,const QJsonObject& initial,const std::function<void()>& checkProject) {
     QDialog dialog(parent);dialog.setObjectName("native-query-totals");dialog.setWindowTitle("Gruppierung und Aggregate");auto* layout=new QVBoxLayout(&dialog);

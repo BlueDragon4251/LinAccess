@@ -1980,7 +1980,7 @@ public:
         if (text(name).compare("FileDialog",Qt::CaseInsensitive)==0) return linaccess::VbaArgumentSignature{{"DialogType"},1};
         if (text(name).compare("Quit",Qt::CaseInsensitive)==0) return linaccess::VbaArgumentSignature{{"Option"},0};
         if (text(name).compare("RunCommand",Qt::CaseInsensitive)==0) return linaccess::VbaArgumentSignature{{"Command"},1};
-        if (QStringList{"dlookup","dmin","dmax","davg","dsum","dcount","dfirst","dlast","dvar","dstdev"}.contains(text(name).toCaseFolded())) return linaccess::VbaArgumentSignature{{"Expr","Domain","Criteria"},2};
+        if (QStringList{"dlookup","dmin","dmax","davg","dsum","dcount","dfirst","dlast","dvar","dstdev","dvarp","dstdevp"}.contains(text(name).toCaseFolded())) return linaccess::VbaArgumentSignature{{"Expr","Domain","Criteria"},2};
         return {};
     }
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
@@ -1999,7 +1999,7 @@ public:
         }
         if (key=="quit") return PreviewDoCmdObject(preview).member("Quit",args);
         if (key=="runcommand") return dispatchPreviewDocumentCommand(preview,"runcommand",args);
-        if (key=="dlookup" || key=="dmin" || key=="dmax" || key=="davg" || key=="dsum" || key=="dcount" || key=="dfirst" || key=="dlast" || key=="dvar" || key=="dstdev") return linaccess::nativeDomainValue(preview.db_,args,key.toStdString());
+        if (key=="dlookup" || key=="dmin" || key=="dmax" || key=="davg" || key=="dsum" || key=="dcount" || key=="dfirst" || key=="dlast" || key=="dvar" || key=="dstdev" || key=="dvarp" || key=="dstdevp") return linaccess::nativeDomainValue(preview.db_,args,key.toStdString());
         if(key=="currentproject" || key=="currentdata") {
             if(!args.empty()) throw linaccess::VbaRuntimeError(450,"Project/data context requires no arguments");
             return linaccess::VbaValue::reference(nativeProjectContext(preview.db_,&preview,key=="currentdata"));

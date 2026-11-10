@@ -91,6 +91,14 @@ If Abs(DStDev("[qty]*2","lookup_values")-Sqr(98))>0.000000001 Then Err.Raise 5
 If DLookup("IIf([id]=1,'FROM SELECT','other')","lookup_values","id=1")<>"FROM SELECT" Then Err.Raise 5
 If DVar("qty","lookup_values")<>24.5 Then Err.Raise 5
 If Abs(Application.DStDev(Domain:="lookup_values",Expr:="qty")-Sqr(24.5))>0.000000001 Then Err.Raise 5
+If DVarP("[qty]*2","lookup_values")<>49 Then Err.Raise 5
+If Application.DStDevP(Domain:="lookup_values",Expr:="[qty]*2")<>7 Then Err.Raise 5
+If DVarP(Expr:="qty",Domain:="lookup_values")<>12.25 Then Err.Raise 5
+If DStDevP("qty","lookup_values")<>3.5 Then Err.Raise 5
+If DVarP("qty","lookup_values","id=1")<>0 Then Err.Raise 5
+If DStDevP("qty","lookup_values","id=1")<>0 Then Err.Raise 5
+If Not IsNull(DVarP("qty","lookup_values","id=99")) Then Err.Raise 5
+If Not IsNull(DStDevP("qty","lookup_values","id=99")) Then Err.Raise 5
 If Not IsNull(DVar("qty","lookup_values","id=1")) Then Err.Raise 5
 If Not IsNull(DStDev("qty","lookup_values","id=99")) Then Err.Raise 5
 If Not IsNull(DLookup("label","lookup_values","id=99")) Then Err.Raise 5

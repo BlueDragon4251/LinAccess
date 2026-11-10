@@ -12,7 +12,7 @@ class NativeReportAggregate {
 public:
     NativeReportAggregate(std::string_view function,bool allowTextSum=false)
         : function_(function),allowTextSum_(allowTextSum) {
-        if(function_!="sum" && function_!="count" && function_!="avg" && function_!="min" && function_!="max" && function_!="first" && function_!="last" && function_!="var" && function_!="stdev")
+        if(function_!="sum" && function_!="count" && function_!="avg" && function_!="min" && function_!="max" && function_!="first" && function_!="last" && function_!="var" && function_!="stdev" && function_!="varp" && function_!="stdevp")
             throw VbaRuntimeError(3251,"Report aggregate unsupported");
     }
     void add(const VbaValue& value) {
@@ -74,7 +74,7 @@ public:
             const long double delta=static_cast<long double>(number)-mean_;
             mean_+=delta/count_;
             if(!std::isfinite(mean_)) throw VbaRuntimeError(6,"Aggregate overflow");
-            if(function_=="var" || function_=="stdev") {
+            if(function_=="var" || function_=="stdev" || function_=="varp" || function_=="stdevp") {
                 secondMoment_+=delta*(static_cast<long double>(number)-mean_);
                 if(!std::isfinite(secondMoment_)) throw VbaRuntimeError(6,"Aggregate overflow");
             }
@@ -83,11 +83,12 @@ public:
     VbaValue result() const {
         if(function_=="count") return VbaValue::numeric(count_);
         if(!count_) return {};
-        if(function_=="var" || function_=="stdev") {
-            if(count_<2) return {};
-            const long double variance=secondMoment_/(count_-1);
+        if(function_=="var" || function_=="stdev" || function_=="varp" || function_=="stdevp") {
+            const bool population=function_=="varp" || function_=="stdevp";
+            if(!population && count_<2) return {};
+            const long double variance=secondMoment_/(population ? count_ : count_-1);
             if(variance<0) throw VbaRuntimeError(6,"Variance computation overflow");
-            const double value=static_cast<double>(function_=="stdev" ? std::sqrt(variance) : variance);
+            const double value=static_cast<double>((function_=="stdev" || function_=="stdevp") ? std::sqrt(variance) : variance);
             if(!std::isfinite(value)) throw VbaRuntimeError(6,"Aggregate overflow");
             return VbaValue::numeric(value);
         }

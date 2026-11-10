@@ -309,8 +309,8 @@ Height =1500)BANDS");
         assert(query.exec("INSERT INTO native_report_stats VALUES(1,10,'A'),(2,20,'B'),(3,NULL,NULL),(4,30,'C')")); query.finish();
         QStringList statsLines{"Begin Report","Width =9000","RecordSource =\"SELECT * FROM native_report_stats ORDER BY id\"",
             "Begin Section","Height =450","Begin TextBox","Name =\"RowId\"","ControlSource =\"id\"","Width =900","Height =300","End","End",
-            "Begin FormFooter","Height =3600"};
-        const QStringList functions{"avg","min","max","sum","count","compound","first","last","firstcompound","lastcompound","var","stdev"};
+            "Begin FormFooter","Height =4200"};
+        const QStringList functions{"avg","min","max","sum","count","compound","first","last","firstcompound","lastcompound","var","stdev","varp","stdevp"};
         for(int index=0;index<functions.size();++index) {
             const auto& function=functions[index]; const auto top=QString::number(index*300);
             const auto expression=function=="compound" ? QString("Avg(IIf([value]>10,[value]*2,Null))")
@@ -339,6 +339,9 @@ Height =1500)BANDS");
             const double variance=(reference.value(2).toDouble()-sum*sum/count)/(count-1);
             assert(qAbs(stats.findChild<QLineEdit*>("access-control-Stat_var")->text().toDouble()-variance)<1e-8);
             assert(qAbs(stats.findChild<QLineEdit*>("access-control-Stat_stdev")->text().toDouble()-std::sqrt(variance))<1e-8);
+            const double population=variance*(count-1)/count;
+            assert(qAbs(stats.findChild<QLineEdit*>("access-control-Stat_varp")->text().toDouble()-population)<1e-8);
+            assert(qAbs(stats.findChild<QLineEdit*>("access-control-Stat_stdevp")->text().toDouble()-std::sqrt(population))<1e-8);
             assert(stats.findChild<QLineEdit*>("access-control-Stat_firstcompound")->text().isEmpty());
         };
         checkStats(); const auto statsPdf=output.filePath("stats.pdf"); assert(stats.exportReportPdf(statsPdf));
@@ -431,6 +434,11 @@ End
         for(const auto& name:{"Stat_var","Stat_stdev"}) {
             const auto control=makePreviewControlsObject(stats)->member("Item",{linaccess::VbaValue::string(name)});
             assert(control.object->member("Value",{}).kind==linaccess::VbaValue::Kind::Null);
+        }
+        for(const auto& name:{"Stat_varp","Stat_stdevp"}) {
+            const auto control=makePreviewControlsObject(stats)->member("Item",{linaccess::VbaValue::string(name)});
+            const auto value=control.object->member("Value",{});
+            assert(value.kind==linaccess::VbaValue::Kind::Number && value.asNumber()==0);
         }
         assert(query.exec("UPDATE native_report_stats SET value=NULL")); query.finish();
         (void)statsObject->member("Requery",{});

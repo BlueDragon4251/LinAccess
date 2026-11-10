@@ -1,3 +1,4 @@
+#include <cmath>
 #include "mainwindow.hpp"
 #include "native_query_builder.hpp"
 #include "access_query.hpp"
@@ -96,6 +97,29 @@ void exerciseVisualQueryDesigner(MainWindow& window,QSqlDatabase database) {
     QTimer::singleShot(0,&window,[&]{auto* dialog=builder();QTimer::singleShot(0,dialog,[]{auto* totals=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(totals && totals->objectName()=="native-query-totals");totals->findChild<QCheckBox*>("native-query-totals-enabled")->setChecked(true);auto* grid=totals->findChild<QTableWidget*>("native-query-total-fields");const QStringList modes{"Count","Where","Sum","Group By"};assert(grid->rowCount()==4);for(int row=0;row<4;++row)qobject_cast<QComboBox*>(grid->cellWidget(row,1))->setCurrentText(modes[row]);totals->findChild<QPushButton*>("native-query-totals-apply")->click();});dialog->findChild<QPushButton*>("native-query-builder-totals")->click();auto* apply=dialog->findChild<QPushButton*>("native-query-builder-apply");assert(apply->isEnabled() && reads==3);apply->click();});
     const auto totals=linaccess::editNativeQueryDesign(&window,database,grouped,[]{});assert(totals && totals->sql.contains(" GROUP BY ") && totals->sql.contains(" HAVING ") && totals->sql.contains(" WHERE ") && reads==3);
     QSqlQuery actualTotals(database),expectedTotals(database);assert(actualTotals.exec(linaccess::compileAccessQuery(totals->sql).sql));assert(expectedTotals.exec("SELECT COUNT(id),SUM(score),(score>=4) FROM builder_input WHERE label<>'rowA' GROUP BY score>=4 HAVING COUNT(id)>=2 ORDER BY (score>=4) DESC"));assert(actualTotals.next() && expectedTotals.next());for(int column=0;column<3;++column)assert(actualTotals.value(column).toString()==expectedTotals.value(column).toString());assert(actualTotals.value(0).toInt()==2 && actualTotals.value(1).toDouble()==10 && !actualTotals.next() && !expectedTotals.next());actualTotals.finish();expectedTotals.finish();
+    auto populationField=totalField("score","population",true,"");populationField.insert("total","VarP");
+    auto deviationField=totalField("","deviation",true,"");deviationField.insert("expression","[score]");deviationField.insert("total","StDevP");
+    const QJsonObject populationDesign{{"version",1},{"table","builder_input"},{"groups",1},{"totals",true},{"fields",QJsonArray{populationField,deviationField}}};
+    QTimer::singleShot(0,&window,[&] {
+        auto* dialog=builder();
+        QTimer::singleShot(0,dialog,[] {
+            auto* totals=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(totals && totals->objectName()=="native-query-totals");
+            auto* fields=totals->findChild<QTableWidget*>("native-query-total-fields");assert(fields && fields->rowCount()==4);
+            assert(qobject_cast<QComboBox*>(fields->cellWidget(0,1))->currentText()=="VarP");
+            assert(qobject_cast<QComboBox*>(fields->cellWidget(1,1))->currentText()=="StDevP");
+            totals->findChild<QPushButton*>("native-query-totals-apply")->click();
+        });
+        dialog->findChild<QPushButton*>("native-query-builder-totals")->click();
+        assert(dialog->findChild<QPushButton*>("native-query-builder-apply")->isEnabled());
+        dialog->findChild<QPushButton*>("native-query-builder-apply")->click();
+    });
+    const auto populationQuery=linaccess::editNativeQueryDesign(&window,database,populationDesign,[]{});
+    assert(populationQuery && populationQuery->sql.contains("VarP(") && populationQuery->sql.contains("StDevP(") && reads==3);
+    const auto populationPlan=linaccess::compileAccessQuery(populationQuery->sql);
+    const auto populationResult=linaccess::executeAccessQueryPlan(database,populationPlan,linaccess::bindAccessQueryParameters(populationPlan,{}));
+    assert(populationResult.rows.size()==1 && populationResult.rows[0].size()==2);
+    assert(qAbs(populationResult.rows[0][0].toDouble()-8.0/3)<1e-10 && qAbs(populationResult.rows[0][1].toDouble()-std::sqrt(8.0/3))<1e-10);
+    assert(populationQuery->state.value("fields").toArray()[0].toObject().value("total").toString()=="VarP");
     assert(sql.exec("ALTER TABLE builder_input ADD COLUMN extra INTEGER"));assert(sql.exec("UPDATE builder_input SET extra=id"));sql.finish();
     QTimer::singleShot(0,&window,[&]{auto* dialog=builder();QTimer::singleShot(0,dialog,[]{auto* totals=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(totals->findChild<QCheckBox*>("native-query-totals-enabled")->isChecked());auto* grid=totals->findChild<QTableWidget*>("native-query-total-fields");assert(qobject_cast<QComboBox*>(grid->cellWidget(0,1))->currentText()=="Count" && qobject_cast<QComboBox*>(grid->cellWidget(1,1))->currentText()=="Where");totals->reject();});dialog->findChild<QPushButton*>("native-query-builder-totals")->click();assert(dialog->findChild<QPushButton*>("native-query-builder-apply")->isEnabled());const auto preview=dialog->findChild<QPlainTextEdit*>("native-query-builder-sql")->toPlainText();assert(!preview.contains("extra"));dialog->reject();});assert(!linaccess::editNativeQueryDesign(&window,database,totals->state,[]{}));
     QAction* createReport=nullptr;for(auto* candidate:window.findChildren<QAction*>())if(candidate->text()=="+ Bericht")createReport=candidate;assert(createReport);QString reportSql;

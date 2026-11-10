@@ -3090,3 +3090,16 @@ Verhalten. App gebaut; bestehendes GUI-/Währungsfeld-Bündel2/2 in19,88s
 (19,39/0,49), keine neuen CTests;456/386/70 unverändert. Vorstufe22a29fa privat
 remote/Baum verifiziert. Weiter ohne Zwischenabschluss: native VarP/StDevP
 in Berichts-/SQL-Aggregaten und DVarP/DStDevP in echten Domainaufrufen ergänzen.
+
+
+Native Populationsstatistik: POPULATION_STATISTICS.md beschreibt VarP/StDevP in
+SQL und Berichtssteuerelementen samt PDF/Requery, DVarP/DStDevP für echte Domains
+inklusive benannter/Application-Aufrufe und die realen visuellen QBE-Funktionsmodi.
+Null/leer/Einzelwert, große Offsets, Gruppen/DISTINCT/Parameter und Fehler geprüft.
+App gebaut; erstes Bündel Kern5,32s/Bericht12,97s bestanden. Neue SQL-Testannahme
+StDevP-Überlauf korrigiert (StDevP kann1e308 liefern, VarP überläuft): nur betroffenes
+Abfragemodell erneut0,13s. Designer-Fixture erwartet zusätzlich verborgene Where-
+Quellfelder; nur GUI erneut18,41s. Keine neuen CTests/Vollsuiten-/Windowsbehauptung;
+456/386/70 unverändert. Sieben Hashes unverändert; Vorstufe c119f5e privat remote
+und Baum geprüft. Anschließend aktuelles Debianpaket bauen/gegen echte Binärdatei
+prüfen und unabhängige Implementierung fortsetzen; kein Zwischenabschluss.

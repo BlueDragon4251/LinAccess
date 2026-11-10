@@ -579,14 +579,14 @@ void lastStep(sqlite3_context* context,int,sqlite3_value** args) noexcept { aggr
 // SQLite owns only the small pointer/error slot; the C++ accumulator has its
 // normal alignment/lifetime and is destroyed even when a group fails.
 struct StatisticalState { NativeReportAggregate* aggregate; int error; };
-template<bool Deviation> void statisticalStep(sqlite3_context* context,int,sqlite3_value** args) noexcept {
+template<bool Deviation,bool Population=false> void statisticalStep(sqlite3_context* context,int,sqlite3_value** args) noexcept {
     auto& native=api();auto* state=static_cast<StatisticalState*>(native.aggregate(context,sizeof(StatisticalState)));
     if(!state) {native.error(context,"LinAccess SQL function error 7",-1);return;}
     if(state->error || native.type(args[0])==SQLITE_NULL) return;
     try {
         if(native.type(args[0])!=SQLITE_INTEGER && native.type(args[0])!=SQLITE_FLOAT)
             throw VbaRuntimeError(13,"Statistical SQL aggregate requires numeric values");
-        if(!state->aggregate) state->aggregate=new NativeReportAggregate(Deviation ? "stdev" : "var");
+        if(!state->aggregate) state->aggregate=new NativeReportAggregate(Population ? (Deviation ? "stdevp" : "varp") : (Deviation ? "stdev" : "var"));
         state->aggregate->add(VbaValue::numeric(native.number(args[0])));
     } catch(const VbaRuntimeError& failure) {state->error=failure.number;functionError(context,failure);}
       catch(...) {state->error=7;native.error(context,"LinAccess SQL function error 7",-1);}
@@ -769,6 +769,8 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_currency_ticks_multiply",2,&currencyTicksMultiply,nullptr,nullptr);
     ensure("linaccess_jet_var",1,nullptr,&statisticalStep<false>,&statisticalFinal);
     ensure("linaccess_jet_stdev",1,nullptr,&statisticalStep<true>,&statisticalFinal);
+    ensure("linaccess_jet_varp",1,nullptr,&statisticalStep<false,true>,&statisticalFinal);
+    ensure("linaccess_jet_stdevp",1,nullptr,&statisticalStep<true,true>,&statisticalFinal);
     ensure("linaccess_jet_first",1,nullptr,&firstStep,&aggregateFinal);
     ensure("linaccess_jet_last",1,nullptr,&lastStep,&aggregateFinal);
     ensure("linaccess_jet_update_value",1,nullptr,&singleStep,&singleFinal);

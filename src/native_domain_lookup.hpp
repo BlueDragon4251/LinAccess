@@ -41,7 +41,7 @@ inline VbaValue nativeDomainValue(QSqlDatabase database,const std::vector<VbaVal
     if(function=="dsum" || function=="dcount") return nativeSqlDomainAggregate(database,function,args);
     const bool lookup=function=="dlookup" || function=="dfirst";
     const bool selector=lookup || function=="dlast";
-    if(!selector && function!="dmin" && function!="dmax" && function!="davg" && function!="dvar" && function!="dstdev")
+    if(!selector && function!="dmin" && function!="dmax" && function!="davg" && function!="dvar" && function!="dstdev" && function!="dvarp" && function!="dstdevp")
         throw VbaRuntimeError(3251,"Domain function unsupported");
     if(args.size()<2 || args.size()>3) throw VbaRuntimeError(450,"Domain function requires two or three arguments");
     if(args[0].kind==VbaValue::Kind::Null || args[1].kind==VbaValue::Kind::Null)
@@ -102,7 +102,7 @@ inline VbaValue nativeDomainValue(QSqlDatabase database,const std::vector<VbaVal
         const bool numeric=type.contains("INT") || type.contains("REAL") || type.contains("FLOA") || type.contains("DOUB");
         const bool typedExtremum=(function=="dmin" || function=="dmax") && (type=="CURRENCY_REAL" || type.contains("DATE"));
         if(selected.size()!=1 || type.contains("BOOL") || (!numeric && !typedExtremum && !(calculated && type.isEmpty()))
-            || ((function=="davg" || function=="dvar" || function=="dstdev") && type=="CURRENCY_REAL"))
+            || ((function=="davg" || function=="dvar" || function=="dstdev" || function=="dvarp" || function=="dstdevp") && type=="CURRENCY_REAL"))
             throw VbaRuntimeError(3251,"Domain aggregate field type unsupported or unproven");
         const auto result=executeAccessQueryPlan(database,plan,bindAccessQueryParameters(plan,{}));
         if(result.columns.size()!=1 || result.columnTypes.value(0).toUpper()!=type)
