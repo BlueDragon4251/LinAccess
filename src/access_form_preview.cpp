@@ -2636,6 +2636,7 @@ bool AccessFormPreview::prepareClose() {
     if (closed_ || openCancelled_) return true;
     return closeDocuments({this},this);
 }
+bool AccessFormPreview::projectIsClosing(const QSqlDatabase& database) {return closingProjects().contains(projectKey(database));}
 bool AccessFormPreview::closeProjectDocuments(const QSqlDatabase& db) {
     for(auto* widget:QApplication::topLevelWidgets())
         if(auto* guard=dynamic_cast<linaccess::NativeProjectCloseGuard*>(widget);guard && !guard->allowProjectClose(db.connectionName())) return false;

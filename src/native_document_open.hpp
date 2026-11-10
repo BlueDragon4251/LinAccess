@@ -2,6 +2,13 @@
 #include "vba_qt_value.hpp"
 #include <QString>
 namespace linaccess {
+struct NativeModuleOpenArguments {QString name,procedure;};
+// Callers scalarize exactly once and recheck their actual execution context.
+inline NativeModuleOpenArguments nativeModuleOpenArguments(const std::vector<VbaValue>& values) {
+    if(values.size()>2) throw VbaRuntimeError(450,"OpenModule accepts at most two arguments");
+    const auto text=[&](std::size_t index) {if(index>=values.size() || values[index].kind==VbaValue::Kind::Missing || values[index].kind==VbaValue::Kind::Empty) return QString{};if(values[index].kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"Invalid Null OpenModule argument");return QString::fromStdString(values[index].asText());};
+    NativeModuleOpenArguments result{text(0),text(1)};if(result.name.isEmpty() && result.procedure.isEmpty()) throw VbaRuntimeError(5,"OpenModule requires a module or procedure name");return result;
+}
 inline VbaOpenFormArguments nativeFormOpenArguments(std::vector<VbaValue> values) {
     if(values.empty() || values[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"OpenForm requires a name");
     for(std::size_t index=1;index<values.size();++index) if(values[index].kind==VbaValue::Kind::Missing) values[index]=VbaValue::empty();

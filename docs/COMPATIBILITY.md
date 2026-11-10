@@ -7101,3 +7101,24 @@ CTest-/Katalog-IDs;456/386/70. Vorstufee64854cf privat/Baum geprüft. Paket weit
 Case-Erweiterungen; neue gebündelte Paketprüfung folgt. Danach echte modellose
 DoCmd.OpenModule-Ausgabe für allgemeine VBA-Entwicklung nachvollziehen/umsetzen.
 Keine Zwischenabschlüsse; weitere offene Anforderungen kontinuierlich bearbeiten.
+
+
+Echtes natives modelloses DoCmd.OpenModule (2026-11-10): MODELESS_MODULE_EDITOR.md.
+Formular-/Standardmodul-Hosts, optionale/benannte ModuleName/ProcedureName, belegte
+Prozedursuche/Quellposition, Deklarationsansicht, vorhandene Fenster/Entwürfe
+wiederverwenden. Gemeinsamer bisheriger Editoraufbau heap-eigen mit wertgebundenen
+Callbacks; modaler GUI-Einstieg bleibt. Eigene Quellen bearbeitbar, importierte
+Standardquellen hier schreibgeschützt ohne Speichern/Löschen/Run/Debug. Laden
+führt Prozeduren nicht aus. Optimistische native Katalogrevision schützt vor
+Überschreiben; Close mit Speicheroptionen, echter Abbruch, Busy-/Projektwechsel-/
+Reentranz-/QObject-Lebensdauergrenzen. Keine volle VBE-/Klassen-/Formmodul-/Library-/
+MDI-/Windows-Fehlergleichheit. App/GUI gebaut, vorhandenes mainwindow_documents
+1/1 in13,50s bestanden, 20s unverändert. Tatsächliche VBA-Fortsetzung, Navigation/
+Wiederverwendung, Revision/Save/Discard/Cancel, geladene Deskriptoren und unberührtes
+technisches Importarchiv geprüft; keine neuen CTest-/Katalog-IDs.456/386/70.
+Aktueller geprüfter Paket-/Original-/Inventarbeleg:5c82c36546f744621cb1523e2c1d37d3fef15258,
+Baum20206cfc219378aadf8127937ceb3a9d2962cac8 privat verifiziert. DEB
+work/sql-case-reverse/package-proof/package/linaccess-0.7.0-Linux.deb bestanden;
+Original118,77/Inventar46,44s, Bündel2/2 in165,21s,7Hash gleich.100/78/22 mit
+Kategorien73/5/3/9/10, kein Access-Ergebnisoracle; bekannte Original-Grenzen bleiben.
+Dieses Paket liegt vor OpenModule. Ohne Zwischenabschluss weiterprogrammieren.

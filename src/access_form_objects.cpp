@@ -1625,6 +1625,7 @@ public:
         if(key=="echo") return Signature{{"EchoOn","StatusBarText"},1};
         if(key=="hourglass") return Signature{{"HourglassOn"},1};
         if(key=="opentable") return Signature{{"TableName","View","DataMode"},1};
+        if(key=="openmodule") return Signature{{"ModuleName","ProcedureName"},0};
         if(key=="openquery") return Signature{{"QueryName","View","DataMode"},1};
         if(key=="rename") return Signature{{"NewName","ObjectType","OldName"},1};
         if(key=="deleteobject") return Signature{{"ObjectType","ObjectName"},0};
@@ -1716,6 +1717,13 @@ public:
             if(const int error=result.value("error").toInt()) throw linaccess::VbaRuntimeError(error,result.value("description").toString().toStdString());
             preview.setProperty("la_explicit_table_context",true); return {};
         }
+        if(key=="openmodule") {
+            std::vector<linaccess::VbaValue> values;for(const auto& argument:args) {values.push_back(linaccess::scalarVbaValue(argument));(void)checked();}
+            const auto request=linaccess::nativeModuleOpenArguments(values);QWidget* owner=nullptr;
+            for(auto* ancestor=preview.parentWidget();ancestor;ancestor=ancestor->parentWidget()) if(qobject_cast<QMainWindow*>(ancestor)) {owner=ancestor;break;}
+            QVariantMap result;if(!owner || !QMetaObject::invokeMethod(owner,"openModuleDocument",Qt::DirectConnection,Q_RETURN_ARG(QVariantMap,result),Q_ARG(QString,request.name),Q_ARG(QString,request.procedure))) throw linaccess::VbaRuntimeError(3251,"Native module opening unavailable");
+            (void)checked();if(const int error=result.value("error").toInt()) throw linaccess::VbaRuntimeError(error,result.value("description").toString().toStdString());return {};
+        }
         if(key=="opentable") {
             if(args.empty() || args.size()>3 || args[0].kind==linaccess::VbaValue::Kind::Missing) throw linaccess::VbaRuntimeError(450,"OpenTable requires a table name and at most three arguments");
             std::vector<linaccess::VbaValue> values;
@@ -1786,6 +1794,13 @@ public:
         const int type=args.empty() || args[0].kind==linaccess::VbaValue::Kind::Empty ? -1 : number(args[0]);
         const auto objectName=args.size()>1 && args[1].kind!=linaccess::VbaValue::Kind::Empty ? std::optional<QString>(text(args[1].asText())) : std::nullopt;
         const int save=args.size()>2 ? number(args[2]) : 0;
+        if(type==5 || type==-1) {
+            QWidget* owner=nullptr;for(auto* ancestor=preview.parentWidget();ancestor;ancestor=ancestor->parentWidget()) if(qobject_cast<QMainWindow*>(ancestor)) {owner=ancestor;break;}
+            QVariantMap result;const auto target=objectName.value_or(QString{});
+            if(owner && owner->metaObject()->indexOfMethod("closeModuleDocument(int,QString,int)")>=0 && QMetaObject::invokeMethod(owner,"closeModuleDocument",Qt::DirectConnection,Q_RETURN_ARG(QVariantMap,result),Q_ARG(int,type),Q_ARG(QString,target),Q_ARG(int,save)) && result.value("handled").toBool()) {
+                if(const int error=result.value("error").toInt()) throw linaccess::VbaRuntimeError(error,result.value("description").toString().toStdString());return {};
+            }
+        }
         if(type==0 || type==1 || (type==-1 && (preview.hasActivated_ || preview.property("la_explicit_table_context").toBool()))) {
             QWidget* owner=nullptr;
             for(auto* ancestor=preview.parentWidget();ancestor;ancestor=ancestor->parentWidget())

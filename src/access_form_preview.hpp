@@ -50,6 +50,7 @@ public:
     int dataSourceErrorNumber() const { return dataSourceErrorNumber_; }
     bool cancelledByOpen() const { return openCancelled_; }
     bool hasUnsavedChanges() const { return dirty_; }
+    static bool projectIsClosing(const QSqlDatabase& database);
     static bool closeProjectDocuments(const QSqlDatabase& database);
     static bool closeApplicationDocuments();
     static void quitApplication();

@@ -106,6 +106,7 @@ public:
         if(key=="runmacro") return VbaArgumentSignature{{"MacroName","RepeatCount","RepeatExpression"},1};
         if(key=="runsql") return VbaArgumentSignature{{"SQLStatement","UseTransaction"},1};
         if(key=="opentable") return VbaArgumentSignature{{"TableName","View","DataMode"},1};
+        if(key=="openmodule") return VbaArgumentSignature{{"ModuleName","ProcedureName"},0};
         if(key=="openquery") return VbaArgumentSignature{{"QueryName","View","DataMode"},1};
         if(key=="findrecord") return VbaArgumentSignature{{"FindWhat","Match","MatchCase","Search","SearchAsFormatted","OnlyCurrentField","FindFirst"},1};
         if(key=="repaintobject") return VbaArgumentSignature{{"ObjectType","ObjectName"},0};
@@ -193,8 +194,9 @@ public:
         }
         if(key=="close") {
             if(values.size()>3) throw VbaRuntimeError(450,"Close accepts at most three arguments");
-            const int type=number(0,-1),save=number(2,0);if(type!=-1 && type!=0 && type!=1 && type!=2 && type!=3) throw VbaRuntimeError(3251,"Closing this object type is not implemented");if(save<0 || save>2) throw VbaRuntimeError(5,"Invalid Close save option");
+            const int type=number(0,-1),save=number(2,0);if(type!=-1 && type!=0 && type!=1 && type!=2 && type!=3 && type!=5) throw VbaRuntimeError(3251,"Closing this object type is not implemented");if(save<0 || save>2) throw VbaRuntimeError(5,"Invalid Close save option");
             const auto object=values.size()>1 && values[1].kind!=VbaValue::Kind::Missing ? QString::fromStdString(coerceVbaModuleValue(values[1],"string").asText()) : QString{};
+            if(type==5 || type==-1) {QVariantMap result;if(!QMetaObject::invokeMethod(owner_,"closeModuleDocument",Qt::DirectConnection,Q_RETURN_ARG(QVariantMap,result),Q_ARG(int,type),Q_ARG(QString,object),Q_ARG(int,save))) throw VbaRuntimeError(3251,"Module closing is unavailable");if(result.value("handled").toBool()) {resultError(result);host.check();return VbaValue::empty();}}
             if(type==0 || type==1 || type==-1) for(const auto* method:{"closeQueryDocument","closeTableDocument"}) {QVariantMap result;if(!QMetaObject::invokeMethod(owner_,method,Qt::DirectConnection,Q_RETURN_ARG(QVariantMap,result),Q_ARG(int,type),Q_ARG(QString,object),Q_ARG(int,save))) throw VbaRuntimeError(3251,"Data document close is unavailable");if(result.value("handled").toBool()) {resultError(result);host.check();return VbaValue::empty();}}
             QPointer<AccessFormPreview> selected;
             for(const auto& document:nativeLoadedProjectDocuments(db_,owner_)) if(document && (type==-1 || type==(document->documentKind()==AccessDocumentKind::Form ? 2 : 3))) {
@@ -220,6 +222,11 @@ public:
             try {execute();if(!query.exec("RELEASE "+savepoint)) fail();}
             catch(...) {const bool rollback=query.exec("ROLLBACK TO "+savepoint),release=query.exec("RELEASE "+savepoint);if(!rollback || !release) throw VbaRuntimeError(3146,"RunSQL savepoint cleanup failed");throw;}
             return VbaValue::empty();
+        }
+        if(key=="openmodule") {
+            const auto request=nativeModuleOpenArguments(values);QVariantMap result;
+            if(!QMetaObject::invokeMethod(owner_,"openModuleDocument",Qt::DirectConnection,Q_RETURN_ARG(QVariantMap,result),Q_ARG(QString,request.name),Q_ARG(QString,request.procedure))) throw VbaRuntimeError(3251,"Module opening is unavailable");
+            resultError(result);host.check();return VbaValue::empty();
         }
         if(key=="opentable" || key=="openquery") {
             if(values.empty() || values.size()>3) throw VbaRuntimeError(450,"OpenTable/OpenQuery argument count invalid");

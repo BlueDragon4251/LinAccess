@@ -10,6 +10,7 @@
 #include "native_schema_editor.hpp"
 #include "native_field_defaults.hpp"
 #include "mainwindow.hpp"
+#include "native_module_editor_dialog.hpp"
 #include "native_macro.hpp"
 #include "native_module_debugger.hpp"
 #include "vba_debugger.hpp"
@@ -108,6 +109,7 @@
 #include <QTableWidget>
 #include <QTextBrowser>
 #include <QTextDocument>
+#include <QTextBlock>
 #include <QToolBar>
 #include <QMenuBar>
 #include <QMenu>
@@ -2268,64 +2270,151 @@ int MainWindow::showTable(const QString& name,bool readOnly,bool interactive,con
     return 0;
 }
 
+QVariantMap MainWindow::openModuleDocument(const QString& requestedName,const QString& requestedProcedure) {
+    try {
+        if(!db_.isOpen()) throw linaccess::VbaRuntimeError(3420,"Module project is closed");
+        if(AccessFormPreview::projectIsClosing(db_) || property("la_module_project_closing").toBool()) throw linaccess::VbaRuntimeError(2501,"Module project is closing");
+        if(requestedName.isEmpty() && requestedProcedure.isEmpty()) throw linaccess::VbaRuntimeError(5,"OpenModule requires a module or procedure name");
+        if(requestedName.size()>64 || requestedProcedure.size()>255 || requestedName.contains(QChar(0)) || requestedProcedure.contains(QChar(0))) throw linaccess::VbaRuntimeError(5,"Invalid OpenModule name");
+        QMap<QString,QString> names;QSet<QString> classes;const auto sources=linaccess::standardVbaModuleSources(db_,&names,&classes);
+        const auto editorFor=[&](const QString& name) -> QDialog* {
+            QDialog* found=nullptr;
+            for(auto* editor:findChildren<QDialog*>("native-module-editor")) if(editor->isVisible()
+                && editor->property("la_project_object_connection").toString()==db_.connectionName()
+                && editor->property("la_project_object_generation")==property("la_project_generation")
+                && editor->property("la_project_object_name").toString().compare(name,Qt::CaseInsensitive)==0) {
+                if(found) throw linaccess::VbaRuntimeError(5,"Module editor is ambiguous");found=editor;
+            }
+            return found;
+        };
+        const auto sourceFor=[&](const QString& key) {if(auto* editor=editorFor(names.value(key,key))) return editor->findChild<QPlainTextEdit*>("native-module-source")->toPlainText();return linaccess::decodeVbaSource(sources.value(key));};
+        QString key=requestedName.toCaseFolded();
+        if(key.isEmpty()) {
+            for(auto it=sources.cbegin();it!=sources.cend();++it) {
+                const auto code=sourceFor(it.key());if(classes.contains(it.key()) || linaccess::isVbaClassModule(code.toUtf8().toStdString())) continue;
+                for(const auto& procedure:linaccess::analyzeVba(code.toUtf8().toStdString()).procedures)
+                    if(QString::fromStdString(procedure.name).compare(requestedProcedure,Qt::CaseInsensitive)==0) {
+                        if(!key.isEmpty() && key!=it.key()) throw linaccess::VbaRuntimeError(3251,"Procedure is ambiguous; specify its module");key=it.key();break;
+                    }
+            }
+        }
+        if(!sources.contains(key) || classes.contains(key)) throw linaccess::VbaRuntimeError(3251,"Current-project standard module unavailable");
+        const auto code=sourceFor(key);if(linaccess::isVbaClassModule(code.toUtf8().toStdString())) throw linaccess::VbaRuntimeError(3251,"Class/document module opening is not supported by this editor");
+        std::optional<linaccess::VbaProcedure> target;
+        if(!requestedProcedure.isEmpty()) {
+            for(const auto& procedure:linaccess::analyzeVba(code.toUtf8().toStdString()).procedures)
+                if(QString::fromStdString(procedure.name).compare(requestedProcedure,Qt::CaseInsensitive)==0) {target=procedure;break;}
+            if(!target) throw linaccess::VbaRuntimeError(3251,"Requested module procedure unavailable");
+        }
+        const auto name=names.value(key,key);QPointer<QDialog> editor=editorFor(name);
+        if(!editor) {
+            const bool imported=objectDefinition("module",name).isEmpty();
+            editor=createModuleEditor(name,sources.value(key),imported);if(!editor) throw linaccess::VbaRuntimeError(3251,"Module editor unavailable");
+            editor->setProperty("la_module_modeless",true);editor->setProperty("la_editor_keep_open",true);editor->setWindowModality(Qt::NonModal);
+            connect(editor,&QDialog::finished,editor,&QObject::deleteLater);editor->show();
+        }
+        auto* text=editor->findChild<QPlainTextEdit*>("native-module-source");
+        QTextCursor cursor(text->document());if(target) cursor=QTextCursor(text->document()->findBlockByNumber(qMax(0,target->line-1)));
+        text->setTextCursor(cursor);text->centerCursor();
+        if(target) {auto* procedures=editor->findChild<QComboBox*>("native-module-procedure");const int index=procedures->findData(QString::fromStdString(linaccess::vbaProcedureExecutionName(*target)));if(index>=0) procedures->setCurrentIndex(index);}
+        editor->show();editor->raise();editor->activateWindow();text->setFocus(Qt::OtherFocusReason);return {{"handled",true},{"error",0}};
+    } catch(const linaccess::VbaRuntimeError& error) {return tableCommandFailure(error.number,QString::fromUtf8(error.what()));}
+      catch(const std::exception&) {return tableCommandFailure(3251,"Native module opening failed");}
+}
+QVariantMap MainWindow::closeModuleDocument(int type,const QString& name,int save) {
+    if(type!=5 && type!=-1) return {};
+    QPointer<QDialog> target;
+    for(auto* editor:findChildren<QDialog*>("native-module-editor")) if(editor->isVisible()
+        && editor->property("la_project_object_connection").toString()==db_.connectionName()
+        && editor->property("la_project_object_generation")==property("la_project_generation")
+        && (name.isEmpty() ? editor==QApplication::activeWindow() || editor==QApplication::activeModalWidget() : editor->property("la_project_object_name").toString().compare(name,Qt::CaseInsensitive)==0)) {
+        if(target) return tableCommandFailure(5,"Module close target ambiguous");target=editor;
+    }
+    if(!target) return type==5 ? tableCommandFailure(3251,"Module close target unavailable") : QVariantMap{};
+    if(save<0 || save>2) return tableCommandFailure(5,"Invalid module Close save option");
+    if(target->property("la_module_busy").toInt()>0) return tableCommandFailure(2501,"Module editor is busy");
+    if(save==1 && target->isWindowModified()) {
+        auto* button=target->findChild<QPushButton*>("native-module-save");if(!button || !button->isEnabled()) return tableCommandFailure(3251,"Module source is read-only");
+        const auto keep=target->property("la_editor_keep_open");target->setProperty("la_editor_keep_open",true);button->click();if(!target) return {{"handled",true},{"error",0}};target->setProperty("la_editor_keep_open",keep);
+        if(target->isWindowModified()) return tableCommandFailure(2501,"Module save failed or cancelled");
+    }
+    const auto old=target->property("la_module_discard_close");target->setProperty("la_module_discard_close",save==2);const auto reset=qScopeGuard([target,old] {if(target) target->setProperty("la_module_discard_close",old);});
+    if(!target->close()) return tableCommandFailure(2501,"Module close cancelled");return {{"handled",true},{"error",0}};
+}
 void MainWindow::editModule(const QString& existingName) {
-    if(!hasProject()) return;const auto old=existingName.isEmpty() ? QJsonObject{} : objectDefinition("module",existingName);
-    try {if(!existingName.isEmpty()) (void)linaccess::nativeModuleSource(old);}catch(const std::exception& error) {messageError(this,QString::fromUtf8(error.what()));return;}
-    QDialog dialog(this);dialog.setObjectName("native-module-editor");dialog.setWindowTitle("Standardmodul bearbeiten");dialog.resize(900,650);tagProjectObject(&dialog,this,db_,"module",existingName);auto* layout=new QVBoxLayout(&dialog);
+    if(!existingName.isEmpty()) for(auto* editor:findChildren<QDialog*>("native-module-editor"))
+        if(editor->isVisible() && editor->property("la_module_modeless").toBool() && editor->property("la_project_object_generation")==property("la_project_generation") && editor->property("la_project_object_name").toString().compare(existingName,Qt::CaseInsensitive)==0) {editor->raise();editor->activateWindow();return;}
+    try {const QPointer<QDialog> editor=createModuleEditor(existingName);if(editor) {editor->exec();if(editor) delete editor.data();}}
+    catch(const std::exception& error) {messageError(this,QString::fromUtf8(error.what()));}
+}
+QDialog* MainWindow::createModuleEditor(const QString& existingName,const QByteArray& imported,bool readOnly) {
+    if(!hasProject()) return nullptr;const auto old=existingName.isEmpty() ? QJsonObject{} : objectDefinition("module",existingName);
+    try {if(!existingName.isEmpty() && !readOnly) (void)linaccess::nativeModuleSource(old);if(imported.size()>1024*1024) throw linaccess::VbaRuntimeError(3035,"Module source exceeds editor limit");}catch(const std::exception& error) {messageError(this,QString::fromUtf8(error.what()));return nullptr;}
+    auto* dialog=new NativeModuleEditorDialog(this);dialog->setObjectName("native-module-editor");dialog->setWindowTitle("Standardmodul bearbeiten");dialog->resize(900,650);tagProjectObject(dialog,this,db_,"module",existingName);auto* layout=new QVBoxLayout(dialog);
     const QPointer<MainWindow> owner=this;const auto identity=db_.databaseName();const auto generation=property("la_project_generation");
     const auto checkProject=[owner,identity,generation] {if(!owner || !owner->db_.isOpen() || owner->db_.databaseName()!=identity || owner->property("la_project_generation")!=generation) throw linaccess::VbaRuntimeError(3420,"Das Modul gehört nicht mehr zum aktuellen Projekt.");};
 
-    auto* name=new QLineEdit(existingName,&dialog);name->setObjectName("native-module-name");name->setMaxLength(64);name->setReadOnly(!existingName.isEmpty());name->setPlaceholderText("Name des Standardmoduls");layout->addWidget(name);
-    auto* source=new QPlainTextEdit(&dialog);source->setObjectName("native-module-source");source->setPlainText(old.value("vba").toString());source->setPlaceholderText("VBA-Quelltext für ein Standardmodul");layout->addWidget(source,1);
-    auto* note=new QLabel("Öffentliche Funktionen stehen unterstützten VBA-, Eval- und SQL-Aufrufen zur Verfügung. Ausführen verwendet das gespeicherte Modul ohne Pflichtargumente. Die native VBA-Sprache ist eingeschränkt; Klassenmodule und ein Formularkontext werden hier nicht bereitgestellt.",&dialog);note->setWordWrap(true);layout->addWidget(note);
-    auto* row=new QHBoxLayout;auto* analyze=addButton(row,"Analysieren");analyze->setObjectName("native-module-analyze");auto* save=addButton(row,"Speichern");save->setObjectName("native-module-save");auto* remove=addButton(row,"Modul löschen");remove->setObjectName("native-module-delete");remove->setEnabled(!existingName.isEmpty());layout->addLayout(row);installDesignerSaveShortcut(dialog,save);
-    auto* execution=new QHBoxLayout;auto* procedures=new QComboBox(&dialog);procedures->setObjectName("native-module-procedure");procedures->setProperty("la_designer_transient",true);execution->addWidget(procedures,1);auto* run=addButton(execution,"Prozedur ausführen (F5)");run->setObjectName("native-module-run");auto* debug=addButton(execution,"Debuggen (F8)");debug->setObjectName("native-module-debug");layout->addLayout(execution);auto breakpoints=std::make_shared<NativeModuleBreakpoints>();installNativeModuleBreakpoints(dialog,*source,breakpoints);
-    auto* runShortcut=new QShortcut(QKeySequence(Qt::Key_F5),&dialog);connect(runShortcut,&QShortcut::activated,run,&QPushButton::click);
+    auto* name=new QLineEdit(existingName,dialog);name->setObjectName("native-module-name");name->setMaxLength(64);name->setReadOnly(!existingName.isEmpty());name->setPlaceholderText("Name des Standardmoduls");layout->addWidget(name);
+    auto* source=new QPlainTextEdit(dialog);source->setObjectName("native-module-source");source->setPlainText(readOnly ? linaccess::decodeVbaSource(imported) : old.value("vba").toString());source->setReadOnly(readOnly);source->setPlaceholderText("VBA-Quelltext für ein Standardmodul");layout->addWidget(source,1);
+    if(readOnly) {dialog->setWindowTitle("Importierte Modulquelle (schreibgeschützt)");}
+    auto* note=new QLabel("Öffentliche Funktionen stehen unterstützten VBA-, Eval- und SQL-Aufrufen zur Verfügung. Ausführen verwendet das gespeicherte Modul ohne Pflichtargumente. Die native VBA-Sprache ist eingeschränkt; Klassenmodule und ein Formularkontext werden hier nicht bereitgestellt.",dialog);note->setWordWrap(true);layout->addWidget(note);
+    auto* row=new QHBoxLayout;auto* analyze=addButton(row,"Analysieren");analyze->setObjectName("native-module-analyze");auto* save=addButton(row,"Speichern");save->setObjectName("native-module-save");auto* remove=addButton(row,"Modul löschen");remove->setObjectName("native-module-delete");save->setEnabled(!readOnly);remove->setEnabled(!readOnly && !existingName.isEmpty());layout->addLayout(row);installDesignerSaveShortcut(*dialog,save);
+    auto* execution=new QHBoxLayout;auto* procedures=new QComboBox(dialog);procedures->setObjectName("native-module-procedure");procedures->setProperty("la_designer_transient",true);execution->addWidget(procedures,1);auto* run=addButton(execution,"Prozedur ausführen (F5)");run->setObjectName("native-module-run");auto* debug=addButton(execution,"Debuggen (F8)");debug->setObjectName("native-module-debug");layout->addLayout(execution);auto breakpoints=std::make_shared<NativeModuleBreakpoints>();installNativeModuleBreakpoints(*dialog,*source,breakpoints);
+    auto* runShortcut=new QShortcut(QKeySequence(Qt::Key_F5),dialog);connect(runShortcut,&QShortcut::activated,run,&QPushButton::click);
     auto* debugShortcut=new QShortcut(QKeySequence(Qt::Key_F8),source);debugShortcut->setContext(Qt::WidgetShortcut);connect(debugShortcut,&QShortcut::activated,debug,&QPushButton::click);
-    const auto updateProcedures=[&] {const auto selected=procedures->currentData();procedures->clear();for(const auto& procedure:linaccess::analyzeVba(source->toPlainText().toUtf8().toStdString()).procedures) procedures->addItem(QString::fromStdString(procedure.kind)+" "+QString::fromStdString(procedure.name),QString::fromStdString(linaccess::vbaProcedureExecutionName(procedure)));const int index=procedures->findData(selected);if(index>=0) procedures->setCurrentIndex(index);run->setEnabled(procedures->count()>0);debug->setEnabled(procedures->count()>0);};
-    updateProcedures();connect(analyze,&QPushButton::clicked,&dialog,updateProcedures);
-    connect(source,&QPlainTextEdit::textChanged,&dialog,[run,debug] {run->setEnabled(false);debug->setEnabled(false);});
-    auto* result=new QTextBrowser(&dialog);result->setObjectName("native-module-result");result->setMaximumHeight(140);layout->addWidget(result);
-    connect(analyze,&QPushButton::clicked,&dialog,[&] {const auto analysis=linaccess::analyzeVba(source->toPlainText().toUtf8().toStdString());QStringList lines{QString("Syntaxinventar: %1 Prozeduren; kein Ausführungsnachweis.").arg(analysis.procedures.size())};for(const auto& flag:analysis.compatibilityFlags) lines.append(QString::fromStdString(flag));result->setPlainText(lines.join('\n'));});
-    const auto executeModule=[&](bool stepping) {
+    const auto updateProcedures=[source,procedures,run,debug,readOnly] {const auto selected=procedures->currentData();procedures->clear();for(const auto& procedure:linaccess::analyzeVba(source->toPlainText().toUtf8().toStdString()).procedures) procedures->addItem(QString::fromStdString(procedure.kind)+" "+QString::fromStdString(procedure.name),QString::fromStdString(linaccess::vbaProcedureExecutionName(procedure)));const int index=procedures->findData(selected);if(index>=0) procedures->setCurrentIndex(index);run->setEnabled(!readOnly && procedures->count()>0);debug->setEnabled(!readOnly && procedures->count()>0);};
+    updateProcedures();connect(analyze,&QPushButton::clicked,dialog,updateProcedures);
+    connect(source,&QPlainTextEdit::textChanged,dialog,[run,debug] {run->setEnabled(false);debug->setEnabled(false);});
+    auto* result=new QTextBrowser(dialog);result->setObjectName("native-module-result");result->setMaximumHeight(140);layout->addWidget(result);
+    connect(analyze,&QPushButton::clicked,dialog,[source,result] {const auto analysis=linaccess::analyzeVba(source->toPlainText().toUtf8().toStdString());QStringList lines{QString("Syntaxinventar: %1 Prozeduren; kein Ausführungsnachweis.").arg(analysis.procedures.size())};for(const auto& flag:analysis.compatibilityFlags) lines.append(QString::fromStdString(flag));result->setPlainText(lines.join('\n'));});
+    const auto executeModule=[this,dialog,existingName,checkProject,source,run,debug,save,remove,analyze,name,procedures,runShortcut,debugShortcut,breakpoints,result,readOnly](bool stepping) {
+        const QPointer<QDialog> guarded=dialog;NativeModuleEditorBusy busy(dialog);
         try {
-            checkProject();const auto saved=dialog.property("la_editor_saved_name").toString();const auto current=saved.isEmpty() ? existingName : saved;
-            if(current.isEmpty() || dialog.isWindowModified()) throw linaccess::VbaRuntimeError(3251,"Modul vor der Ausführung speichern und analysieren.");
+            checkProject();if(readOnly) throw linaccess::VbaRuntimeError(3251,"Imported source is read-only in this editor");const auto saved=dialog->property("la_editor_saved_name").toString();const auto current=saved.isEmpty() ? existingName : saved;
+            if(current.isEmpty() || dialog->isWindowModified()) throw linaccess::VbaRuntimeError(3251,"Modul vor der Ausführung speichern und analysieren.");
             const auto code=linaccess::nativeModuleSource(objectDefinition("module",current));
             const auto catalog=linaccess::standardVbaModuleSources(db_);
             if(!catalog.contains(current.toCaseFolded()) || catalog.value(current.toCaseFolded())!=code) throw linaccess::VbaRuntimeError(3420,"Gespeicherter Modulkatalog hat sich geändert.");
             if(code!=source->toPlainText().toUtf8()) throw linaccess::VbaRuntimeError(3251,"Die gespeicherte Modulrevision hat sich geändert. Modul neu öffnen.");
-            const QList<QWidget*> protectedWidgets{run,debug,save,remove,analyze,name,source,procedures};for(auto* widget:protectedWidgets) widget->setEnabled(false);runShortcut->setEnabled(false);debugShortcut->setEnabled(false);const auto restore=qScopeGuard([&] {for(auto* widget:protectedWidgets) widget->setEnabled(true);remove->setEnabled(!current.isEmpty());name->setReadOnly(!current.isEmpty());runShortcut->setEnabled(true);debugShortcut->setEnabled(true);if(dialog.isVisible()) {dialog.raise();dialog.activateWindow();source->setFocus(Qt::OtherFocusReason);}});
+            const QList<QWidget*> protectedWidgets{run,debug,save,remove,analyze,name,source,procedures};for(auto* widget:protectedWidgets) widget->setEnabled(false);runShortcut->setEnabled(false);debugShortcut->setEnabled(false);const auto restore=qScopeGuard([&] {if(!guarded) return;for(auto* widget:protectedWidgets) widget->setEnabled(true);remove->setEnabled(!current.isEmpty());name->setReadOnly(!current.isEmpty());runShortcut->setEnabled(true);debugShortcut->setEnabled(true);if(dialog->isVisible()) {dialog->raise();dialog->activateWindow();source->setFocus(Qt::OtherFocusReason);}});
             linaccess::VbaExecutionResult outcome;bool stopped=false;QString debuggerError;
-            const auto inspected=runNativeModuleDebugger(dialog,db_,current,code,procedures->currentData().toString(),*breakpoints,stepping,checkProject);outcome=inspected.execution;stopped=inspected.stopped;debuggerError=inspected.debuggerError;
+            const auto inspected=runNativeModuleDebugger(*dialog,db_,current,code,procedures->currentData().toString(),*breakpoints,stepping,checkProject);if(!guarded) return;outcome=inspected.execution;stopped=inspected.stopped;debuggerError=inspected.debuggerError;
             if(stopped) result->setPlainText("Ausführung im Debugger beendet. Bereits ausgeführte Datenbankänderungen bleiben erhalten."+(debuggerError.isEmpty() ? QString{} : "\n"+debuggerError));
             else if(outcome.status==linaccess::VbaExecutionStatus::Completed) result->setPlainText("Prozedur ausgeführt."+(outcome.returnValue ? " Rückgabewert: "+QString::fromStdString(*outcome.returnValue) : QString{}));
             else result->setPlainText(QString("Fehler %1 in Zeile %2: %3").arg(outcome.errorNumber ? outcome.errorNumber : 3251).arg(outcome.line).arg(QString::fromStdString(outcome.explanation)));
-        }catch(const linaccess::VbaRuntimeError& error) {result->setPlainText(QString("Fehler %1: %2").arg(error.number).arg(QString::fromUtf8(error.what())));}
+        }catch(const linaccess::VbaRuntimeError& error) {if(guarded) result->setPlainText(QString("Fehler %1: %2").arg(error.number).arg(QString::fromUtf8(error.what())));}
     };
-    connect(run,&QPushButton::clicked,&dialog,[&] {executeModule(false);});connect(debug,&QPushButton::clicked,&dialog,[&] {executeModule(true);});
-    connect(save,&QPushButton::clicked,&dialog,[&] {
+    connect(run,&QPushButton::clicked,dialog,[executeModule] {executeModule(false);});connect(debug,&QPushButton::clicked,dialog,[executeModule] {executeModule(true);});
+    connect(save,&QPushButton::clicked,dialog,[this,dialog,checkProject,name,source,existingName,remove,updateProcedures,readOnly] {
+        NativeModuleEditorBusy busy(dialog);
         try {
-            checkProject();
+            checkProject();if(readOnly) throw linaccess::VbaRuntimeError(3251,"Imported source is read-only");
             const auto moduleName=name->text().trimmed();if(!linaccess::nativeModuleNameValid(moduleName)) throw linaccess::VbaRuntimeError(5,"Ungültiger Standardmodulname.");
             const QJsonObject definition{{"version",1},{"vba",source->toPlainText()}};(void)linaccess::nativeModuleSource(definition);
-            const auto saved=dialog.property("la_editor_saved_name").toString();const auto current=saved.isEmpty() ? existingName : saved;
+            const auto saved=dialog->property("la_editor_saved_name").toString();const auto current=saved.isEmpty() ? existingName : saved;
             const auto modules=linaccess::standardVbaModuleSources(db_);if(current.isEmpty() && modules.contains(moduleName.toCaseFolded())) throw linaccess::VbaRuntimeError(3010,"Modulname ist bereits vorhanden. Öffnen Sie das vorhandene native Modul oder wählen Sie einen anderen Namen.");
             if(!current.isEmpty() && current!=moduleName) throw linaccess::VbaRuntimeError(3251,"Modulumbenennung ist hier nicht implementiert.");
-            if(saveObject("module",moduleName,definition)) {name->setText(moduleName);name->setReadOnly(true);remove->setEnabled(true);tagProjectObject(&dialog,this,db_,"module",moduleName);completeDesignerSave(dialog,moduleName);updateProcedures();}
-        }catch(const std::exception& error) {messageError(&dialog,QString::fromUtf8(error.what()));}
+            const auto encoded=QString::fromUtf8(QJsonDocument(definition).toJson(QJsonDocument::Compact));QSqlQuery store(db_);
+            if(current.isEmpty()) {store.prepare("INSERT INTO main._la_objects(kind,name,definition) VALUES('module',?,?)");store.addBindValue(moduleName);store.addBindValue(encoded);}
+            else {store.prepare("UPDATE main._la_objects SET definition=? WHERE kind='module' AND name=? COLLATE BINARY AND definition=?");store.addBindValue(encoded);store.addBindValue(current);store.addBindValue(dialog->property("la_module_revision"));}
+            if(!store.exec()) throw linaccess::VbaRuntimeError(3146,"Native module save failed");
+            if(store.numRowsAffected()!=1) throw linaccess::VbaRuntimeError(3420,"Module revision changed; reopen it before saving");
+            dialog->setProperty("la_module_revision",encoded);refreshExplorer();
+            {name->setText(moduleName);name->setReadOnly(true);remove->setEnabled(true);tagProjectObject(dialog,this,db_,"module",moduleName);completeDesignerSave(*dialog,moduleName);updateProcedures();}
+        }catch(const std::exception& error) {messageError(dialog,QString::fromUtf8(error.what()));}
     });
-    connect(remove,&QPushButton::clicked,&dialog,[&] {
-        try {checkProject();
-        const auto saved=dialog.property("la_editor_saved_name").toString();const auto moduleName=saved.isEmpty() ? existingName : saved;if(moduleName.isEmpty()) return;
-        QSqlQuery snapshot(db_);snapshot.prepare("SELECT definition FROM main._la_objects WHERE kind='module' AND name=? COLLATE BINARY");snapshot.addBindValue(moduleName);if(!snapshot.exec() || !snapshot.next()) {messageError(&dialog,"Gespeichertes Modul ist nicht verfügbar.");return;}const auto previous=snapshot.value(0);snapshot.finish();
-        if(QMessageBox::question(&dialog,"Modul löschen","Gespeichertes Modul und ungespeicherten Text wirklich verwerfen?",QMessageBox::Yes|QMessageBox::No,QMessageBox::No)!=QMessageBox::Yes) return;
+    connect(remove,&QPushButton::clicked,dialog,[this,dialog,checkProject,existingName,readOnly] {
+        NativeModuleEditorBusy busy(dialog);try {checkProject();if(readOnly) throw linaccess::VbaRuntimeError(3251,"Imported source is read-only");
+        const auto saved=dialog->property("la_editor_saved_name").toString();const auto moduleName=saved.isEmpty() ? existingName : saved;if(moduleName.isEmpty()) return;
+        QSqlQuery snapshot(db_);snapshot.prepare("SELECT definition FROM main._la_objects WHERE kind='module' AND name=? COLLATE BINARY");snapshot.addBindValue(moduleName);if(!snapshot.exec() || !snapshot.next()) {messageError(dialog,"Gespeichertes Modul ist nicht verfügbar.");return;}const auto previous=snapshot.value(0);snapshot.finish();
+        if(QMessageBox::question(dialog,"Modul löschen","Gespeichertes Modul und ungespeicherten Text wirklich verwerfen?",QMessageBox::Yes|QMessageBox::No,QMessageBox::No)!=QMessageBox::Yes) return;
         checkProject();
         QSqlQuery query(db_);query.prepare("DELETE FROM main._la_objects WHERE kind='module' AND name=? COLLATE BINARY AND definition=?");query.addBindValue(moduleName);query.addBindValue(previous);
-        if(!query.exec() || query.numRowsAffected()!=1) {messageError(&dialog,"Modul wurde zwischenzeitlich geändert oder konnte nicht gelöscht werden.");return;}refreshExplorer();dialog.accept();
-        }catch(const std::exception& error) {messageError(&dialog,QString::fromUtf8(error.what()));}
+        if(!query.exec() || query.numRowsAffected()!=1) {messageError(dialog,"Modul wurde zwischenzeitlich geändert oder konnte nicht gelöscht werden.");return;}refreshExplorer();dialog->accept();
+        }catch(const std::exception& error) {messageError(dialog,QString::fromUtf8(error.what()));}
     });
-    trackDesignerChanges(dialog);dialog.exec();
+    if(!existingName.isEmpty() && !readOnly) {QSqlQuery revision(db_);revision.prepare("SELECT definition FROM main._la_objects WHERE kind='module' AND name=? COLLATE BINARY");revision.addBindValue(existingName);if(!revision.exec() || !revision.next()) {delete dialog;throw linaccess::VbaRuntimeError(3420,"Module revision unavailable");}dialog->setProperty("la_module_revision",revision.value(0));}
+    trackDesignerChanges(*dialog);return dialog;
 }
 
 void MainWindow::editMacro(const QString& existingName) {
@@ -2910,11 +2999,15 @@ bool MainWindow::canCloseDataPage(QWidget* page) {
     return true;
 }
 bool MainWindow::allowProjectClose(const QString& connection) {
+    if(property("la_module_project_closing").toBool()) return false;
     if(!connection.isEmpty() && connection!=db_.connectionName()) return true;
     if(linaccess::vbaDebuggerBusy()) {statusBar()->showMessage("Debugger fortsetzen oder beenden, bevor das Projekt geschlossen wird.",10000);return false;}
     if(queryExecutionDepth_>0) { statusBar()->showMessage("Projektwechsel während einer laufenden Abfrage ist noch nicht verfügbar.",10000); return false; }
     if(macroExecutionDepth_>0 || linaccess::nativeProjectMacrosActive(db_)) {statusBar()->showMessage("Projektwechsel während eines laufenden Makros ist nicht verfügbar.",10000);return false;}
     for(int i=0;i<tabs_->count();++i) if(!canCloseDataPage(tabs_->widget(i))) return false;
+    const auto old=property("la_module_project_closing");setProperty("la_module_project_closing",true);const auto reset=qScopeGuard([this,old] {setProperty("la_module_project_closing",old);});
+    QVector<QPointer<QDialog>> editors;for(auto* editor:findChildren<QDialog*>("native-module-editor")) if(editor->isVisible() && editor->property("la_module_modeless").toBool() && editor->property("la_project_object_generation")==property("la_project_generation")) editors.append(editor);
+    for(const auto& editor:editors) if(editor && !editor->close()) return false;
     return true;
 }
 

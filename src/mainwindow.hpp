@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QJsonObject>
+#include <QByteArray>
 #include "native_project_close_guard.hpp"
 #include <QMainWindow>
 #include <QSqlDatabase>
@@ -9,6 +10,7 @@
 #include <QVariantMap>
 #include <QSet>
 
+class QDialog;
 class QTabWidget;
 class QTreeWidget;
 class QTreeWidgetItem;
@@ -26,6 +28,8 @@ public:
     Q_INVOKABLE int activateOpenTable(const QString& name);
     Q_INVOKABLE int activateOpenQuery(const QString& name);
     Q_INVOKABLE int openTableDocument(const QString& name,int view,int mode);
+    Q_INVOKABLE QVariantMap openModuleDocument(const QString& name,const QString& procedure);
+    Q_INVOKABLE QVariantMap closeModuleDocument(int type,const QString& name,int save);
     Q_INVOKABLE QVariantMap openQueryDocument(const QString& name,int view,int mode);
     Q_INVOKABLE QVariantMap closeQueryDocument(int type,const QString& name,int save);
     Q_INVOKABLE QVariantMap dispatchTableCommand(int command);
@@ -88,6 +92,7 @@ private:
     int showTable(const QString& name,bool readOnly=false,bool interactive=true,const QString& queryName={},const QString& querySource={});
     void editQuery(const QString& name = {});
     void editMacro(const QString& name = {});
+    QDialog* createModuleEditor(const QString& name,const QByteArray& imported={},bool readOnly=false);
     void editModule(const QString& name = {});
     void editClass(const QString& name = {});
     void editForm(const QString& name = {});

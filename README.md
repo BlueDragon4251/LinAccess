@@ -1299,3 +1299,5 @@ Native SQL-Suche und Leerzeichenbehandlung: [InStr, StrComp und Trim](docs/NATIV
 Gruppenköpfe auf Folgeseiten und native Abschnitts-API: [Umfang](docs/NATIVE_REPORT_REPEAT_HEADER.md).
 
 Typisierte ASCII-Schreibweise und Rückwärtssuche in SQL: [LCase/UCase, StrReverse/InStrRev](docs/NATIVE_SQL_CASE_REVERSE.md).
+
+VBA-Standardmodule modelllos öffnen und bearbeiten: [DoCmd.OpenModule](docs/MODELESS_MODULE_EDITOR.md).
