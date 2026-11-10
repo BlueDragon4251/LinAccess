@@ -5973,3 +5973,20 @@ Echte Tastatur-/VBA-/SQL-/TEMP-Refusal-/Retry-Belege; keine neuen CTest-/Katalog
 456/386/70. Vorstufe65fa8d1 privat remote/Baum geprüft. Abfrageformulare/Provider/
 Quellgenerations-/vollständige Orakelparität offen. Letztes geprüftes DEB/Original
 weiterhinc67cbd9e vor späteren Änderungen. Ohne Zwischenabschluss weiterarbeiten.
+
+
+DAO-Aliasse/Record-Clipboard: DAO_EDITABLE_QUERY_ALIASES.md und
+RECORD_CLIPBOARD_INSERT_IDENTITY.md dokumentieren getrennte sichtbare/physische
+Feldzuordnung für Schreiben, Generatoren, Defaults/Typen/Herkunft/Properties und
+Klone. Gemeinsamer Validator prüft WHERE physisch bei abgeschaltetem DQS-Fallback,
+ohne Ausführung; mehrdeutige Qt-Fold-Ausgaben nicht schreibbar. Clipboard nutzt
+main-Bindung/Quellprüfung und echte RETURNING-Identität auch0. Gemeinsames Bündel:
+5/6 bestanden; DAO-Fixtureannahmen zu unbewiesenen Original-Properties und noch
+nicht unterstütztem Currency-CreateField korrigiert, ausschließlich DAO wiederholt,
+zuletzt1/1 in3,61s. Modell/Currency/Layout13,78s nicht erneut ausgeführt.
+Echte VBA-/SQL-/Counter-/Single-/Date-/BLOB-/Property-/Clipboard-Belege; exakte
+Currency-Aliasse an unterstützter physischer Tick-Tabelle. Keine neue Currency-
+CreateField-/Orakel-/vollständige Query-Paritätsbehauptung. Keine neuen CTest-/
+Katalog-IDs;456/386/70. Vorstufe73328ff privat remote/Baum geprüft. Letztes DEB/
+Original weiterhinc67cbd9e; nach Sicherung gesammelten Stand paketieren/Original
+prüfen und ohne Zwischenabschluss weitere allgemeine Anforderungen implementieren.

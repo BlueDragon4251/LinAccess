@@ -30,6 +30,7 @@
 #include <cassert>
 #include <iostream>
 #include <map>
+#include <tuple>
 #include <limits>
 #include <cmath>
 #include <thread>
@@ -1061,7 +1062,13 @@ void testEditableStarQueryDynasets() {
     assert(projectedFields->member("Item",{VbaValue::integer(0)}).object->member("Name",{}).asText()=="score");
     projected->member("Edit",{});projected->assignItem("score",VbaValue::longInteger(41));projected->member("Update",{});
     assert(sql.exec("SELECT score FROM query_edit_rows WHERE id=0") && sql.next() && sql.value(0).toInt()==41);sql.finish();
-    auto aliased=open("SELECT score AS renamed FROM query_edit_rows");assert(!aliased->member("Updatable",{}).truthy());
+    auto aliased=open("SELECT score AS renamed FROM query_edit_rows ORDER BY id");assert(aliased->member("Updatable",{}).truthy());
+    auto aliasField=aliased->member("Fields",{VbaValue::string("renamed")}).object;
+    assert(aliasField->member("SourceField",{}).asText()=="score");error([&] {aliasField->member("Properties",{VbaValue::string("SourceField")});},3251);
+    aliased->member("Edit",{});aliased->assignItem("renamed",VbaValue::longInteger(42));aliased->member("Update",{});
+    assert(sql.exec("SELECT score FROM query_edit_rows WHERE id=0") && sql.next() && sql.value(0).toInt()==42);sql.finish();
+    assert(!open("SELECT score AS renamed FROM query_edit_rows WHERE [renamed]>20")->member("Updatable",{}).truthy());
+    assert(!open("SELECT score AS [ä],label AS [Ä] FROM query_edit_rows")->member("Updatable",{}).truthy());
     auto projectedPeer=projected->member("Clone",{}).object;projectedPeer->member("MoveFirst",{});assert(projectedPeer->item("score").asNumber()==41);
     assert(projectedFields->member("Item",{VbaValue::integer(0)}).object->member("SourceField",{}).asText()=="score");
     assert(sql.exec("CREATE TABLE projected_defaults(id INTEGER PRIMARY KEY,shown INTEGER,omitted TEXT DEFAULT 'native-default',stamp DATE DEFAULT CURRENT_TIMESTAMP)"));sql.finish();
@@ -1080,12 +1087,12 @@ void testEditableStarQueryDynasets() {
     assert(sql.exec("CREATE TABLE no_query_key(value INTEGER)"));assert(sql.exec("INSERT INTO no_query_key VALUES(7)"));sql.finish();assert(!open("SELECT * FROM no_query_key")->member("Updatable",{}).truthy());
     Host host(db);const auto result=executeVbaProcedure(R"VBA(Function EditStarQuery As Long
 Dim rows As DAO.Recordset
-Set rows=CurrentDb.OpenRecordset("SELECT score FROM query_edit_rows WHERE id=1",dbOpenDynaset)
+Set rows=CurrentDb.OpenRecordset("SELECT score AS EditedScore FROM query_edit_rows WHERE id=1",dbOpenDynaset)
 If Not rows.Updatable Then Err.Raise 5
 rows.Edit
-rows!score=12
+rows!EditedScore=12
 rows.Update
-EditStarQuery=rows!score
+EditStarQuery=rows!EditedScore
 rows.Close
 End Function)VBA","EditStarQuery",host);
     if(result.status!=VbaExecutionStatus::Completed) std::cerr<<"Editable star: "<<result.explanation<<" line "<<result.line<<" error "<<result.errorNumber<<'\n';
@@ -1243,8 +1250,33 @@ End Function)VBA","DeleteCursorRows",host);
 
 }
 
+void testEditableTypedAliases() {
+    using namespace linaccess;auto db=QSqlDatabase::addDatabase("QSQLITE","dao-typed-alias");db.setDatabaseName(":memory:");assert(db.open());QSqlQuery sql(db);auto database=makeDaoDatabase(db);
+    auto table=database->member("CreateTableDef",{VbaValue::string("AliasTyped")}).object;
+    auto id=table->member("CreateField",{VbaValue::string("ID"),VbaValue::integer(4)}).object;id->assign("Attributes",VbaValue::longInteger(16));table->member("Fields",{}).object->member("Append",{VbaValue::reference(id)});
+    for(const auto& item:std::vector<std::tuple<const char*,int,const char*>>{{"Measured",6,"0.1"},{"Stamp",8,"Now()"},{"Label",10,"\"initial\""},{"Payload",11,""}}) {
+        auto field=table->member("CreateField",{VbaValue::string(std::get<0>(item)),VbaValue::integer(std::get<1>(item)),VbaValue::longInteger(std::get<1>(item)==10 ? 12 : 0)}).object;
+        if(*std::get<2>(item)) field->assign("DefaultValue",VbaValue::string(std::get<2>(item)));table->member("Fields",{}).object->member("Append",{VbaValue::reference(field)});
+    }
+    auto primary=table->member("CreateIndex",{VbaValue::string("PrimaryKey")}).object;primary->assign("Primary",VbaValue::logical(true));primary->member("Fields",{}).object->member("Append",{primary->member("CreateField",{VbaValue::string("ID")})});table->member("Indexes",{}).object->member("Append",{VbaValue::reference(primary)});database->member("TableDefs",{}).object->member("Append",{VbaValue::reference(table)});
+    auto rows=database->member("OpenRecordset",{VbaValue::string("SELECT Label AS Caption,ID AS KeyValue,Measured AS Ratio,Stamp AS Moment,Payload AS Bytes FROM AliasTyped ORDER BY KeyValue"),VbaValue::integer(2)}).object;
+    assert(rows->member("Updatable",{}).truthy());rows->member("AddNew",{});assert(rows->item("KeyValue").asNumber()==1 && rows->item("Ratio").numericType==VbaValue::NumericType::Single && rows->item("Moment").kind==VbaValue::Kind::Date);
+    rows->assignItem("Caption",VbaValue::string("created"));rows->member("Fields",{VbaValue::string("Bytes")}).object->member("AppendChunk",{VbaValue::byteArray({0,1,255})});rows->member("Update",{});
+    assert(rows->item("Caption").asText()=="created");
+    auto key=rows->member("Fields",{VbaValue::string("KeyValue")}).object;assert(key->member("Attributes",{}).asNumber()==49 && key->member("SourceField",{}).asText()=="ID");assert(key->member("Properties",{VbaValue::string("SourceField")}).object->member("Value",{}).asText()=="ID");
+    auto caption=rows->member("Fields",{VbaValue::string("Caption")}).object;assert(caption->member("Size",{}).asNumber()==12 && caption->member("Properties",{VbaValue::string("DefaultValue")}).object->member("Value",{}).asText()=="\"initial\"");
+    auto peer=rows->member("Clone",{}).object;peer->member("MoveFirst",{});peer->member("Edit",{});peer->assignItem("Caption",VbaValue::string("peer"));int number=0;try {peer->assignItem("KeyValue",VbaValue::longInteger(99));}catch(const VbaRuntimeError& failure) {number=failure.number;}assert(number==3164);peer->member("Update",{});
+    assert(rows->item("Caption").asText()=="peer");assert(sql.exec("SELECT Label,hex(Payload),Stamp FROM main.AliasTyped WHERE ID=1") && sql.next() && sql.value(0).toString()=="peer" && sql.value(1).toString()=="0001FF" && !sql.value(2).isNull());sql.finish();
+    assert(sql.exec("CREATE TABLE AliasMoney(id INTEGER PRIMARY KEY,amount CURRENCY_TICKS DEFAULT 12500)"));sql.finish();
+    auto money=database->member("OpenRecordset",{VbaValue::string("SELECT amount AS Total,id AS KeyValue FROM AliasMoney"),VbaValue::integer(2)}).object;
+    assert(money->member("Updatable",{}).truthy());money->member("AddNew",{});money->assignItem("KeyValue",VbaValue::longInteger(1));assert(money->item("Total").currencyUnits==12500);money->assignItem("Total",VbaValue::currency(1234567890123456LL));money->member("Update",{});
+    assert(money->item("Total").currencyUnits==1234567890123456LL && money->member("Fields",{VbaValue::string("Total")}).object->member("Type",{}).asNumber()==5);
+    assert(sql.exec("SELECT amount FROM main.AliasMoney WHERE id=1") && sql.next() && sql.value(0).toLongLong()==1234567890123456LL);sql.finish();
+}
+
 void testOwnedQueryDefs() {
     testEditableStarQueryDynasets();
+    testEditableTypedAliases();
     testRecordsetCopyQueryDef();
     auto db=QSqlDatabase::addDatabase("QSQLITE","owned-querydef-sql"); db.setDatabaseName(":memory:"); assert(db.open());
     QSqlQuery sql(db);

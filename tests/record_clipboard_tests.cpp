@@ -90,7 +90,18 @@ End Sub
     auto manualDefinition=definition; manualDefinition.replace("records","manual");
     AccessFormPreview manual("manual key",manualDefinition,code,db); manual.show(); manual.activateWindow(); QApplication::processEvents();
     result=manual.executeProcedure("Duplicate",arguments); assert(result.errorNumber==3022);
-    assert(sql.exec("SELECT count(*) FROM manual") && sql.next() && sql.value(0).toInt()==1); sql.finish(); assert(manual.close());
+    assert(sql.exec("SELECT count(*) FROM manual") && sql.next() && sql.value(0).toInt()==1);sql.finish();
+    auto zeroData=QJsonDocument::fromJson(original).object();auto zeroFields=zeroData["fields"].toArray();
+    for(int i=0;i<zeroFields.size();++i) {auto field=zeroFields[i].toObject();if(field["name"].toString()=="id") {field["value"]="0";zeroFields[i]=field;}}
+    zeroData["fields"]=zeroFields;setClipboard(QJsonDocument(zeroData).toJson());
+    result=manual.executeProcedure("Append",arguments);assert(result.status==VbaExecutionStatus::Completed);
+    auto manualRoot=makePreviewFormObject(manual);assert(manualRoot->item("id").asNumber()==0 && manualRoot->member("Recordset",{}).object->member("RecordCount",{}).asNumber()==2);
+    assert(sql.exec("SELECT count(*) FROM main.manual WHERE id=0") && sql.next() && sql.value(0).toInt()==1);sql.finish();
+    assert(sql.exec("CREATE TEMP TABLE manual AS SELECT * FROM main.manual WHERE id=1"));sql.finish();setClipboard(original);
+    result=manual.executeProcedure("Append",arguments);assert(result.errorNumber==3251);
+    assert(sql.exec("SELECT count(*) FROM main.manual") && sql.next() && sql.value(0).toInt()==2);sql.finish();
+    assert(sql.exec("SELECT count(*) FROM temp.manual") && sql.next() && sql.value(0).toInt()==1);sql.finish();
+    assert(sql.exec("DROP TABLE temp.manual"));sql.finish();assert(manual.close());
     auto eventDefinition=definition; eventDefinition.replace("Begin Form\n","Begin Form\nBeforeInsert =\"[Event Procedure]\"\n");
     const auto eventCode=code+"Sub Form_BeforeInsert(Cancel As Integer)\nCurrentDb.Execute \"CREATE TABLE forbidden_event(value)\"\nEnd Sub\n";
     AccessFormPreview guarded("unsupported insert pipeline",eventDefinition,eventCode,db); setClipboard(original);

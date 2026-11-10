@@ -2463,6 +2463,8 @@ QString editableAccessQueryTable(QSqlDatabase db,const QString& source,QString* 
         if(column<0 || projectedColumns.contains(column) || outputFields.contains(output)) throw VbaRuntimeError(3251,"Editable fields must resolve uniquely");
         projectedColumns.insert(column);outputFields.insert(output,column);const auto caption=nativeName(field.alias)==nativeName(schema.fieldName(column)) ? QString{} : field.alias;mapped.push_back({column,caption});
     }
+    QSet<QString> visibleNames;
+    for(const auto& field:mapped) {const auto output=(field.alias.isEmpty() ? schema.fieldName(field.column) : field.alias).toCaseFolded();if(visibleNames.contains(output)) throw VbaRuntimeError(3251,"Editable output fields are ambiguous for native lookup");visibleNames.insert(output);}
     QVector<QPair<int,Qt::SortOrder>> ordering;QSet<int> orderedColumns;
     for(const auto& field:orderedFields) {
         int column=field.qualified ? -1 : outputFields.value(nativeName(field.name),-1);
@@ -2477,6 +2479,15 @@ QString editableAccessQueryTable(QSqlDatabase db,const QString& source,QString* 
         if(!known) throw VbaRuntimeError(3251,"Editable qualified predicate field is unavailable");
         predicateTokens[i].value=table;predicateTokens[i].kind=Token::Identifier;i+=2;
     }
+    const auto databaseHandle=db.driver()->handle();
+    if(!databaseHandle.isValid() || QByteArray(databaseHandle.typeName())!="sqlite3*") throw VbaRuntimeError(3251,"Editable physical predicate connection unavailable");
+    auto* connection=*static_cast<sqlite3* const*>(databaseHandle.constData());int previousDqs=0;
+    if(!connection || sqlite3_db_config(connection,SQLITE_DBCONFIG_DQS_DML,-1,&previousDqs)!=SQLITE_OK || sqlite3_db_config(connection,SQLITE_DBCONFIG_DQS_DML,0,nullptr)!=SQLITE_OK)
+        throw VbaRuntimeError(3251,"Strict editable predicate preparation unavailable");
+    const auto restoreDqs=qScopeGuard([&] {sqlite3_db_config(connection,SQLITE_DBCONFIG_DQS_DML,previousDqs,nullptr);});
+    QSqlQuery physicalPredicate(db);
+    if(!physicalPredicate.prepare("SELECT 1 FROM main."+identifier(table)+(predicateTokens.isEmpty() ? QString{} : " WHERE ("+renderJetTokens(predicateTokens)+")")))
+        throw VbaRuntimeError(3251,"Editable WHERE must resolve against physical source fields");
     QSqlQuery syntax(db);if(!syntax.prepare(plan.sql)) throw VbaRuntimeError(3251,"Editable query must resolve as the checked physical projection");
     if(filter) *filter=renderJetTokens(predicateTokens);
     if(sort) *sort=ordering;

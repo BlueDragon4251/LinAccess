@@ -131,7 +131,7 @@ keine Tests oder Teilpunkte allein zur Erhöhung einer Fortschrittszahl anlegen.
 - [x] **F023** — Recordset iteration, named/indexed Field.Value access and edit/insert/delete buffers.
 - [ ] **F052** — Application/Forms/Reports/Me/DoCmd and Access/DAO constants.
 - [ ] **F053** — CurrentDb/DBEngine/Workspace/Database, DAO transactions and ADO adapter.
-- [ ] **F055** — Edit/AddNew/Update/Delete, QueryDefs/Parameters/TableDefs and Requery. Physical subset/reordered projections: [scope](DAO_EDITABLE_QUERY_PROJECTIONS.md). Bounded editable star-query dynasets: [scope](DAO_EDITABLE_STAR_QUERIES.md). Bounded actual Recordset.CopyQueryDef: [scope](DAO_COPYQUERYDEF.md); AddNew current/LastModified: [scope](DAO_ADDNEW_CURRENT.md).
+- [ ] **F055** — Edit/AddNew/Update/Delete, QueryDefs/Parameters/TableDefs and Requery. Physical-field aliases: [scope](DAO_EDITABLE_QUERY_ALIASES.md). Physical subset/reordered projections: [scope](DAO_EDITABLE_QUERY_PROJECTIONS.md). Bounded editable star-query dynasets: [scope](DAO_EDITABLE_STAR_QUERIES.md). Bounded actual Recordset.CopyQueryDef: [scope](DAO_COPYQUERYDEF.md); AddNew current/LastModified: [scope](DAO_ADDNEW_CURRENT.md).
 - [x] **F108** — Native QueryDef.Parameters Count/Item/For Each, stable object identity, generation/close invalidation and original six-query collection regression.
 - [ ] **F121** — Complete DAO catalog Fields/Indexes/Relations, Refresh/Append/Delete, linked-table metadata and immutable generation identity across drop/recreate. Bounded actual field origins: [scope](DAO_FIELD_ORIGINS.md).
 - [ ] **F122** — Full declared result/local/argument type enforcement and Access DAO oracle.

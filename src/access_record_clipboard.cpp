@@ -116,8 +116,9 @@ void AccessFormPreview::pasteAppendRecord() {
     QString table;
     for (const auto& candidate:db_.tables()) if (candidate.compare(layout_.recordSource.trimmed(),Qt::CaseInsensitive)==0) { table=candidate; break; }
     if (table.isEmpty()) throw VbaRuntimeError(3078,"Append table unavailable");
+    checkPhysicalRecordSource();
     QSet<QString> counters;
-    QSqlQuery metadata(db_); metadata.prepare("SELECT definition FROM _la_table_schema WHERE table_name=?"); metadata.addBindValue(table);
+    QSqlQuery metadata(db_); metadata.prepare("SELECT definition FROM main._la_table_schema WHERE table_name=?"); metadata.addBindValue(table);
     if (metadata.exec() && metadata.next())
         for (const auto& field:QJsonDocument::fromJson(metadata.value(0).toByteArray()).array())
             if (field.toObject()["auto_number"].toBool()) counters.insert(field.toObject()["name"].toString().toCaseFolded());
@@ -150,7 +151,7 @@ void AccessFormPreview::pasteAppendRecord() {
             const QSignalBlocker blocked(recordSelector_); recordSelector_->setCurrentIndex(index); currentRecordIndex_=index; loadRecord(); recordsetSnapshot_=snapshot;
         }
     });
-    const auto insert=columns.isEmpty() ? "INSERT INTO "+identifier(table)+" DEFAULT VALUES" : "INSERT INTO "+identifier(table)+"("+columns.join(',')+") VALUES("+placeholders.join(',')+")";
+    const auto insert=columns.isEmpty() ? "INSERT INTO main."+identifier(table)+" DEFAULT VALUES RETURNING rowid" : "INSERT INTO main."+identifier(table)+"("+columns.join(',')+") VALUES("+placeholders.join(',')+") RETURNING rowid";
     {
         linaccess::SqliteExecutionBudget budget(db_);
         if (!sql.prepare(insert)) throw VbaRuntimeError(3146,"Append preparation failed");
@@ -162,8 +163,10 @@ void AccessFormPreview::pasteAppendRecord() {
             throw VbaRuntimeError(number,"Record append failed");
         }
     }
-    if (sql.numRowsAffected()!=1) throw VbaRuntimeError(3146,"Append affected an unexpected row count");
-    const auto id=sql.lastInsertId(); sql.finish();
+    if(!sql.next()) throw VbaRuntimeError(3146,"Appended row identity unavailable");
+    const auto id=sql.value(0);
+    if(id.isNull() || sql.next() || sql.lastError().isValid()) throw VbaRuntimeError(3146,"Appended row identity is ambiguous");
+    sql.finish();
     loadRecords(); displayed=true;
     if (!dataSourceAvailable_ || dataTruncated_) throw VbaRuntimeError(3035,"Complete appended record view unavailable");
     const int index=rowIds_.indexOf(id)+1;

@@ -540,10 +540,10 @@ public:
                 QString predicate;QVector<QPair<int,Qt::SortOrder>> ordering;QVector<AccessQueryColumn> projection;
                 const auto target=editableAccessQueryTable(db_,queryPlan_.source,&predicate,&ordering,&projection);
                 (void)physicalRowIdentity(db_,target);(void)readTableSchemaColumns(db_,target);
-                const auto schema=db_.record(target);QStringList terms,fields;
-                for(const auto& field:projection) {if(!field.alias.isEmpty()) throw VbaRuntimeError(3251,"DAO: Writable query aliases are not mapped");fields.append(schema.fieldName(field.column));}
+                const auto schema=db_.record(target);QStringList terms,fields,names;
+                for(const auto& field:projection) {const auto physical=schema.fieldName(field.column);fields.append(physical);names.append(field.alias.isEmpty() ? physical : field.alias);}
                 for(const auto& item:ordering) terms.append(quote(schema.fieldName(item.first))+(item.second==Qt::DescendingOrder ? " DESC" : " ASC"));
-                source_=target;table_=true;queryBased_=true;queryWhere_=predicate;queryOrdering_=terms;queryProjection_=fields;
+                source_=target;table_=true;queryBased_=true;queryWhere_=predicate;queryOrdering_=terms;queryProjection_=fields;queryOutputNames_=names;
             } catch(const VbaRuntimeError& failure) {if(failure.number!=3251) throw;}
         }
         if(table_ && nativeTableNames(db_).contains(source_,Qt::CaseInsensitive)) tableGeneration_=data_->workspace->tableGenerations.value(source_.toCaseFolded());
@@ -808,8 +808,8 @@ public:
                 QStringList expressions,names;for(auto it=data_->defaultExpressions.cbegin();it!=data_->defaultExpressions.cend();++it) if(data_->daoTypes.value(it.key())==8) if(const auto expression=nativeDateDefaultSql(it.value())) {names.append(it.key());expressions.append(*expression);}
                 if(!expressions.isEmpty()) {installJetSqlFunctions(db_);QSqlQuery defaults(db_);if(!defaults.exec("SELECT "+expressions.join(',')) || !defaults.next()) queryFailure(defaults);for(int i=0;i<names.size();++i) {const auto index=column(names[i]);pending_[index]=defaults.value(i);changed_.insert(index);}}
                 const auto generators=generatedAccessColumns(db_,source_);
-                for(int i=0;i<data_->columns.size();++i) if(generators.contains(data_->columns[i].toCaseFolded())) {
-                    const auto reservation=reserveAccessCounter(db_,source_,data_->columns[i]);
+                for(int i=0;i<data_->columns.size();++i) if(generators.contains(physicalField(data_->columns[i]).toCaseFolded())) {
+                    const auto reservation=reserveAccessCounter(db_,source_,physicalField(data_->columns[i]));
                     pending_[i]=reservation.value;changed_.insert(i);
                     if(!data_->workspace->savepoints.isEmpty()) {
                         const auto key=reservation.table+QChar(0)+reservation.column;
@@ -916,7 +916,7 @@ public:
     VbaValue generatedFieldProperty(const QString& name,bool attributes) const {
         (void)fieldType(name);
         if(!table_ || declaredFieldType(name).asNumber()!=4
-            || !generatedAccessColumns(db_,source_).contains(name.toCaseFolded()))
+            || !generatedAccessColumns(db_,source_).contains(physicalField(name).toCaseFolded()))
             throw VbaRuntimeError(3251,"DAO: Field generator property is not proven in this context");
         // Access2003/DAO3.6 writable Long counter observation: Fixed|AutoIncr|Updatable.
         const bool writable=!readOnly_ && connectionUpdatable(db_);return attributes ? VbaValue::longInteger(writable ? 49 : 17) : VbaValue::logical(writable);
@@ -925,7 +925,8 @@ public:
         (void)fieldType(name);const auto& properties=allowZeroLength ? data_->allowZeroLengthFields : data_->requiredFields;const auto key=name.toCaseFolded();
         if(!properties.contains(key)) throw VbaRuntimeError(3251,"DAO: Recordset field property has no proven native declaration");return VbaValue::logical(properties.value(key));
     }
-    QVector<TableSchemaColumn> propertySchema() const {checkTransaction();if(closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");if(!table_) throw VbaRuntimeError(3251,"DAO: Query field properties are not proven");return readTableSchemaColumns(db_,source_);}
+    QVector<TableSchemaColumn> propertySchema() const {checkTransaction();if(closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");if(!table_) throw VbaRuntimeError(3251,"DAO: Query field properties are not proven");auto schema=readTableSchemaColumns(db_,source_);if(!queryBased_) return schema;QVector<TableSchemaColumn> selected;
+        for(int i=0;i<queryProjection_.size();++i) for(auto field:schema) if(field.name.compare(queryProjection_[i],Qt::CaseInsensitive)==0) {field.fieldOrigin={source_,field.name};field.name=queryOutputNames_[i];selected.append(std::move(field));break;}return selected;}
     VbaValue schemaFieldValidation(const QString& name,bool message) const {
         (void)fieldType(name);const auto& properties=message ? data_->validationTexts : data_->validationRules;const auto key=name.toCaseFolded();if(!properties.contains(key)) throw VbaRuntimeError(3251,"DAO: Recordset validation metadata has no proven native declaration");return VbaValue::string(properties.value(key).toStdString());
     }
@@ -1016,8 +1017,8 @@ public:
         require(mode_ != Mode::Browse, "DAO: Edit or AddNew required");
         const auto index = column(name);
         if(mode_==Mode::Add && value.kind==VbaValue::Kind::Null && !pending_[index].isNull()
-            && generatedAccessColumns(db_,source_).contains(name.toCaseFolded())) return;
-        if(mode_==Mode::Edit && table_ && generatedAccessColumns(db_,source_).contains(name.toCaseFolded()))
+            && generatedAccessColumns(db_,source_).contains(physicalField(name).toCaseFolded())) return;
+        if(mode_==Mode::Edit && table_ && generatedAccessColumns(db_,source_).contains(physicalField(name).toCaseFolded()))
             throw VbaRuntimeError(3164,"DAO: AutoNumber field cannot be updated");
         const auto type=data_->types.value(name.toCaseFolded());
         if(chunkFields_.contains(index)) throw VbaRuntimeError(3251,"Mixed AppendChunk and binary Value assignment is unsupported");
@@ -1045,7 +1046,7 @@ private:
     struct CloneTag {};
     Recordset(const Recordset& source,CloneTag)
         : data_(source.data_),db_(source.db_),source_(source.source_),openingName_(source.openingName_),bindings_(source.bindings_),
-          table_(source.table_),readOnly_(source.readOnly_),frozen_(source.frozen_),queryBased_(source.queryBased_),recordsetType_(source.recordsetType_),tableGeneration_(source.tableGeneration_),indexName_(source.indexName_),position_(-1),queryPlan_(source.queryPlan_),queryDefinitionSource_(source.queryDefinitionSource_),filter_(source.filter_),sort_(source.sort_),queryWhere_(source.queryWhere_),queryOrdering_(source.queryOrdering_),queryProjection_(source.queryProjection_) {
+          table_(source.table_),readOnly_(source.readOnly_),frozen_(source.frozen_),queryBased_(source.queryBased_),recordsetType_(source.recordsetType_),tableGeneration_(source.tableGeneration_),indexName_(source.indexName_),position_(-1),queryPlan_(source.queryPlan_),queryDefinitionSource_(source.queryDefinitionSource_),filter_(source.filter_),sort_(source.sort_),queryWhere_(source.queryWhere_),queryOrdering_(source.queryOrdering_),queryProjection_(source.queryProjection_),queryOutputNames_(source.queryOutputNames_) {
         cloneCounted_=true; ++data_->workspace->clones;
         data_->cursors.insert(this);
     }
@@ -1055,6 +1056,7 @@ private:
             if (data_->columns[i].compare(name, Qt::CaseInsensitive) == 0) return i;
         throw std::runtime_error("DAO: Unknown field");
     }
+    QString physicalField(const QString& name) const {return queryBased_ ? queryProjection_.value(column(name)) : name;}
     QString queryPredicate() const {return queryWhere_.isEmpty() ? QString{} : " AND ("+queryWhere_+")";}
     void current() const { if (deleted_ || position_<0 || position_>=data_->rows.size()) throw VbaRuntimeError(3021,"DAO: No current record"); }
     void navigate(qsizetype target,int emptyDirection=0) {
@@ -1179,10 +1181,11 @@ private:
             if(mainName.isEmpty()) data_->types=sqliteColumnTypes(db_,source_);
             else {
                 const auto schema=readTableSchemaColumns(db_,mainName);
-                data_->literalDefaults=literalDefaultValues(db_,schema);
+                const auto defaults=literalDefaultValues(db_,schema);
                 for(const auto& field:schema) {
-                if(queryBased_ && !queryProjection_.contains(field.name,Qt::CaseInsensitive)) {data_->literalDefaults.remove(field.name.toCaseFolded());continue;}
-                const auto key=field.name.toCaseFolded(); data_->types.insert(key,field.type);
+                int projected=-1;if(queryBased_) {for(int i=0;i<queryProjection_.size();++i) if(queryProjection_[i].compare(field.name,Qt::CaseInsensitive)==0) projected=i;if(projected<0) continue;}
+                const auto key=(queryBased_ ? queryOutputNames_[projected] : field.name).toCaseFolded();
+                if(defaults.contains(field.name.toCaseFolded())) data_->literalDefaults.insert(key,defaults.value(field.name.toCaseFolded())); data_->types.insert(key,field.type);
                 if(field.nativeAttributes) {data_->validationRules.insert(key,field.validationRule);data_->validationTexts.insert(key,field.validationText);}
                 if(field.required) data_->requiredFields.insert(key,*field.required);if(field.allowZeroLength) data_->allowZeroLengthFields.insert(key,*field.allowZeroLength);
                 const auto code=field.sourceType ? field.sourceType : provenDaoFieldType(field.type);
@@ -1206,14 +1209,14 @@ private:
         QSqlQuery query(db_);
         data_->rowIdentity=physicalRowIdentity(db_,source_);std::optional<NativeRecordsetIndex> selected;QString order;if(!indexName_.isEmpty()) {selected=checkedRecordsetIndex(db_,source_,indexName_);QStringList terms;for(int field=0;field<selected->fields.size();++field) terms.append(quote(selected->fields[field])+(selected->descending[field] ? " DESC" : " ASC"));terms.append(data_->rowIdentity+" ASC");order=" ORDER BY "+terms.join(',');}
         if(indexName_.isEmpty() && !queryOrdering_.isEmpty()) {auto terms=queryOrdering_;terms.append(data_->rowIdentity+" ASC");order=" ORDER BY "+terms.join(',');}
-        QStringList selection;for(const auto& field:queryProjection_) selection.append(quote(field));
+        QStringList selection;for(int i=0;i<queryProjection_.size();++i) selection.append(quote(queryProjection_[i])+" AS "+quote(queryOutputNames_[i]));
         exec(query,"SELECT "+data_->rowIdentity+","+(queryBased_ ? selection.join(',') : QString("*"))+" FROM main." + quote(source_)+(queryWhere_.isEmpty() ? QString{} : " WHERE ("+queryWhere_+")")+order);data_->selectedIndex=std::move(selected);
         const int offset = table_ ? 1 : 0;
         data_->columns.clear(); data_->rows.clear(); data_->ids.clear(); position_ = 0;
         const int end = query.record().count();
         for (int i = offset; i < end; ++i) data_->columns << query.record().fieldName(i);
         data_->fieldOrigins.resize(data_->columns.size());
-        if(!tableOrigin.isEmpty()) for(int i=0;i<data_->columns.size();++i) data_->fieldOrigins[i]={tableOrigin,data_->columns[i]};
+        if(!tableOrigin.isEmpty()) for(int i=0;i<data_->columns.size();++i) data_->fieldOrigins[i]={tableOrigin,queryBased_ ? queryProjection_[i] : data_->columns[i]};
         while (query.next()) {
             require(data_->rows.size() < 100000, "DAO: Recordset row limit exceeded");
             QVariantList row;
@@ -1245,10 +1248,10 @@ private:
         QVariant id = adding ? QVariant{} : data_->ids[position_];
         QStringList columns, values, assignments;
         QList<int> indices = changed_.values();
-        if (adding) indices.removeIf([&](int index) { return pending_[index].isNull() && generated.contains(data_->columns[index].toCaseFolded()); });
+        if (adding) indices.removeIf([&](int index) { return pending_[index].isNull() && generated.contains(physicalField(data_->columns[index]).toCaseFolded()); });
         std::sort(indices.begin(), indices.end());
         for (const int i : indices) {
-            columns << quote(data_->columns[i]); values << "?"; assignments << quote(data_->columns[i]) + "=?";
+            columns << quote(physicalField(data_->columns[i])); values << "?"; assignments << quote(physicalField(data_->columns[i])) + "=?";
         }
         QSqlQuery query(db_);
         if (adding && columns.empty()) { if (!query.exec("INSERT INTO main." + quote(source_) + " DEFAULT VALUES")) queryFailure(query); }
@@ -1297,7 +1300,7 @@ private:
     AccessQueryPlan queryPlan_;
     QString queryDefinitionSource_;
     QString filter_,sort_,queryWhere_;
-    QStringList queryOrdering_,queryProjection_;
+    QStringList queryOrdering_,queryProjection_,queryOutputNames_;
     std::weak_ptr<VbaObject> fields_;
     QMap<QString,std::weak_ptr<Field>> fieldObjects_;
 };
