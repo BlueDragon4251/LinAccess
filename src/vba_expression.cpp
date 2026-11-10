@@ -717,19 +717,21 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
 }
 
 class VbaDictionary final : public VbaObject,public NativeVariantContainer {
-    struct Key { bool numeric{}; std::uint64_t number{}; std::string text; bool operator==(const Key&) const = default; };
-    struct Hash { std::size_t operator()(const Key& key) const { return key.numeric ? std::hash<std::uint64_t>{}(key.number)^0x9e3779b9U : std::hash<std::string>{}(key.text); } };
+    struct Key { bool numeric{}; std::uint64_t number{}; std::string text; const VbaObject* object{}; bool operator==(const Key&) const = default; };
+    struct Hash { std::size_t operator()(const Key& key) const { return key.object ? std::hash<const VbaObject*>{}(key.object)^0x85ebca6bU : key.numeric ? std::hash<std::uint64_t>{}(key.number)^0x9e3779b9U : std::hash<std::string>{}(key.text); } };
     struct Entry { Key key; VbaValue original,value; };
     std::list<Entry> entries_;
     std::unordered_map<Key,std::list<Entry>::iterator,Hash> index_;
     std::shared_ptr<int> enumerators_=std::make_shared<int>(0);
     int compare_{};
     Key key(const VbaValue& value) const {
+        if(value.kind==VbaValue::Kind::Object && value.object && dynamic_cast<const NativeVariantContainer*>(value.object.get()))
+            return {false,0,{},value.object.get()};
         if(value.kind==VbaValue::Kind::Number) {
             if(!std::isfinite(value.number)) throw error("Non-finite Dictionary keys are not implemented",3251);
             return {true,std::bit_cast<std::uint64_t>(value.number==0 ? 0.0 : value.number),{}};
         }
-        if(value.kind!=VbaValue::Kind::Text) throw error("Dictionary keys require native String or numeric values",3251);
+        if(value.kind!=VbaValue::Kind::Text) throw error("Dictionary keys require native String, numeric or checked native container references",3251);
         (void)utf16String(value.text); auto text=value.text;
         if(compare_) for(auto& ch:text) {
             if(static_cast<unsigned char>(ch)>127) throw error("Regional Dictionary text keys are not implemented",3251);
@@ -742,6 +744,7 @@ class VbaDictionary final : public VbaObject,public NativeVariantContainer {
         const auto normalized=key(original); structural();
         if(index_.contains(normalized)) throw error("Duplicate Dictionary key",457);
         if(entries_.size()>=1000000) throw error("Dictionary allocation limit",3251);
+        checkNativeContainerItem(this,original);
         checkNativeContainerItem(this,value);
         entries_.push_back({normalized,original,value});
         try { index_.emplace(normalized,std::prev(entries_.end())); } catch(...) { entries_.pop_back(); throw; }
@@ -752,7 +755,7 @@ class VbaDictionary final : public VbaObject,public NativeVariantContainer {
 public:
     std::string_view className() const override { return "Dictionary"; }
     bool isNativeType(std::string_view type) const override { return type=="scripting.dictionary"; }
-    void visitOwnedValues(const std::function<void(const VbaValue&)>& visitor) const override { for(const auto& entry:entries_) visitor(entry.value); }
+    void visitOwnedValues(const std::function<void(const VbaValue&)>& visitor) const override { for(const auto& entry:entries_) {visitor(entry.original);visitor(entry.value);} }
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         const auto member=lower(std::string(name));
         if(member=="add") return VbaArgumentSignature{{"Key","Item"},2};
@@ -800,6 +803,7 @@ public:
             auto replacement=key(value);
             if(replacement==normalized) throw error("Equivalent Dictionary key renaming is not implemented",3251);
             if(index_.contains(replacement)) throw error("Duplicate Dictionary key",457);
+            checkNativeContainerItem(this,value);
             const auto entry=found->second; auto original=value;
             index_.emplace(replacement,entry); index_.erase(normalized);
             entry->key=std::move(replacement); entry->original=std::move(original); return;

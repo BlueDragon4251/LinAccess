@@ -4346,6 +4346,43 @@ End Function
         const auto changed=executeVbaProcedure(edited,"Cached",firstCacheHost);
         assert(changed.status==VbaExecutionStatus::Completed && changed.typedReturnValue->number==31);
     }
+    {
+        auto dictionary=evaluateVbaExpression("New Scripting.Dictionary",host,{}).object;
+        auto first=evaluateVbaExpression("New Collection",host,{});auto second=evaluateVbaExpression("New Collection",host,{});auto replacement=evaluateVbaExpression("New Scripting.Dictionary",host,{});
+        dictionary->assign("CompareMode",VbaValue::longInteger(1));dictionary->member("Add",{first,VbaValue::string("first")});dictionary->member("Add",{second,VbaValue::string("second")});
+        assert(dictionary->member("Count",{}).asNumber()==2 && dictionary->member("Item",{first}).asText()=="first" && dictionary->member("Item",{second}).asText()=="second");
+        dictionary->assignIndexedMember("Key",{first},replacement);assert(!dictionary->member("Exists",{first}).truthy() && dictionary->member("Exists",{replacement}).truthy());
+        auto keys=dictionary->member("Keys",{});assert(vbaArrayElement(keys,{VbaValue::integer(0)}).object==replacement.object);
+        int cycle=0;try {replacement.object->member("Add",{VbaValue::string("back"),VbaValue::reference(dictionary)});}catch(const VbaRuntimeError& failure) {cycle=failure.number;}assert(cycle==3251 && replacement.object->member("Count",{}).asNumber()==0);
+        cycle=0;try {dictionary->member("Add",{VbaValue::reference(dictionary),VbaValue::integer(1)});}catch(const VbaRuntimeError& failure) {cycle=failure.number;}assert(cycle==3251 && dictionary->member("Count",{}).asNumber()==2);
+        first.object->member("Add",{VbaValue::reference(dictionary)});cycle=0;try {dictionary->assignIndexedMember("Key",{second},first);}catch(const VbaRuntimeError& failure) {cycle=failure.number;}assert(cycle==3251 && dictionary->member("Exists",{second}).truthy());first.object->member("Remove",{VbaValue::integer(1)});
+        keys=VbaValue::empty();dictionary->member("RemoveAll",{});std::weak_ptr<VbaObject> lifetime=second.object;dictionary->member("Add",{second,VbaValue::integer(1)});second=VbaValue::empty();assert(!lifetime.expired());
+        keys=dictionary->member("Keys",{});dictionary->member("RemoveAll",{});assert(!lifetime.expired());keys=VbaValue::empty();assert(lifetime.expired());
+    }
+    const auto objectKeys=executeVbaProcedure(R"VBA(Sub ObjectKeys()
+Dim d As Scripting.Dictionary, first As Collection, second As Collection, aliasKey As Object
+Dim key As Variant, keys As Variant, count As Long
+Set d=New Scripting.Dictionary
+Set first=New Collection
+Set second=New Collection
+Set aliasKey=first
+d.Add first,"one"
+d.Add second,"two"
+If Not d.Exists(aliasKey) Then Err.Raise 5
+If d(aliasKey)<>"one" Then Err.Raise 5
+keys=d.Keys
+If Not (keys(0) Is first) Then Err.Raise 5
+For Each key In d
+If key Is first Then count=count+1
+If key Is second Then count=count+1
+Next
+If count<>2 Then Err.Raise 5
+d.Remove aliasKey
+If d.Count<>1 Or d.Exists(first) Then Err.Raise 5
+Me!ObjectKeyResult=d(second)
+End Sub)VBA","ObjectKeys",host);
+    if(objectKeys.status!=VbaExecutionStatus::Completed) std::cerr<<"Object keys error="<<objectKeys.errorNumber<<" line="<<objectKeys.line<<'\n';
+    assert(objectKeys.status==VbaExecutionStatus::Completed && host.fields["ObjectKeyResult"]=="two");
     const auto dictionaries=executeVbaProcedure(R"VBA(Sub Dictionaries()
 Dim d As Object, other As Object, held As Object
 Dim c As Collection

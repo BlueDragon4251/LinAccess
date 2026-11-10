@@ -3726,3 +3726,19 @@ alle sieben geschützten Hashes unverändert, bekannte Makrogrenze bleibt.
 Dieses Paket liegt vor Feldfähigkeiten; letzter Inventarbeleg4ebc3f6c100/78/22;
 keine vollständige Windows-/Provider-/Fehlerreihenfolgenparität behaupten.
 Ohne Zwischenabschluss weitere allgemeine Anforderungen implementieren.
+
+
+Dictionary Container-Objektschlüssel: SCRIPTING_DICTIONARY_RUNTIME.md dokumentiert
+echte Collection-/Dictionary-Referenzidentität als Schlüssel, gehaltene Original-
+referenzen, Keys-/ForEach-Objekte, Lookup/Item/Remove/Umbenennung ohne Scalar-Default.
+Besitzgraph umfasst Schlüssel und Werte; Add/Key-Rename prüfen vor Mutation,
+direkte/über Schlüssel und Werte/Collection verlaufende Zyklen verweigern3251.
+Nothing/Arrays/beliebige Host-/Projektklassen-/COM-Schlüssel weiter explizit begrenzt.
+App/Core gebaut; vor Prüfungen versehentliche gemeinsame Textänderung an Collection
+auf Dictionary eingeschränkt und Fixture-API-Aufrufe korrigiert; einmaliges
+bestehendes Core-Bündel1/1 in5,70s bestanden. Echte VBA-/Objekt-/Weak-
+Referenz-/Snapshot-/Zyklusbelege. Keine neuen CTest-/Katalog-IDs;456/386/70.
+Vorstufec59e828 privat remote/Baum geprüft; letztes geprüftes DEBa23c7009, Original
+1/1 in119,54s und sieben geschützte Hashes unverändert. Dieses Paket liegt vor
+Feldfähigkeiten/Objektschlüsseln. Kein vollständiger COM-/Windows-/Lifetimebeleg;
+ohne Zwischenabschluss weitere allgemeine Anforderungen implementieren.

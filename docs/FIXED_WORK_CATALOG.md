@@ -283,7 +283,7 @@ keine Tests oder Teilpunkte allein zur Erhöhung einer Fortschrittszahl anlegen.
 - [x] **F426** — Whole-array VBA a() expressions/calls preserve array reference metadata; direct declared-array ByVal arguments refuse while explicit Variant copies remain independent.
 - [x] **F432** — Fixed array binding survives whole-array ByRef argument forwarding, allowing element/reset writeback while guarding ReDim, incompatible shape and whole-array replacement.
 - [x] **F434** — Fixed array dimensions fold integral constant expressions and prior module/local constants without executing runtime APIs.
-- [x] **F438** — Native Scripting.Dictionary construction supports real ordered key/value operations, bounded comparison/key families and cross-container cycle guards without generic COM activation claims.
+- [x] **F438** — Native Scripting.Dictionary construction supports real ordered key/value operations, bounded comparison/key families (including actual native container reference keys) and cross-container cycle guards without generic COM activation claims.
 - [x] **F439** — Dictionary Keys/Items expose independent owned snapshots and object For Each retains its enumerated owner through source-variable clearing and loop exit.
 - [x] **F440** — Indexed object default writes support Dictionary values/references and real DAO Recordset/Fields pending edits committed only through Update.
 - [x] **F442** — Native As Object argument/Set/collection-loop binding checks actual references; ByVal/ByRef replacement and independently omitted Optional Nothing parameters execute through real native objects.

@@ -16,7 +16,8 @@ explicit Nothing defaults. Generic reference management remains open.
 Add/Exists/Item/Count/Keys/Items/Remove/RemoveAll, distinct-key renaming and
 CompareMode operate on real ordered hash storage. Item reads of absent keys
 create Empty entries; setters add/update actual values. Duplicate keys refuse
-457. String and finite primitive numeric keys are supported; numeric and String
+457. String, finite primitive numeric and bounded native container reference keys
+are supported (reference-key details below); numeric and String
 keys remain distinct. Binary String comparison preserves Unicode values; text
 comparison is bounded to ASCII. Database/use-option/LCID comparison and other
 Variant key families remain 3251. Missing Remove/rename targets and equivalent
@@ -103,3 +104,32 @@ SCRIPTING_DICTIONARY_RUNTIME.md specifies the bounded native path. Full desktop
 48/48 (77.95 s), freshly rebuilt GUI-free 1/1 (1.26 s), targeted core 1/1
 (1.20 s), Debian payload/permissions/Build-ID/pinned SQLite and all four original
 hashes pass. Scoped checklist 375 checked / 72 open, not complete Access parity.
+
+
+## Native container reference keys
+
+Native Collection and Dictionary references are now valid Dictionary keys. Keys
+compare by actual reference identity, independently of CompareMode and contents;
+no scalar default getter is invoked and no pointer text is exposed. Each stored
+original key owns its reference. Keys snapshots and For Each preserve those actual
+objects. Distinct-object key rename uses the same real index and preserves order;
+lookup, default Item and Remove use that identity too. Nothing, array, arbitrary
+host/class/COM-object keys and other unimplemented Variant families remain3251.
+This is not a general COM IUnknown/key-equivalence claim.
+
+Owned graph traversal now includes original keys as well as item values. Add and
+key rename check a new key before mutating storage. Direct self keys, cycles via
+another key's container, and later reverse value/container edges are refused3251
+without changing Count or the old key. Existing enumeration and traversal/allocation
+bounds remain. Key references release after removal/RemoveAll/destruction and after
+the last independent Keys snapshot releases them; no cycle collector is claimed.
+
+App and existing core target built. Before checks, an initial compile found a
+shared-text edit applied the traversal to Collection; the edit was scoped to
+Dictionary and fixture API arguments corrected. One existing core_tests bundle
+passed1/1 in5.70s. Actual C++ objects cover reference hashing/lookup/rename/order,
+key-to-value and Collection-to-key cycle refusal, and weak-reference release with
+an independently held Keys snapshot. Actual VBA covers distinct native Collection
+keys, aliased references, default Item, Keys/Is, For Each and Remove. No new CTest/
+catalog IDs;456/386/70 unchanged; this extends existing F438, not full F043/F091.
+No Windows execution-oracle or broad object-lifetime equivalence is asserted.
