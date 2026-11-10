@@ -2,6 +2,7 @@
 #include "vba_expression.hpp"
 #include "native_field_defaults.hpp"
 #include "vba_qt_value.hpp"
+#include "vba_currency.hpp"
 #include <QRegularExpression>
 #include <QString>
 #include <QStringList>
@@ -9,11 +10,17 @@
 namespace linaccess {
 // Bounded numeric field rules: comparisons joined by And/Or, or Between.
 // No identifiers, subqueries, calls, locale-dependent numbers or implicit SQL.
-inline QString nativeNumericValidationPredicate(QString rule,const QString& column) {
+inline QString nativeNumericValidationPredicate(QString rule,const QString& column,bool currency=false) {
     if(rule.isEmpty()) return {};
     if(rule.size()>255 || rule.contains(QChar(0))) throw VbaRuntimeError(3251,"Native numeric ValidationRule exceeds the supported shape");
     const QString number=QStringLiteral(R"([+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?)");
-    const auto literal=[](const QString& token) {bool valid=false;const auto value=token.toDouble(&valid);if(!valid || !std::isfinite(value)) throw VbaRuntimeError(3251,"ValidationRule numeric literal is not representable");return QString::number(value,'g',17);};
+    const auto literal=[currency](const QString& token) {
+        if(currency) {
+            static const QRegularExpression decimal(R"(^[+-]?(?:[0-9]+(?:\.[0-9]{0,4})?|\.[0-9]{1,4})$)");
+            if(!decimal.match(token).hasMatch()) throw VbaRuntimeError(3251,"Currency ValidationRule requires decimal bounds with at most four places");
+            return QString::number(currencyToRealStorage(convertCurrency(VbaValue::string(token.toStdString()))),'g',17);
+        }
+        bool valid=false;const auto value=token.toDouble(&valid);if(!valid || !std::isfinite(value)) throw VbaRuntimeError(3251,"ValidationRule numeric literal is not representable");return QString::number(value,'g',17);};
     const QRegularExpression between("^\\s*Between\\s+("+number+")\\s+And\\s+("+number+")\\s*$",QRegularExpression::CaseInsensitiveOption);
     const auto bounds=between.match(rule);if(bounds.hasMatch()) return "("+column+">="+literal(bounds.captured(1))+" AND "+column+"<="+literal(bounds.captured(2))+")";
     const QRegularExpression term("\\G\\s*(>=|<=|<>|=|>|<)\\s*("+number+")\\s*(?:(And|Or)\\s+|$)",QRegularExpression::CaseInsensitiveOption);
@@ -38,7 +45,7 @@ inline QString nativeDateValidationPredicate(QString rule,const QString& column)
     if(parts.isEmpty() || connector) throw VbaRuntimeError(3251,"Native Date ValidationRule comparison is incomplete");return "("+parts.join(' ')+")";
 }
 inline QString nativeFieldValidationPredicate(int type,const QString& rule,const QString& column) {
-    return type==8 ? nativeDateValidationPredicate(rule,column) : nativeNumericValidationPredicate(rule,column);
+    return type==8 ? nativeDateValidationPredicate(rule,column) : nativeNumericValidationPredicate(rule,column,type==5);
 }
 
 }

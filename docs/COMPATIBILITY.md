@@ -6839,3 +6839,20 @@ Unabhängige schreibgeschützte MDB-Kopiebeobachtung:29 Tabellen/316 Spalten,
 81 tatsächliche Defaults vollständig übernommen ohne Literalabweichung;
 15 zusätzliche Backenddefaults ausschließlich Boolean. Keine VBA-/Geschäftsdaten
 für diese Beobachtung geladen oder ausgegeben. Ohne Zwischenabschluss fortsetzen.
+
+
+Native Währungs-Gültigkeitsregeln: NATIVE_CURRENCY_VALIDATION.md. Erstellung,
+Feldmetadaten, tatsächlicher Feldeditor und explizite verlustfreie Typwechsel
+unterstützen Vergleiche/And/Or/Between mit exakt darstellbaren Dezimalgrenzen bis
+vier Nachkommastellen im vorhandenen nativen Bereich. Keine stille Rundung von
+Regelgrenzen; Exponenten/fünfte Stelle/Funktionen/Bereichsüberschreitung werden
+vor Änderung abgewiesen. SQL-Constraints mit ValidationText, atomarer Abbruch
+bei Bestandsverletzung und kompatible Currency/Double-Regelerhaltung geprüft.
+GUI12,45s bestanden (20s-Watchdog unverändert). Erstes DAO-Fixture benutzte nach
+Spaltenaddition eine erwartungsgemäß ungültige alte Feldreferenz; Fixture greift
+nun neu auf das tatsächliche Feld zu. Nur DAO neu gebaut/geprüft:1/1 in2,44s.
+App/GUI/DAO gebaut; keine neuen CTest-/Katalog-IDs;456/386/70. Frühere pauschale
+Currency-Regelsperre ist für diesen begrenzten Umfang ersetzt; keine volle
+Jet-/Windows-Ausdrucks-/Currency-Parität. Vorstufeb8fee632 privat/Baum geprüft;
+sieben geschützte Hashes unverändert. DEB/Original/Inventar weiterhinda72e727.
+Ohne Zwischenabschluss bei weiteren allgemeinen Anforderungen fortsetzen.

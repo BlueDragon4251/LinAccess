@@ -1298,6 +1298,10 @@ void testNativeCurrencyCreation() {
     auto amount=table->member("CreateField",{VbaValue::string("Amount"),VbaValue::integer(5)}).object;amount->assign("Required",VbaValue::logical(true));amount->assign("DefaultValue",VbaValue::string("12.3456"));table->member("Fields",{}).object->member("Append",{VbaValue::reference(amount)});
     auto primary=table->member("CreateIndex",{VbaValue::string("PrimaryKey")}).object;primary->assign("Primary",VbaValue::logical(true));primary->member("Fields",{}).object->member("Append",{primary->member("CreateField",{VbaValue::string("ID")})});table->member("Indexes",{}).object->member("Append",{VbaValue::reference(primary)});database->member("TableDefs",{}).object->member("Append",{VbaValue::reference(table)});
     assert(amount->member("Type",{}).asNumber()==5 && amount->member("Size",{}).asNumber()==8 && amount->member("DefaultValue",{}).asText()=="12.3456" && amount->member("Required",{}).truthy());
+    amount->assign("ValidationText",VbaValue::string("Currency bound"));amount->assign("ValidationRule",VbaValue::string("Between -0.0001 And 12.3456"));
+    assert(amount->member("ValidationRule",{}).asText()=="Between -0.0001 And 12.3456");
+    for(const auto* rule:{">0.00001",">1e2",">549755813888",">0 Or SQL()"}) {int number=0;try {amount->assign("ValidationRule",VbaValue::string(rule));}catch(const VbaRuntimeError& failure) {number=failure.number;}assert(number==3251 && amount->member("ValidationRule",{}).asText()=="Between -0.0001 And 12.3456");}
+    assert(!sql.exec("INSERT INTO NativeMoney VALUES(99,12.3457)"));sql.finish();
     auto rows=database->member("OpenRecordset",{VbaValue::string("NativeMoney")}).object;rows->member("AddNew",{});rows->assignItem("ID",VbaValue::longInteger(1));assert(rows->item("Amount").currencyUnits==123456);rows->member("Update",{});
     assert(sql.exec("SELECT Amount,typeof(Amount) FROM main.NativeMoney WHERE ID=1") && sql.next() && currencyFromRealStorage(sql.value(0).toDouble()).currencyUnits==123456 && sql.value(1).toString()=="real");sql.finish();
     database->member("Execute",{VbaValue::string("INSERT INTO NativeMoney(ID,Amount) VALUES(2,'1.23455')")});assert(sql.exec("SELECT Amount FROM NativeMoney WHERE ID=2") && sql.next() && currencyFromRealStorage(sql.value(0).toDouble()).currencyUnits==12346);sql.finish();
@@ -1306,8 +1310,10 @@ void testNativeCurrencyCreation() {
     assert(sql.exec("SELECT Extra FROM NativeMoney ORDER BY ID") && sql.next() && currencyFromRealStorage(sql.value(0).toDouble()).currencyUnits==-1 && sql.next() && currencyFromRealStorage(sql.value(0).toDouble()).currencyUnits==-1);sql.finish();
     const auto snapshotMoney=[&] {std::vector<std::pair<quint64,quint64>> values;assert(sql.exec("SELECT Amount,Extra FROM main.NativeMoney ORDER BY ID"));while(sql.next()) values.emplace_back(std::bit_cast<quint64>(sql.value(0).toDouble()),std::bit_cast<quint64>(sql.value(1).toDouble()));sql.finish();return values;};
     const auto originalMoney=snapshotMoney();
+
     const auto moneyTable=[&] {return database->member("TableDefs",{VbaValue::string("NativeMoney")}).object;};
     const auto moneyField=[&] {return moneyTable()->member("Fields",{VbaValue::string("Amount")}).object;};
+    int ruleMigrationError=0;try {moneyField()->assign("ValidationRule",VbaValue::string("<=1"));}catch(const VbaRuntimeError& failure) {ruleMigrationError=failure.number;}assert(ruleMigrationError!=0 && snapshotMoney()==originalMoney && moneyField()->member("ValidationRule",{}).asText()=="Between -0.0001 And 12.3456");
     moneyField()->assign("DefaultValue",VbaValue::string("2.0001"));assert(moneyField()->member("DefaultValue",{}).asText()=="2.0001" && snapshotMoney()==originalMoney);
     moneyField()->assign("Required",VbaValue::logical(false));assert(!moneyField()->member("Required",{}).truthy() && snapshotMoney()==originalMoney);
     moneyField()->assign("OrdinalPosition",VbaValue::longInteger(2));assert(moneyField()->member("OrdinalPosition",{}).asNumber()==2 && snapshotMoney()==originalMoney);
@@ -1326,6 +1332,8 @@ Dim t As DAO.TableDef,f As DAO.Field,r As DAO.Recordset
 Set t=CurrentDb.CreateTableDef("VbaMoney")
 Set f=t.CreateField("Amount",dbCurrency)
 f.DefaultValue="1.2500"
+f.ValidationRule="Between 1.2500 And 1.2501"
+f.ValidationText="Exact money"
 t.Fields.Append f
 CurrentDb.TableDefs.Append t
 Set r=CurrentDb.OpenRecordset("VbaMoney")
@@ -1349,7 +1357,8 @@ void testLosslessCurrencyTypeChanges() {
     database->member("Execute",{VbaValue::string("INSERT INTO ExactMoney DEFAULT VALUES")});assert(sql.exec("SELECT Value FROM ExactMoney ORDER BY rowid DESC LIMIT 1") && sql.next() && currencyFromRealStorage(sql.value(0).toDouble()).currencyUnits==20001);sql.finish();
     const auto refused=[&](const char* name,const char* value) {make(name,7,"1.25");database->member("Execute",{VbaValue::string(std::string("INSERT INTO ")+name+" VALUES("+value+")")});assert(sql.exec(QString("SELECT Value FROM ")+name) && sql.next());const auto bits=std::bit_cast<quint64>(sql.value(0).toDouble());sql.finish();int error=0;try {changeNativeNumericFieldType(db,name,"Value",5);}catch(const VbaRuntimeError& failure) {error=failure.number;}assert(error!=0 && kind(name)==7);assert(sql.exec(QString("SELECT Value FROM ")+name) && sql.next() && std::bit_cast<quint64>(sql.value(0).toDouble())==bits);sql.finish();};
     refused("RoundedMoney","1.23456");refused("LargeMoney","549755813888");
-    auto ruled=make("RuledMoney",7,"1.25");ruled->member("Fields",{VbaValue::string("Value")}).object->assign("ValidationRule",VbaValue::string(">0"));int ruleError=0;try {changeNativeNumericFieldType(db,"RuledMoney","Value",5);}catch(const VbaRuntimeError& failure) {ruleError=failure.number;}assert(ruleError==3251 && kind("RuledMoney")==7);
+    auto ruled=make("RuledMoney",7,"1.25");ruled->member("Fields",{VbaValue::string("Value")}).object->assign("ValidationRule",VbaValue::string(">0"));changeNativeNumericFieldType(db,"RuledMoney","Value",5);assert(kind("RuledMoney")==5);
+    auto precise=make("PreciseRuleMoney",7,"1.25");precise->member("Fields",{VbaValue::string("Value")}).object->assign("ValidationRule",VbaValue::string(">0.00001"));int ruleError=0;try {changeNativeNumericFieldType(db,"PreciseRuleMoney","Value",5);}catch(const VbaRuntimeError& failure) {ruleError=failure.number;}assert(ruleError==3251 && kind("PreciseRuleMoney")==7);
 }
 
 void testOwnedQueryDefs() {
