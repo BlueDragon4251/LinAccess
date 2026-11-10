@@ -5451,3 +5451,25 @@ ReDim, Funktion nur1x und echtes DAO-Feld[And] belegt; ungültiger Funktionsbang
 vor Körpereffekten verweigert. Keine neuen IDs,456/386/70. F040 bleibt breit offen.
 Paketbeleg780a709 (117,91/47,08s,7Hash gleich). Stand780a709/Baum579ff0b2 privat
 verifiziert; neue Single-Erweiterung liegt nach diesem Paket.
+
+
+Typisierte SQL-Kalenderfamilie (2026-11-10): DATE_RUNTIME.md erweitert.
+17 Kalenderfunktionen mit nachgewiesenen Date/Boolean/Single/Currency/integralen
+Argumenttypen, tatsächlichen Date/Integer2/Integer4/Text-Ergebnissen, geschachtelten
+Ausdrücken und unterstützten Filter-/Gruppier-/Sortierpfaden. Sechs Vergleiche
+zwischen nachgewiesenen Date-Werten liefern Boolean -1/0; Datumsliteral-Herkunft
+bleibt im Lexer erhalten; Date IS NULL/IS NOT NULL behält gebundene Kinder.
+Kein TEXT-Inhalt als Date-Typ geraten. Ungültiges UTF-8 im gemeinsamen Scalar-
+Adapter vor ersetzender Dekodierung abgewiesen. Bestehende DAO-/Query-Modell-
+Prüfung2/2 in3,47s (3,22/0,25s), App gebaut. DateAdd-Typverlust im Filter und
+bestehende SQLite-1-Erwartung korrigiert; bestehender ungültiger UTF-8-Fall belegt.
+Keine neuen CTest-/Katalog-IDs.456/386/70 unverändert; F067/F068/F071 sowie
+regionale Kalender-/Format-/komplexe Quellenanforderungen bleiben offen.
+Kein neuer Windows-/Access-Ergebnisoracle.
+
+Letzter Paketbeleg vor dieser Kalendererweiterung: privat veröffentlichter
+Stand9413428d938c27ef19cdeca1dcfc7d5bedaee49c,
+Baum61740b61e261d6ea954b3347240193e3be67ac57.
+work/single-bang-identifiers/package-proof/package/linaccess-0.7.0-Linux.deb:
+Bau/CPack/check-deb bestanden, bestehendes Original-/Inventarbündel2/2 in164,29s
+(117,39/46,90s),7 geschützte Hashes unverändert. Bekannte Referenzgrenzen bleiben.

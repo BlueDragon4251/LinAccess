@@ -262,20 +262,21 @@ void double_subtract(sqlite3_context* context,int count,sqlite3_value** args) no
 void double_multiply(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"*",2,2,0,true);}
 void double_divide(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"/",2,2,0,true);}
 void numericPower(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"^",2,2,0,true);}
-void stringSqlFunction(sqlite3_context* context,int count,sqlite3_value** args,std::string_view builtin,int minimum,int maximum,bool typed) noexcept {
+void boundScalarSqlFunction(sqlite3_context* context,int count,sqlite3_value** args,std::string_view builtin,int minimum,int maximum,bool typed,bool dateComparison=false) noexcept {
     auto& native=api();
     try {
         const int offset=typed ? 1 : 0,arguments=count-offset;
-        if(arguments<minimum || arguments>maximum) throw VbaRuntimeError(450,"Invalid string SQL arity");
+        if(arguments<minimum || arguments>maximum) throw VbaRuntimeError(450,"Invalid bound scalar SQL arity");
         QStringList declared;
         if(typed) {
-            if(native.type(args[0])!=SQLITE_TEXT) throw VbaRuntimeError(450,"Typed string SQL requires argument types");
+            if(native.type(args[0])!=SQLITE_TEXT) throw VbaRuntimeError(450,"Typed scalar SQL requires argument types");
             declared=scalarText(args[0]).split(',');
-            if(declared.size()!=arguments) throw VbaRuntimeError(450,"Typed string SQL argument types mismatch");
+            if(declared.size()!=arguments) throw VbaRuntimeError(450,"Typed scalar SQL argument types mismatch");
             static const QSet<QString> supported{"","CURRENCY_REAL","DATETIME","SINGLE_REAL","INTEGER1","INTEGER2","INTEGER4","BOOL","BOOLEAN","DOUBLE"};
-            for(const auto& type:declared) if(!supported.contains(type)) throw VbaRuntimeError(3251,"String SQL source type is unsupported");
+            for(const auto& type:declared) if(!supported.contains(type)) throw VbaRuntimeError(3251,"Scalar SQL source type is unsupported");
         }
-        VbaVariables values;std::string expression=std::string(builtin)+"(";
+        if(dateComparison && declared!=QStringList{"DATETIME","DATETIME"}) throw VbaRuntimeError(450,"Date comparison requires two proven Date operands");
+        VbaVariables values;std::string expression=dateComparison ? std::string{} : std::string(builtin)+"(";
         for(int index=0;index<arguments;++index) {
             auto* argument=args[index+offset];QVariant storage;
             switch(native.type(argument)) {
@@ -284,61 +285,65 @@ void stringSqlFunction(sqlite3_context* context,int count,sqlite3_value** args,s
             case SQLITE_FLOAT: storage=native.number(argument);break;
             case SQLITE_TEXT: {
                 const auto* bytes=native.text(argument);const auto size=native.bytes(argument);
-                if(!bytes && size) throw VbaRuntimeError(7,"String SQL text unavailable");
-                storage=QString::fromUtf8(bytes ? reinterpret_cast<const char*>(bytes) : "",size);break;
+                if(!bytes && size) throw VbaRuntimeError(7,"Scalar SQL text unavailable");
+                const QByteArray input(bytes ? reinterpret_cast<const char*>(bytes) : "",size);
+                if(!input.isValidUtf8()) throw VbaRuntimeError(13,"Scalar SQL text is not valid UTF-8");
+                storage=QString::fromUtf8(input);break;
             }
-            default: throw VbaRuntimeError(13,"String SQL binary input is unsupported");
+            default: throw VbaRuntimeError(13,"Scalar SQL binary input is unsupported");
             }
             const auto name="_la_arg"+std::to_string(index);values.emplace(name,qtFieldValue(storage,declared.value(index)));
-            if(index) expression+=',';expression+=name;
+            if(index) expression+=dateComparison ? std::string(builtin) : ",";expression+=name;
         }
-        expression+=')';ScalarStringHost host;
+        if(!dateComparison) expression+=')';ScalarStringHost host;
         const auto result=evaluateVbaExpression(expression,host,values);
         if(result.kind==VbaValue::Kind::Null) native.nullResult(context);
+        else if(result.kind==VbaValue::Kind::Boolean) native.integerResult(context,result.boolean ? -1 : 0);
+        else if(result.kind==VbaValue::Kind::Date) returnText(context,sqlFieldValue(result,"DATETIME").toString());
         else if(result.kind==VbaValue::Kind::Text) returnText(context,QString::fromUtf8(result.text.data(),static_cast<qsizetype>(result.text.size())));
         else if(result.kind==VbaValue::Kind::Number && (result.numericType==VbaValue::NumericType::Integer || result.numericType==VbaValue::NumericType::Long || result.numericType==VbaValue::NumericType::Byte)) native.integerResult(context,static_cast<qlonglong>(result.number));
-        else throw VbaRuntimeError(13,"String SQL result type mismatch");
+        else throw VbaRuntimeError(13,"Scalar SQL result type mismatch");
     } catch(const VbaRuntimeError& failure) { functionError(context,failure); }
-      catch(...) { native.error(context,"SQL string evaluation failed",-1); }
+      catch(...) { native.error(context,"SQL bound scalar evaluation failed",-1); }
 }
-void stringCStr(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"CStr",1,1,false);}
-void stringCStrTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"CStr",1,1,true);}
-void stringStr(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Str",1,1,false);}
-void stringStrTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Str",1,1,true);}
-void stringLeft(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Left",2,2,false);}
-void stringLeftTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Left",2,2,true);}
-void stringLeftString(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Left$",2,2,false);}
-void stringLeftStringTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Left$",2,2,true);}
-void stringRight(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Right",2,2,false);}
-void stringRightTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Right",2,2,true);}
-void stringRightString(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Right$",2,2,false);}
-void stringRightStringTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Right$",2,2,true);}
-void stringMid(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Mid",2,3,false);}
-void stringMidTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Mid",2,3,true);}
-void stringMidString(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Mid$",2,3,false);}
-void stringMidStringTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Mid$",2,3,true);}
-void stringReplace(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Replace",3,6,false);}
-void stringReplaceTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Replace",3,6,true);}
-void stringInStr(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"InStr",2,4,false);}
-void stringInStrTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"InStr",2,4,true);}
-void stringStrComp(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"StrComp",2,3,false);}
-void stringStrCompTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"StrComp",2,3,true);}
-void stringTrim(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Trim",1,1,false);}
-void stringTrimTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Trim",1,1,true);}
-void stringTrimString(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Trim$",1,1,false);}
-void stringTrimStringTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"Trim$",1,1,true);}
-void stringLTrim(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"LTrim",1,1,false);}
-void stringLTrimTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"LTrim",1,1,true);}
-void stringLTrimString(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"LTrim$",1,1,false);}
-void stringLTrimStringTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"LTrim$",1,1,true);}
-void stringRTrim(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"RTrim",1,1,false);}
-void stringRTrimTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"RTrim",1,1,true);}
-void stringRTrimString(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"RTrim$",1,1,false);}
-void stringRTrimStringTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"RTrim$",1,1,true);}
-void stringLCaseString(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"LCase$",1,1,false);}
-void stringLCaseStringTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"LCase$",1,1,true);}
-void stringUCaseString(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"UCase$",1,1,false);}
-void stringUCaseStringTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"UCase$",1,1,true);}
+void stringCStr(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"CStr",1,1,false);}
+void stringCStrTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"CStr",1,1,true);}
+void stringStr(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Str",1,1,false);}
+void stringStrTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Str",1,1,true);}
+void stringLeft(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Left",2,2,false);}
+void stringLeftTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Left",2,2,true);}
+void stringLeftString(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Left$",2,2,false);}
+void stringLeftStringTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Left$",2,2,true);}
+void stringRight(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Right",2,2,false);}
+void stringRightTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Right",2,2,true);}
+void stringRightString(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Right$",2,2,false);}
+void stringRightStringTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Right$",2,2,true);}
+void stringMid(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Mid",2,3,false);}
+void stringMidTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Mid",2,3,true);}
+void stringMidString(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Mid$",2,3,false);}
+void stringMidStringTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Mid$",2,3,true);}
+void stringReplace(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Replace",3,6,false);}
+void stringReplaceTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Replace",3,6,true);}
+void stringInStr(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"InStr",2,4,false);}
+void stringInStrTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"InStr",2,4,true);}
+void stringStrComp(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"StrComp",2,3,false);}
+void stringStrCompTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"StrComp",2,3,true);}
+void stringTrim(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Trim",1,1,false);}
+void stringTrimTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Trim",1,1,true);}
+void stringTrimString(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Trim$",1,1,false);}
+void stringTrimStringTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Trim$",1,1,true);}
+void stringLTrim(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"LTrim",1,1,false);}
+void stringLTrimTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"LTrim",1,1,true);}
+void stringLTrimString(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"LTrim$",1,1,false);}
+void stringLTrimStringTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"LTrim$",1,1,true);}
+void stringRTrim(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"RTrim",1,1,false);}
+void stringRTrimTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"RTrim",1,1,true);}
+void stringRTrimString(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"RTrim$",1,1,false);}
+void stringRTrimStringTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"RTrim$",1,1,true);}
+void stringLCaseString(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"LCase$",1,1,false);}
+void stringLCaseStringTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"LCase$",1,1,true);}
+void stringUCaseString(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"UCase$",1,1,false);}
+void stringUCaseStringTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"UCase$",1,1,true);}
 void convert_cbool(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"CBool",1,1);}
 void convert_cbyte(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"CByte",1,1);}
 void convert_cint(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"CInt",1,1);}
@@ -357,10 +362,10 @@ void financialFv(sqlite3_context* context,int count,sqlite3_value** args) noexce
 void financialPmt(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Pmt",3,5); }
 void partitionRange(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Partition",4,4); }
 void stringLenB(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"LenB",1,1); }
-void stringReverse(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"StrReverse",1,1,false);}
-void stringReverseTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"StrReverse",1,1,true);}
-void stringInStrRev(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"InStrRev",2,4,false);}
-void stringInStrRevTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"InStrRev",2,4,true);}
+void stringReverse(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"StrReverse",1,1,false);}
+void stringReverseTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"StrReverse",1,1,true);}
+void stringInStrRev(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"InStrRev",2,4,false);}
+void stringInStrRevTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"InStrRev",2,4,true);}
 void mathSqr(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Sqr",1,1); }
 void mathExp(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Exp",1,1); }
 void mathLog(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Log",1,1); }
@@ -368,10 +373,33 @@ void mathSin(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
 void mathCos(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Cos",1,1); }
 void mathTan(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Tan",1,1); }
 void mathAtn(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Atn",1,1); }
-void stringLCase(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"LCase",1,1,false);}
-void stringLCaseTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"LCase",1,1,true);}
-void stringUCase(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"UCase",1,1,false);}
-void stringUCaseTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {stringSqlFunction(context,count,args,"UCase",1,1,true);}
+void stringLCase(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"LCase",1,1,false);}
+void stringLCaseTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"LCase",1,1,true);}
+void stringUCase(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"UCase",1,1,false);}
+void stringUCaseTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"UCase",1,1,true);}
+void calendarDateValueTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"DateValue",1,1,true);}
+void calendarTimeValueTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"TimeValue",1,1,true);}
+void calendarDateAddTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"DateAdd",3,3,true);}
+void calendarDateSerialTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"DateSerial",3,3,true);}
+void calendarTimeSerialTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"TimeSerial",3,3,true);}
+void calendarCDateTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"CDate",1,1,true);}
+void calendarDatePartTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"DatePart",2,4,true);}
+void calendarDatediffTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"DateDiff",3,5,true);}
+void calendarYearTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Year",1,1,true);}
+void calendarMonthTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Month",1,1,true);}
+void calendarDayTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Day",1,1,true);}
+void calendarHourTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Hour",1,1,true);}
+void calendarMinuteTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Minute",1,1,true);}
+void calendarSecondTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Second",1,1,true);}
+void calendarWeekdayTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Weekday",1,2,true);}
+void monthNameTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"MonthName",1,2,true);}
+void weekdayNameTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"WeekdayName",1,3,true);}
+void calendarCompare_equal(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"=",2,2,true,true);}
+void calendarCompare_not_equal(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"<>",2,2,true,true);}
+void calendarCompare_less(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"<",2,2,true,true);}
+void calendarCompare_less_equal(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"<=",2,2,true,true);}
+void calendarCompare_greater(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,">",2,2,true,true);}
+void calendarCompare_greater_equal(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,">=",2,2,true,true);}
 void currentDirectory(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"CurDir",0,1); }
 void fileLength(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"FileLen",1,1); }
 void fileModified(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"FileDateTime",1,1); }
@@ -883,14 +911,27 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_date_subtract_1",-1,&calendarDateArithmetic<1,true>,nullptr,nullptr);
     ensure("linaccess_jet_date_subtract_2",-1,&calendarDateArithmetic<2,true>,nullptr,nullptr);
     ensure("linaccess_jet_date_subtract_3",-1,&calendarDateArithmetic<3,true>,nullptr,nullptr);
+    ensure("linaccess_jet_date_equal",-1,&calendarCompare_equal,nullptr,nullptr);
+    ensure("linaccess_jet_date_not_equal",-1,&calendarCompare_not_equal,nullptr,nullptr);
+    ensure("linaccess_jet_date_less",-1,&calendarCompare_less,nullptr,nullptr);
+    ensure("linaccess_jet_date_less_equal",-1,&calendarCompare_less_equal,nullptr,nullptr);
+    ensure("linaccess_jet_date_greater",-1,&calendarCompare_greater,nullptr,nullptr);
+    ensure("linaccess_jet_date_greater_equal",-1,&calendarCompare_greater_equal,nullptr,nullptr);
     ensure("linaccess_jet_datevalue",-1,&calendarDateValue,nullptr,nullptr);
+    ensure("linaccess_jet_datevalue_typed",-1,&calendarDateValueTyped,nullptr,nullptr);
     ensure("linaccess_jet_timevalue",-1,&calendarTimeValue,nullptr,nullptr);
+    ensure("linaccess_jet_timevalue_typed",-1,&calendarTimeValueTyped,nullptr,nullptr);
     ensure("linaccess_jet_dateadd",-1,&calendarDateAdd,nullptr,nullptr);
+    ensure("linaccess_jet_dateadd_typed",-1,&calendarDateAddTyped,nullptr,nullptr);
     ensure("linaccess_jet_date_sum",1,nullptr,&unsupportedDateSumStep,&unsupportedDateSumFinal);
     ensure("linaccess_jet_dateserial",-1,&calendarDateSerial,nullptr,nullptr);
+    ensure("linaccess_jet_dateserial_typed",-1,&calendarDateSerialTyped,nullptr,nullptr);
     ensure("linaccess_jet_timeserial",-1,&calendarTimeSerial,nullptr,nullptr);
+    ensure("linaccess_jet_timeserial_typed",-1,&calendarTimeSerialTyped,nullptr,nullptr);
     ensure("linaccess_jet_cdate",-1,&calendarCDate,nullptr,nullptr);
+    ensure("linaccess_jet_cdate_typed",-1,&calendarCDateTyped,nullptr,nullptr);
     ensure("linaccess_jet_datepart",-1,&calendarDatePart,nullptr,nullptr);
+    ensure("linaccess_jet_datepart_typed",-1,&calendarDatePartTyped,nullptr,nullptr);
     ensure("linaccess_jet_choose",-1,&scalarChoose,nullptr,nullptr);
     ensure("linaccess_jet_switch",-1,&scalarSwitch,nullptr,nullptr);
     ensure("linaccess_jet_val",-1,&stringVal,nullptr,nullptr);
@@ -902,15 +943,25 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_strreverse",-1,&stringReverse,nullptr,nullptr);
     ensure("linaccess_jet_instrrev",-1,&stringInStrRev,nullptr,nullptr);
     ensure("linaccess_jet_datediff",-1,&calendarDatediff,nullptr,nullptr);
+    ensure("linaccess_jet_datediff_typed",-1,&calendarDatediffTyped,nullptr,nullptr);
     ensure("linaccess_jet_year",-1,&calendarYear,nullptr,nullptr);
+    ensure("linaccess_jet_year_typed",-1,&calendarYearTyped,nullptr,nullptr);
     ensure("linaccess_jet_month",-1,&calendarMonth,nullptr,nullptr);
+    ensure("linaccess_jet_month_typed",-1,&calendarMonthTyped,nullptr,nullptr);
     ensure("linaccess_jet_day",-1,&calendarDay,nullptr,nullptr);
+    ensure("linaccess_jet_day_typed",-1,&calendarDayTyped,nullptr,nullptr);
     ensure("linaccess_jet_hour",-1,&calendarHour,nullptr,nullptr);
+    ensure("linaccess_jet_hour_typed",-1,&calendarHourTyped,nullptr,nullptr);
     ensure("linaccess_jet_minute",-1,&calendarMinute,nullptr,nullptr);
+    ensure("linaccess_jet_minute_typed",-1,&calendarMinuteTyped,nullptr,nullptr);
     ensure("linaccess_jet_second",-1,&calendarSecond,nullptr,nullptr);
+    ensure("linaccess_jet_second_typed",-1,&calendarSecondTyped,nullptr,nullptr);
     ensure("linaccess_jet_weekday",-1,&calendarWeekday,nullptr,nullptr);
+    ensure("linaccess_jet_weekday_typed",-1,&calendarWeekdayTyped,nullptr,nullptr);
     ensure("linaccess_jet_monthname",-1,&monthName,nullptr,nullptr,SQLITE_UTF8|SQLITE_INNOCUOUS);
+    ensure("linaccess_jet_monthname_typed",-1,&monthNameTyped,nullptr,nullptr,SQLITE_UTF8|SQLITE_INNOCUOUS);
     ensure("linaccess_jet_weekdayname",-1,&weekdayName,nullptr,nullptr,SQLITE_UTF8|SQLITE_INNOCUOUS);
+    ensure("linaccess_jet_weekdayname_typed",-1,&weekdayNameTyped,nullptr,nullptr,SQLITE_UTF8|SQLITE_INNOCUOUS);
     ensure("linaccess_jet_ccur",-1,&currencyNumber,nullptr,nullptr);
     ensure("linaccess_jet_currency_store",1,&currencyStore,nullptr,nullptr);
     ensure("linaccess_jet_field_store",2,&fieldStore,nullptr,nullptr);

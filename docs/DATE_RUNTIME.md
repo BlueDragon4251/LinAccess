@@ -80,3 +80,28 @@ Uhrwerte und speichern den initialisierten Wert, auch bei ungebundenen
 Datumsfeldern im Formular. Neue Date-Schemas erzwingen kanonische Zeitstempel;
 ältere Definitionen werden bei Migration nicht still verändert. Einzelheiten
 und weiterhin offene Grenzen: SOURCE_LITERAL_DEFAULTS.md, Abschnitt vom2026-11-08.
+
+
+Typisierte native SQL-Kalenderbindung (2026-11-10)
+------------------------------------------------
+DateValue/TimeValue/DateAdd/DateSerial/TimeSerial/CDate, DatePart/DateDiff,
+Year/Month/Day/Hour/Minute/Second/Weekday und MonthName/WeekdayName erhalten
+in nachgewiesenen einfachen Quellen die tatsächlichen Argumenttypen. Date,
+Boolean, Single und Currency werden über die gemeinsame Feldbindung gelesen;
+ein ISO-Text in einer TEXT-Spalte wird dadurch nicht als Date deklariert.
+Verschachtelte Projektionen sowie unterstützte WHERE-/GROUP-BY-/ORDER-BY-
+Ausdrücke behalten diese Bindung und die tatsächlichen Ergebnistypen.
+
+Vergleiche zwischen zwei nachgewiesenen Date-Ausdrücken verwenden native
+Date-Werte; Datumsliterale behalten ihre Herkunft bereits im Lexer. Die sechs
+Vergleichsoperatoren liefern Boolean (-1/0), NULL bleibt NULL. Date-Ausdrücke
+mit IS NULL/IS NOT NULL erhalten die gebundenen Kinderausdrücke. Datumsfelder
+mit reinem Datum werden dabei normalisiert, ungültige Date-Speicherung wird
+abgewiesen. Andere gemischte Vergleichstypen sind damit nicht vollständig
+implementiert. Der allgemeine Jet-Übersetzer F067 bleibt offen.
+
+Die bestehenden Grenzen für Gregorian/ISO, System-Wochenregeln, regionale
+Eingabe und Ausgabe, Untersekundenspeicherung und komplexe Quellen gelten
+weiter. Die gemeinsamen SQL-Scalar-Adapter lehnen ungültiges UTF-8 vor einer
+ersetzenden Textkonvertierung ab. Dies ist ein nativer Implementierungsbeleg,
+kein neuer Windows-/Access-Ergebnisvergleich.

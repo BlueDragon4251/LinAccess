@@ -1,3 +1,4 @@
+#include <QLocale>
 #include "native_field_defaults.hpp"
 #include "access_table_import.hpp"
 #include <QDateTime>
@@ -2047,6 +2048,67 @@ End Function
         int error=0;try{(void)database->member("OpenRecordset",{linaccess::VbaValue::string(failure.first)});}catch(const linaccess::VbaRuntimeError& actual){error=actual.number;}
         if(error!=failure.second) std::cerr<<"Native case/reverse adapter error: "<<failure.first<<" actual="<<error<<" expected="<<failure.second<<'\n';assert(error==failure.second);
     }
+    {
+        struct RestoreCalendarLocale {QLocale previous;~RestoreCalendarLocale(){QLocale::setDefault(previous);}} restore;
+        QLocale::setDefault(QLocale(QLocale::English,QLocale::UnitedStates));
+        const char* calendarPhase="projection";
+        try {
+        assert(sql.exec("CREATE TABLE calendar_inputs(marker INTEGER2,stamp DATETIME,offset_date DATETIME,offset_text TEXT,enabled BOOLEAN,elapsed SINGLE_REAL,amount CURRENCY_REAL)"));
+        assert(sql.exec("INSERT INTO calendar_inputs VALUES(1,'2024-02-28 12:34:56','1900-01-01','1900-01-01',1,16777217,1.5),(2,NULL,'1900-01-01','1900-01-01',NULL,NULL,NULL)"));sql.finish();
+        const auto calendarSource=QStringLiteral(R"SQL(SELECT DateAdd('d',offset_date,stamp) AS shifted,
+TimeSerial(offset_date,Minute(stamp),Second(stamp)) AS clock,
+DatePart('y',stamp,offset_date) AS ordinal,
+DateDiff('d',stamp,DateAdd('d',offset_date,stamp),offset_date) AS distance,
+Year(stamp) AS year_part,Weekday(stamp,offset_date) AS week_part,
+DateValue(stamp) AS civil,TimeValue(stamp) AS time_only,CDate(offset_date) AS converted,
+DateSerial(2024,Month(stamp),Day(stamp)) AS reconstructed,Hour(stamp) AS hour_part,
+MonthName(offset_date,True) AS month_label,WeekdayName(offset_date,False,2) AS weekday_label,
+DateAdd('d',enabled,stamp) AS bool_shift,DateAdd('s',elapsed,stamp) AS single_shift,
+DateAdd('h',amount,stamp) AS money_shift,DateAdd('d',offset_date,stamp)+1 AS rollover
+FROM calendar_inputs WHERE marker=1)SQL");
+        const auto calendar=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery(calendarSource),{});
+        assert(calendar.rows.size()==1 && calendar.columnTypes==QVector<QString>({"DATETIME","DATETIME","INTEGER2","INTEGER4","INTEGER2","INTEGER2","DATETIME","DATETIME","DATETIME","DATETIME","INTEGER2","TEXT","TEXT","DATETIME","DATETIME","DATETIME","DATETIME"}));
+        const auto& values=calendar.rows[0];
+        assert(values[0].toString()=="2024-03-01 12:34:56" && values[1].toString()=="1899-12-30 02:34:56");
+        assert(values[2].toInt()==59 && values[3].toInt()==2 && values[4].toInt()==2024 && values[5].toInt()==3);
+        assert(values[6].toString()=="2024-02-28 00:00:00" && values[7].toString()=="1899-12-30 12:34:56" && values[8].toString()=="1900-01-01 00:00:00");
+        assert(values[9].toString()=="2024-02-28 00:00:00" && values[10].toInt()==12 && values[11].toString()=="Feb" && values[12].toString()=="Tuesday");
+        assert(values[13].toString()=="2024-02-27 12:34:56" && values[14].toString()=="2024-09-09 16:55:12" && values[15].toString()=="2024-02-28 14:34:56" && values[16].toString()=="2024-03-02 12:34:56");
+        calendarPhase="DAO fields";
+        const auto calendarFields=database->member("OpenRecordset",{linaccess::VbaValue::string(calendarSource.toStdString())}).object;
+        assert(calendarFields->member("Fields",{linaccess::VbaValue::string("shifted")}).object->member("Type",{}).asNumber()==8);
+        assert(calendarFields->member("Fields",{linaccess::VbaValue::string("ordinal")}).object->member("Type",{}).asNumber()==3);
+        assert(calendarFields->member("Fields",{linaccess::VbaValue::string("distance")}).object->member("Type",{}).asNumber()==4);
+        assert(calendarFields->item("shifted").kind==linaccess::VbaValue::Kind::Date && calendarFields->item("shifted").asText()=="2024-03-01 12:34:56");calendarFields->member("Close",{});
+        calendarPhase="filter";
+        const auto calendarFilter=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT marker FROM calendar_inputs WHERE DateAdd('d',offset_date,stamp)=#2024-03-01 12:34:56#"),{});
+        assert(calendarFilter.rows.size()==1 && calendarFilter.rows[0][0].toInt()==1);
+        const auto dateComparisons=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT offset_date=#1900-01-01# AS same_epoch,offset_date<>#1900-01-02# AS different,offset_date<#1900-01-02# AS earlier,offset_date<=#1900-01-01# AS not_later,offset_date>#1899-12-31# AS later,offset_date>=#1900-01-01# AS not_earlier FROM calendar_inputs WHERE marker=1"),{});
+        assert(dateComparisons.rows.size()==1 && dateComparisons.columnTypes==QVector<QString>(6,"BOOLEAN"));
+        for(const auto& value:dateComparisons.rows[0]) assert(value.toInt()==-1);
+        const auto nullCalendarFilter=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT marker FROM calendar_inputs WHERE DateAdd('d',offset_date,stamp) IS NULL"),{});
+        assert(nullCalendarFilter.rows.size()==1 && nullCalendarFilter.rows[0][0].toInt()==2);
+        calendarPhase="group/order";
+        const auto calendarGroups=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT DateAdd('d',offset_date,stamp) AS shifted,Count(*) AS tally FROM calendar_inputs GROUP BY DateAdd('d',offset_date,stamp) ORDER BY DateAdd('d',offset_date,stamp) DESC"),{});
+        assert(calendarGroups.rows.size()==2 && calendarGroups.columnTypes.value(0)=="DATETIME" && calendarGroups.rows[0][0].toString()=="2024-03-01 12:34:56" && calendarGroups.rows[1][0].isNull() && calendarGroups.rows[0][1].toInt()==1 && calendarGroups.rows[1][1].toInt()==1);
+        calendarPhase="Null";
+        const auto calendarNulls=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT DateAdd('d',1,stamp),Year(stamp),DatePart('m',stamp) FROM calendar_inputs WHERE marker=2"),{});
+        assert(calendarNulls.rows.size()==1 && calendarNulls.rows[0][0].isNull() && calendarNulls.rows[0][1].isNull() && calendarNulls.rows[0][2].isNull());
+        assert(sql.exec("INSERT INTO calendar_inputs(marker,stamp,offset_date) VALUES(3,'bad','1900-01-01')"));sql.finish();
+        for(const auto& failure:std::vector<std::pair<std::string,int>>{
+            {"SELECT DateAdd('d',offset_text,stamp) FROM calendar_inputs WHERE marker=1",13},
+            {"SELECT Year(stamp) FROM calendar_inputs WHERE marker=3",13},
+            {"SELECT CDate(stamp) FROM calendar_inputs WHERE marker=2",94},
+            {"SELECT DatePart('ww',stamp,0) FROM calendar_inputs WHERE marker=1",3251},
+            {"SELECT DateDiff('s',#0100-01-01#,#9999-12-31#)",6},
+            {"SELECT DateAdd('d',1)",450}}) {
+            int error=0;try{(void)database->member("OpenRecordset",{linaccess::VbaValue::string(failure.first)});}catch(const linaccess::VbaRuntimeError& actual){error=actual.number;}
+            if(error!=failure.second) std::cerr<<"Typed calendar SQL error: "<<failure.first<<" actual="<<error<<" expected="<<failure.second<<'\n';assert(error==failure.second);
+        }
+        } catch(const linaccess::VbaRuntimeError& failure) {
+            std::cerr<<"Typed calendar SQL phase="<<calendarPhase<<" error="<<failure.number<<"\n";throw;
+        }
+    }
     const auto typedRows=database->member("OpenRecordset",{linaccess::VbaValue::string(typedSource.toStdString())}).object;
     const auto enabled=typedRows->member("Fields",{linaccess::VbaValue::string("enabled")}).object;
     assert(enabled->member("Type",{}).asNumber()==1 && enabled->member("Size",{}).asNumber()==1);
@@ -3430,7 +3492,7 @@ End Sub
     assert(bindings.value(":la_parameter_0").toString() == "a%");
     assert(bindings.value(":la_parameter_0_like").toString() == "a\\%");
     const auto datePlan = linaccess::compileAccessQuery("SELECT #12/31/2003# = #2003-12-31#, Date(), Now()");
-    assert(q.exec(datePlan.sql)); assert(q.next() && q.value(0).toInt() == 1);
+    assert(q.exec(datePlan.sql)); assert(q.next() && q.value(0).toInt() == -1);
     assert(q.value(1).toString().endsWith("00:00:00"));
     assert(q.value(2).toString().size() == 19);
     const auto dateParameters = linaccess::compileAccessQuery("PARAMETERS d DateTime; SELECT d");
