@@ -5585,3 +5585,32 @@ bestanden. Nach Date-Fix betroffenes Kern-/DAO-Bündel2/2 in4,47s (0,40/4,07)
 bestanden. Keine neuen IDs,456/386/70 unverändert, kein Access-Oracle behauptet.
 Vorstand3d2ff1f12bc33fa3b103cc8633f79bef7b5d27d6/Baum7da7aa9200277987742a3a1a6d06b5d7bc819051
 privat veröffentlicht/exakt verifiziert; letzter Paketbeleg2d7fa91 liegt davor.
+
+
+Frischer Paketbeleg für native SQL-Scalar-/Rundungsbindung (2026-11-10):
+Privater Stand9f73a8c5f86f6cb1a28f2e86989c27f264f49245,
+Baumebea651f8afd1f1db9e6689c4db3514f88e8cafc. DEB unter
+work/sql-normalization/package-proof/package/linaccess-0.7.0-Linux.deb:
+Integrationsbau/CPack/check-deb bestanden; bestehendes Original-/Inventarbündel
+2/2 in167,90s (Original120,56/Inventar47,34s);7 geschützte Hashes unverändert.
+Inventar100/78/22 und Kategorien73/5/3/9/10 unverändert. Weiterhin kein Access-
+Ergebnisoracle für78 ausgeführte Abfragen, bekannte Original-/Makrogrenzen bleiben.
+Paket enthält Zeichen-/Längen-/Finanz-/Farb-/Partition-/Normalisierungsbindung
+und Date-zu-Currency-Korrektur; liegt vor den neuen SQL-Typabfragen.
+Fester Katalog456/386/70 unverändert; keine Vollparität behauptet.
+
+
+Native SQL-Typabfragen (2026-11-10): VARTYPE_RESULT_RUNTIME.md.
+IsNumeric/VarType/TypeName als echte native SQL-Callbacks mit geprüfter Quell-
+Typbindung und Boolean/Integer/Text-Ergebnisprojektionen. Date/Boolean/Single/
+Currency/Integer und verschachtelte Byte/Long/Double-Konvertierungen, tatsächliche
+DAO Boolean/Integer-Typen, Null-Laufzeittyp, Text statt geratenem Date sowie
+Projektionen/Filter/Gruppierung/Sortierung geprüft. Boolean-Literalbindung bleibt
+auch in Klammern erhalten; quoted Feldnamen unverändert. Grenzen unproven
+Zahlen/BLOB/Object/Array/Locale sowie gesondertes Access-Eval-Profil bleiben.
+App/DAO/Query-Modell gebaut; bestehendes Bündel2/2 in4,50s (4,14/0,35) bestanden.
+Keine neuen IDs;456/386/70 unverändert, kein neuer Windows-Access-Oracle.
+Vorstand9f73a8c5f86f6cb1a28f2e86989c27f264f49245/Baumebea651f8afd1f1db9e6689c4db3514f88e8cafc
+privat veröffentlicht/exakt verifiziert, Paketbeleg167,90s/7Hashes gleich oben.
+SQL-Typabfragen liegen nach diesem Paket. Kontinuierlich weitere Anforderungen
+implementieren; kein Zwischenabschluss oder Abschlussanruf.

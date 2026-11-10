@@ -332,6 +332,12 @@ void normalized_sgn_typed(sqlite3_context* context,int count,sqlite3_value** arg
 void normalized_sgn(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Sgn",1,1,false);}
 void normalized_round_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Round",1,2,true);}
 void normalized_ccur_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"CCur",1,1,true);}
+void inspect_isnumeric(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"IsNumeric",1,1,false);}
+void inspect_isnumeric_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"IsNumeric",1,1,true);}
+void inspect_vartype(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"VarType",1,1,false);}
+void inspect_vartype_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"VarType",1,1,true);}
+void inspect_typename(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"TypeName",1,1,false);}
+void inspect_typename_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"TypeName",1,1,true);}
 void stringCStr(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"CStr",1,1,false);}
 void stringCStrTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"CStr",1,1,true);}
 void stringStr(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Str",1,1,false);}
@@ -899,6 +905,13 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_next_counter",2,&nextAccessCounter,nullptr,nullptr);
     ensure("linaccess_jet_iif",3,&iif,nullptr,nullptr);
     ensure("linaccess_jet_rgb",-1,&rgbColor,nullptr,nullptr);
+    ensure("linaccess_jet_isnumeric",-1,&inspect_isnumeric,nullptr,nullptr);
+    ensure("linaccess_jet_isnumeric_typed",-1,&inspect_isnumeric_typed,nullptr,nullptr);
+    ensure("linaccess_jet_vartype",-1,&inspect_vartype,nullptr,nullptr);
+    ensure("linaccess_jet_vartype_typed",-1,&inspect_vartype_typed,nullptr,nullptr);
+    ensure("linaccess_jet_typename",-1,&inspect_typename,nullptr,nullptr);
+    ensure("linaccess_jet_typename_typed",-1,&inspect_typename_typed,nullptr,nullptr);
+
     ensure("linaccess_jet_rgb_typed",-1,&bound_rgb,nullptr,nullptr);
     ensure("linaccess_jet_qbcolor_typed",-1,&bound_qbcolor,nullptr,nullptr);
     ensure("linaccess_jet_partition_typed",-1,&bound_partition,nullptr,nullptr);
