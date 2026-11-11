@@ -522,6 +522,7 @@ void calendarDatePart(sqlite3_context* context,int count,sqlite3_value** args) n
 void scalarChoose(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Choose",2,1000); }
 void scalarSwitch(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Switch",2,1000); }
 void stringVal(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Val",1,1); }
+void stringValTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Val",1,1,true);}
 void stringHexTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Hex",1,1,true);}
 void alias_hex_string(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Hex$",1,1,false);}
 void alias_hex_string_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Hex$",1,1,true);}
@@ -1172,6 +1173,7 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_choose",-1,&scalarChoose,nullptr,nullptr);
     ensure("linaccess_jet_switch",-1,&scalarSwitch,nullptr,nullptr);
     ensure("linaccess_jet_val",-1,&stringVal,nullptr,nullptr);
+    ensure("linaccess_jet_val_typed",-1,&stringValTyped,nullptr,nullptr);
     ensure("linaccess_jet_hex_string",-1,&alias_hex_string,nullptr,nullptr);
     ensure("linaccess_jet_hex_string_typed",-1,&alias_hex_string_typed,nullptr,nullptr);
     ensure("linaccess_jet_oct_string",-1,&alias_oct_string,nullptr,nullptr);

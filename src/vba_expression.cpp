@@ -2620,8 +2620,8 @@ private:
                     const bool longValue=end<text.size() && text[end]=='&';
                     const bool integerValue=end<text.size() && text[end]=='%';
                     if(integerValue && bits>0xffffU) throw error("Val Integer overflow",6);
-                    if(!longValue && bits<=0xffffU) return VbaValue::integer(static_cast<std::int16_t>(bits>=0x8000U ? static_cast<std::int64_t>(bits)-0x10000 : static_cast<std::int64_t>(bits)));
-                    return VbaValue::longInteger(static_cast<std::int32_t>(bits>=0x80000000U ? static_cast<std::int64_t>(bits)-0x100000000LL : bits));
+                    if(!longValue && bits<=0xffffU) return VbaValue::numeric(bits>=0x8000U ? static_cast<double>(static_cast<std::int64_t>(bits)-0x10000) : static_cast<double>(bits));
+                    return VbaValue::numeric(bits>=0x80000000U ? static_cast<double>(static_cast<std::int64_t>(bits)-0x100000000LL) : static_cast<double>(bits));
                 }
                 std::size_t end=0;
                 if(end<text.size() && (text[end]=='+' || text[end]=='-')) ++end;
@@ -2648,10 +2648,10 @@ private:
                     const auto suffix=text[end];
                     if(suffix=='%' || suffix=='&') {
                         if(std::trunc(number)!=number) throw error("Val integral suffix mismatch",13);
-                        return coerceVbaModuleValue(result,suffix=='%' ? "integer" : "long");
+                        return VbaValue::numeric(coerceVbaModuleValue(result,suffix=='%' ? "integer" : "long").asNumber());
                     }
-                    if(suffix=='!') return coerceVbaModuleValue(result,"single");
-                    if(suffix=='@') return convertCurrency(result);
+                    if(suffix=='!') return VbaValue::numeric(coerceVbaModuleValue(result,"single").asNumber());
+                    if(suffix=='@') return VbaValue::numeric(convertCurrency(result).asNumber());
                     if(suffix=='$') throw error("Val String suffix mismatch",13);
                     if(suffix=='^') throw error("64-bit Val suffix is not implemented",3251);
                 }

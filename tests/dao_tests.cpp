@@ -2397,6 +2397,19 @@ FROM calendar_inputs WHERE marker=1)SQL");
             int actual=0;try{(void)database->member("OpenRecordset",{linaccess::VbaValue::string(failure.first)});}catch(const linaccess::VbaRuntimeError& error){actual=error.number;}
             if(actual!=failure.second) std::cerr<<"SQL conditional error actual="<<actual<<" expected="<<failure.second<<"\n";assert(actual==failure.second);
         }
+        calendarPhase="native Val Double contract";
+        const auto valSource=QStringLiteral("SELECT Val('&HFFFF') AS signed_hex,Val('&HFFFF&') AS long_hex,Val('50%') AS percentage,Val('16777217!') AS single_literal,Val('1.2345@') AS currency_literal,Val(enabled) AS flag_value,Val(elapsed) AS single_value,Val(amount) AS money_value,VarType(Val('&HFFFF')) AS subtype,TypeName(Val('50%')) AS name FROM calendar_inputs WHERE marker=1");
+        const auto valValues=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery(valSource),{});
+        assert(valValues.rows.size()==1 && valValues.columnTypes==QVector<QString>({"DOUBLE","DOUBLE","DOUBLE","DOUBLE","DOUBLE","DOUBLE","DOUBLE","DOUBLE","INTEGER2","TEXT"}));
+        assert(valValues.rows[0][0].toDouble()==-1 && valValues.rows[0][1].toDouble()==65535 && valValues.rows[0][2].toDouble()==50 && valValues.rows[0][3].toDouble()==16777216 && valValues.rows[0][4].toDouble()==1.2345);
+        assert(valValues.rows[0][5].toDouble()==0 && valValues.rows[0][6].toDouble()==16777220 && valValues.rows[0][7].toDouble()==1.5 && valValues.rows[0][8].toInt()==5 && valValues.rows[0][9].toString()=="Double");
+        const auto valFields=database->member("OpenRecordset",{linaccess::VbaValue::string(valSource.toStdString())}).object;
+        assert(valFields->member("Fields",{linaccess::VbaValue::string("signed_hex")}).object->member("Type",{}).asNumber()==7 && valFields->item("signed_hex").numericType==linaccess::VbaValue::NumericType::Double);valFields->member("Close",{});
+        const auto emptyVal=database->member("OpenRecordset",{linaccess::VbaValue::string("SELECT Val(amount) AS result FROM calendar_inputs WHERE marker<0")}).object;
+        assert(emptyVal->member("EOF",{}).boolean && emptyVal->member("Fields",{linaccess::VbaValue::string("result")}).object->member("Type",{}).asNumber()==7);emptyVal->member("Close",{});
+        for(const auto& failure:std::vector<std::pair<std::string,int>>{{"SELECT Val(enabled) FROM calendar_inputs WHERE marker=2",94},{"SELECT Val('50.5%')",13},{"SELECT Val('&HFFFF!')",3251}}) {
+            int actual=0;try{(void)database->member("OpenRecordset",{linaccess::VbaValue::string(failure.first)});}catch(const linaccess::VbaRuntimeError& error){actual=error.number;}assert(actual==failure.second);
+        }
         calendarPhase="typed selector aggregate family";
         const auto selectorSource=QStringLiteral("SELECT Min(stamp) AS earliest,Max(stamp) AS latest,First(stamp) AS initial_stamp,Last(stamp) AS final_stamp,Min(amount) AS small_money,Max(amount) AS big_money,Min(elapsed) AS low_single,Max(marker) AS high_integer,Min(enabled) AS low_flag,Max(enabled) AS high_flag,VarType(Min(stamp)) AS date_kind,TypeName(Max(amount)) AS money_kind,Min(DISTINCT marker) AS unique_marker FROM calendar_inputs");
         const auto selectors=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery(selectorSource),{});

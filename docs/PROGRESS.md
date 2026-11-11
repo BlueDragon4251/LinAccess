@@ -8375,3 +8375,40 @@ Vorstandf0c3c29636a5e23e4e71263b181a9bec6a91345a/Baum570525c5f17af9d389fb9a63bba
 privat/exakt veröffentlicht. Letzter positiver Paket-/Originalbeleg2adda672
 180,90s/7Hashes gleich liegt vor neuer Feld-/PageDown-/Enum-Erweiterung; frischer
 gemeinsamer Nachweis folgt. Nicht als Zwischen-/Gesamtabschluss behandeln.
+
+
+Aktualisierter gemeinsamer Enum-/UI-Paketbeleg (2026-11-11):
+Quelle918c2c4d6ae36c019721f2cb9cd55a116e8ebcc3,
+Baum0bcb6db1bd2be79ea1279d0911959c4fad41808f, privat/exakt veröffentlicht.
+DEB: work/project-enums-package/package/linaccess-0.7.0-Linux.deb.
+Integrationsbau/CPack/check-deb bestanden; vorhandenes Original-/Inventarbündel
+2/2 in182,07s (Inventar54,16/Original127,91s),7 geschützte Hashes unverändert.
+Privates Abfrageinventar100/78/22, Status73/5/3/9/10 unverändert;78 Ausführungen
+ohne Access-Ergebnisoracle, Original behält bekannte Makrogrenze. Enthält
+Feldwert-Leerung/PageDown und explizite Projekt-Enum-Typbindung. Keine vollständige
+Original-Geschäfts-/Windows-/Katalogparität. Neue Val-/Validierungskorrektur liegt
+nach diesem Paket;456/386/70 unverändert.
+
+
+Native Rückgabe-/Validierungsverträge (2026-11-11): VAL_DOUBLE_CONTRACT.md und
+ENUM_VALIDATION_ERRORS.md. MS-VBAL6.1.2.3.1.21 erklärt Val als Double: native
+Radix-/unterstützte Suffixkonversion behält Werte/Fehlergrenzen, liefert aber
+immer Double statt zufälliger Integer-/Long-/Single-/Currency-Untertypen. SQL
+reicht belegte Eingangsarten vor Stringkonversion durch und bindet Double-
+Ergebnisse/DAOdbDouble7 einschließlich leerem Resultat. Booltext/Single-Text-/
+Currency-Pfade nutzen bestehende native Regeln;7-stellige Singletextdarstellung
+explizit, keine neue Windows-Suffix-/Locale-Paritätsbehauptung.
+Ungültige Enum-Deklarationen liefern nun das negative Compilergebnis samt
+Fehlernummer, statt aus validateVbaProcedure als C++-Ausnahme durch den
+Fähigkeitsbericht zu entweichen. Quellen-Scanner bleibt checked throwing API,
+Zeile0 ohne erfundene Quellenzuordnung; Report führt nichts aus.
+App gebaut; vorhandene GUI bestanden16,17s, DAO bestanden5,29s. Kern nach
+Entfernung einer unbelegten Len-Speichergrößen-Erwartung betroffen1/1 in0,55s
+bestanden (Len-Runtime unverändert). Geprüft: Werte/Double-Untertyp/Hex,
+belegte SQL-Eingänge/Metadaten/Null-/Fehlergrenzen/Leerresultat und echter
+Fähigkeitsbericht mit invalidem Enum ohne Absturz/Programmausführung. Keine
+neue CTest-ID/Katalog-ID/Windows-Beobachtung. F040/F041/F051/F067/F071 bleiben
+offen, feste456 IDs/386 bestätigte Teilumfänge/70 offene Vollanforderungen.
+Vorstand918c2c4d6ae36c019721f2cb9cd55a116e8ebcc3 privat/exakt publiziert;
+aktueller positiver Vorstand-DEB/Originalbeleg182,07s/7Hashes gleich siehe oben.
+Direkt weiterentwickeln; kein Zwischen-/Gesamtabschluss.

@@ -264,7 +264,7 @@ keine Tests oder Teilpunkte allein zur Erhöhung einer Fortschrittszahl anlegen.
 - [x] **F305** — Direct-table DataEntry sessions and fresh acFormAdd/acFormEdit/acFormReadOnly opening policies, real inserts and NewRecord Integer semantics; queries open.
 - [x] **F308** — Preserving existing String/Byte arrays in Variants, zero-based VBA.Array and optional Let assignment; full typed/multidimensional arrays remain open.
 - [x] **F309** — Bounded hexadecimal/octal literals and checked 32-bit numeric And/Or; full decimal/subtype/Null operator matrix remains open.
-- [x] **F313** — Native Val decimal prefixes, stripped ASCII spaces, signed hexadecimal/octal patterns and checked suffixes in VBA/SQL; full suffix/locale matrix remains open.
+- [x] **F313** — Native Val Double contract and proven SQL typing: [scope](VAL_DOUBLE_CONTRACT.md). Native Val decimal prefixes, stripped ASCII spaces, signed hexadecimal/octal patterns and checked suffixes in VBA/SQL; full suffix/locale matrix remains open.
 - [x] **F317** — Bounded native Date Variant, CDate, Date locals/module fields/parameters/ results, type inspection and Gregorian calendar integration; full locale/OLE open.
 - [x] **F318** — Native Date clocks and supported bound-field/DAO Date parameter roundtrip, with physical-column Date lineage in query results; full expression typing open.
 - [x] **F319** — Calculated Date display and typed unbound Date storage; original calculation regression retained, complete formatting/precision/edit-event oracle remains open.

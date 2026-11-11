@@ -776,7 +776,10 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
     std::string activeSource;
     try {activeSource=preprocessVbaConditional(module);module=activeSource;}
     catch(const VbaConditionalError& error) {VbaExecutionResult result{VbaExecutionStatus::Unsupported,error.what(),error.line};result.errorNumber=error.number;return result;}
-    const auto enumTypes=inherited ? inherited->enums : moduleEnumNames(module,aliases);
+    VbaEnumAliases enumTypes;
+    try {enumTypes=inherited ? inherited->enums : moduleEnumNames(module,aliases);}
+    catch(const VbaRuntimeError& failure) {VbaExecutionResult rejected{VbaExecutionStatus::Unsupported,"Enum type declaration is unsupported",0};rejected.errorNumber=failure.number;return rejected;}
+    catch(const std::bad_alloc&) {VbaExecutionResult rejected{VbaExecutionStatus::Error,"Enum type binding allocation failed",0};rejected.errorNumber=7;return rejected;}
     ImplicitTypes implicitTypes;int declarationArrayBase=0;
     try {implicitTypes=inherited ? inherited->implicit : moduleImplicitTypes(module);declarationArrayBase=inherited ? inherited->arrayBase : moduleArrayBase(module);}
     catch(const VbaRuntimeError& error) {VbaExecutionResult failure{VbaExecutionStatus::Unsupported,error.what(),0};failure.errorNumber=error.number;return failure;}

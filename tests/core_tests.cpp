@@ -501,6 +501,14 @@ End Function)BOUND";
     assert(eval("Val(\"&O177777\")").asNumber()==-1 && eval("Val(\"24 and 57\")").asNumber()==24);
     assert(eval("Val(\"+1.25e2tail\")").asNumber()==125 && eval("Val(\"1,25\")").asNumber()==1);
     assert(eval("Val(\"50%\")").asNumber()==50 && eval("Val(\"none\")").asNumber()==0);
+    for(const auto* expression:{"Val(\"&HFFFF\")","Val(\"&HFFFF&\")","Val(\"&O177777\")","Val(\"50%\")","Val(\"123&\")","Val(\"16777217!\")","Val(\"1.2345@\")","Val(\"none\")"}) {
+        const auto parsed=eval(expression);assert(parsed.kind==VbaValue::Kind::Number && parsed.numericType==VbaValue::NumericType::Double);
+    }
+    assert(eval("VarType(Val(\"&HFFFF\"))=vbDouble And TypeName(Val(\"50%\"))=\"Double\"").truthy());
+    assert(eval("Hex(Val(\"&HFFFF\"))").asText()=="FFFFFFFF");
+    assert(eval("Val(\"16777217!\")").number==16777216 && eval("Val(\"1.2345@\")").number==1.2345);
+    assert(eval("Val(CSng(16777217))").number==16777220); // Existing seven-digit native Single text policy.
+
     assert(eval("Sqr(Number:=81)").asNumber()==9 && eval("VarType(Sqr(81))=vbDouble").truthy());
     assert(std::abs(eval("Log(Exp(2))").asNumber()-2)<1e-12);
     assert(std::abs(eval("Sin(4*Atn(1)/2)").asNumber()-1)<1e-12);

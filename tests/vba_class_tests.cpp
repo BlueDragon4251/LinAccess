@@ -99,6 +99,7 @@ void testVbaClasses() {using namespace linaccess;auto state=std::make_shared<Cla
     const auto beforeEnumGuard=state->messages;result=executeVbaProcedure(enumTypeFixture+"Sub RejectEnumClass\nMsgBox \"unreached\"\nDim item As Object\nIf TypeOf item Is NativeState_2 Then Exit Sub\nEnd Sub\n","RejectEnumClass",host);assert(result.status==VbaExecutionStatus::Error && result.errorNumber==3251 && state->messages==beforeEnumGuard);
     {
         int reservedEnum=0;try{(void)nativeVbaEnumTypeNames("Public Enum Double\nFirst=1\nEnd Enum",true);}catch(const VbaRuntimeError& failure){reservedEnum=failure.number;}assert(reservedEnum==5);
+        const auto invalidEnum=validateVbaProcedure("Public Enum Double\nFirst=1\nEnd Enum\nSub BadEnum()\nEnd Sub","BadEnum");assert(invalidEnum.status==VbaExecutionStatus::Unsupported && invalidEnum.errorNumber==5);
         const auto visible=nativeVbaEnumTypeNames(projectEnumProvider,true);assert(visible.contains("nativeshared_2") && visible.contains("enumprovider.nativeshared_2") && visible.contains("legacyshared_2") && !visible.contains("nativehidden_2") && !visible.contains("enumprovider.nativehidden_2"));
         auto projectState=std::make_shared<ClassState>();projectState->enums=visible;projectState->classes["projectenumholder"]=projectEnumClassFixture;ClassServices projectHost(projectState);
         for(const auto* source:{&projectEnumConsumer,&projectEnumQualifiedConsumer}) for(const auto& probe:std::vector<std::pair<const char*,int>>{{"EnumTypeProbe",64},{"EnumTypeOverflow",6}}) {
