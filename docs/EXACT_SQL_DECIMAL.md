@@ -15,7 +15,7 @@ Trailing-zero scale and signed-zero representation are not preserved by this
 transport; numerical exactness does not establish Access formatting identity.
 
 Supported SELECT projection aliases retain their proven types. Unknown functions,
-unsupported aggregates such as Sum, nested SELECT/UNION, action/make-table queries
+unsupported aggregates, nested SELECT/UNION, action/make-table queries
 and unproven Decimal predicates refuse instead of executing SQLite blob arithmetic.
 Physical Jet Decimal creation, import, precision/scale properties, writable Decimal
 fields and lossless MDB round trips remain open. Derived DAO Filter/Sort snapshots
@@ -31,3 +31,13 @@ The fixed 456-item catalog remains unchanged: 386 confirmed partial scopes and
 
 Validation: application build succeeded; existing core target passed in0.58s,
 query model in0.45s and final affected DAO target in5.41s.
+
+Native homogeneous Decimal Sum uses a fixed 24-byte accumulator per group,
+reusing checked Decimal addition and the exact key codec. NULL inputs are ignored;
+empty groups return NULL with proven Decimal result metadata. Intermediate
+96-bit overflow reports6. No Double accumulator, heap-owned group object, physical
+Decimal column support or complete Access aggregate promotion is introduced.
+DISTINCT Decimal sums and broader average/variance semantics remain unproven.
+
+Sum validation: app built; existing query model0.42s and final affected
+DAO1/1 in5.72s passed.

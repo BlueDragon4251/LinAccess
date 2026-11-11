@@ -8477,3 +8477,17 @@ unveränderte Daten prüft. Nur betroffenes DAO erneut1/1 in5,41s bestanden.
 Keine neue CTest-ID/Windows-Referenz. F014/F041/F067/F068 bleiben offen;
 feste456/386/70 unverändert. Gesamtpaket-/Originalbeleg64291db liegt vor diesem
 Decimal-Umfang. Direkt weiterentwickeln, kein Zwischen-/Gesamtabschluss.
+
+
+Native exakte Decimal-Summen (2026-11-11): EXACT_SQL_DECIMAL.md erweitert.
+Sum(CDec(...)) verwendet pro Gruppe festen24-Byte-Zustand und bestehenden
+geprüften Decimal-Additionskern, keineDouble-Akkumulation. NULL überspringen,
+leere GruppenNULL mit belegtem Typ; Überlauf6. Grundsumme/Gruppen, >2^53
+plus0,0001, Nullzweig und96-Bit-Überlauf im bestehenden DAO-Ziel gemeinsam
+geprüft. App gebaut, Querymodell0,42s bestanden; falsche Boolean-Gruppenordnung
+in Prüferwartung korrigiert (True=-1 vorFalse=0), nur DAO erneut1/1 in5,72s
+bestanden. Keine neue CTest-ID/Access-Referenz, keine generelle Aggregate-/
+Typ-Promotion-/physischeDecimal-Parität. F014/F041/F067/F068 bleiben offen;
+feste456/386/70 unverändert. Vorstand2f786060/Baum
+f308a7cc1c63e0591dfe1bd14f5aad6b71a1dfba privat/exakt veröffentlicht.
+Direkt weiterentwickeln, kein Zwischen-/Gesamtabschluss.

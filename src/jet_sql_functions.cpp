@@ -675,6 +675,29 @@ void currencyTicksAdd(sqlite3_context* c,int,sqlite3_value** a) noexcept {curren
 void currencyTicksSubtract(sqlite3_context* c,int,sqlite3_value** a) noexcept {currencyTicksArithmetic(c,a,"-");}
 void currencyTicksMultiply(sqlite3_context* c,int,sqlite3_value** a) noexcept {currencyTicksArithmetic(c,a,"*");}
 
+// Fixed-size encoded state needs no placement construction or per-group heap owner.
+struct DecimalSumState { unsigned char encoded[24]; int error; bool seen; };
+void decimalSumStep(sqlite3_context* context,int,sqlite3_value** args) noexcept {
+    auto& native=api();auto* state=static_cast<DecimalSumState*>(native.aggregate(context,sizeof(DecimalSumState)));
+    if(!state) {functionError(context,VbaRuntimeError(7,"Decimal aggregate allocation failed"));return;}
+    if(state->error || native.type(args[0])==SQLITE_NULL) return;
+    try {
+        const auto input=qtFieldValue(boundSqlStorage(args[0],true),"DECIMAL_EXACT");
+        const auto total=state->seen ? decimalBinary("+",decimalFromSqlKey(std::vector<unsigned char>(state->encoded,state->encoded+24)),input) : input;
+        const auto bytes=decimalSqlKey(total);std::memcpy(state->encoded,bytes.data(),24);state->seen=true;
+    } catch(const VbaRuntimeError& failure) {state->error=failure.number;functionError(context,failure);}
+      catch(...) {state->error=7;functionError(context,VbaRuntimeError(7,"Decimal aggregate failed"));}
+}
+void decimalSumFinal(sqlite3_context* context) noexcept {
+    auto& native=api();const auto* state=static_cast<DecimalSumState*>(native.aggregate(context,0));
+    try {
+        if(state && state->error) throw VbaRuntimeError(state->error,"Decimal aggregate failed");
+        if(!state || !state->seen) {native.nullResult(context);return;}
+        returnBoundSqlValue(context,decimalFromSqlKey(std::vector<unsigned char>(state->encoded,state->encoded+24)));
+    } catch(const VbaRuntimeError& failure) {functionError(context,failure);}
+      catch(...) {functionError(context,VbaRuntimeError(7,"Decimal aggregate failed"));}
+}
+
 struct CurrencySumState { std::int64_t units; int error; bool seen; };
 void currencySumStep(sqlite3_context* context,int,sqlite3_value** args) noexcept {
     auto& native=api(); auto* state=static_cast<CurrencySumState*>(native.aggregate(context,sizeof(CurrencySumState)));
@@ -1255,6 +1278,7 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_ccur",-1,&currencyNumber,nullptr,nullptr);
     ensure("linaccess_jet_currency_store",1,&currencyStore,nullptr,nullptr);
     ensure("linaccess_jet_field_store",2,&fieldStore,nullptr,nullptr);
+    ensure("linaccess_jet_decimal_sum",1,nullptr,&decimalSumStep,&decimalSumFinal);
     ensure("linaccess_jet_currency_sum",1,nullptr,&currencySumStep,&currencySumFinal);
     ensure("linaccess_jet_currency_add",2,&currencyAdd,nullptr,nullptr);
     ensure("linaccess_jet_currency_subtract",2,&currencySubtract,nullptr,nullptr);

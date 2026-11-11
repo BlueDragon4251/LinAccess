@@ -2,7 +2,7 @@
 
 Min/Max with one argument and native First/Last retain the proven argument type
 through the existing bound query plan, DAO values and result metadata. This
-covers supported Date, Currency, Boolean, Byte/Integer/Long, Single and Double
+covers supported exact Decimal, Date, Currency, Boolean, Byte/Integer/Long, Single and Double
 sources and already-proven scalar expressions. Min/Max DISTINCT retain the same
 argument type. No type is inferred from sample result values or invented for
 unknown SQLite columns; exact untyped SQLite integers retain their raw values.
@@ -30,3 +30,6 @@ multi-argument SQLite Min/Max scalar argument binding. Cases cover actual field
 types/values, Boolean ordering with raw1/0, Single rounding, negative Date serial
 ordering, Date/Currency nested type inspection, DISTINCT/grouping/empty results,
 First/Last NULL and untyped integers above2^53. No new CTest or Access oracle.
+
+Exact Decimal selectors use the checked sortable transport described in
+[Exact SQL Decimal](EXACT_SQL_DECIMAL.md), without a Double intermediate.
