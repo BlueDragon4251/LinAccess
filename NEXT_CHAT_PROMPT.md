@@ -4487,3 +4487,20 @@ Vorhandenes mainwindow_documents1/1 in15,10s (Test15,09) bestanden, unverändert
 20s-Watchdog. Keine neue CTest-/Katalog-ID;456/386/70. Veröffentlichter Stand
 a599c2dd7a9c79f8eb1529de54bc288946f6d120/Baumaf0c0433d29584711ece0152e2467214fbd07b0f
 privat/exakt verifiziert. Kein neuer Windows-/Gesamtparitätsnachweis.
+
+
+Primitive SQL-Prädikatergebnisse (2026-11-11): NATIVE_TYPED_LOGIC.md.
+LIKE/NOT LIKE, IN/NOT IN, BETWEEN/NOT BETWEEN und IS NULL/IS NOT NULL behalten
+Boolean -1/0/NULL in unterstützten Projektionen, Verschachtelung, Gruppierung
+und Sortierung; echte Predicate behalten SQL-Operatorstruktur. BETWEEN-
+Bereichs-AND von logischem AND getrennt, gebundene Bounds/IN-Listen-Kinder
+und negierte linke Ausdrücke erhalten. IS NOT NULL wird vor scalar Not gebunden;
+vorher mögliche falsche Transformation IS Not(Null) korrigiert. Tatsächliche
+DAO Boolean-Typen, NULL-Fälle, Präzedenz, Gruppierung/Sortierung/Filter geprüft.
+Unveränderte Pattern-/Collation-/Membership-/Range-Coercion-/Date-Currency-/
+Quellgrenzen; keine pauschale Jet- oder Oracle-Behauptung. App/DAO/Modell gebaut;
+ein bestehendes Bündel2/2 in5,15s (4,75/0,39) bestanden. Keine neuen IDs;
+456/386/70 unverändert. Vorstandf66aaa3e21e1bc19d766f25483e451b0a8ce9c26/
+Baum3e2c56be109c5eebc94ff9ead0087f108d17c47a privat/exakt veröffentlicht.
+Letzter Paketbeleg9f73a8c5,167,90s/7Hashes gleich; spätere SQL-/UI-Inkremente
+darin nicht enthalten. Ohne Zwischenabschluss weiterimplementieren.

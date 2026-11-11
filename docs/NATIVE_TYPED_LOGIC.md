@@ -70,3 +70,24 @@ Vergleichsergebnisse auf. Der eigene interne Boolean-Ergebnisencoder erhält NUL
 und normalisiert ausschließlich SQLite0/1; CBool(NULL) selbst bleibt unverändert94.
 Native NULL-Vergleiche, Not und Or über Vergleichsergebnisse sind damit im
 vorhandenen DAO-Ziel geprüft. Keine zusätzliche CTest-Registrierung.
+
+
+Primitive SQL predicate result family (2026-11-11)
+------------------------------------------------
+Like/Not Like, In/Not In, Between/Not Between and Is Null/Is Not Null retain
+Boolean -1/0/NULL result identity in supported projections, grouping, sorting
+and nested scalar calls. Real predicates keep their SQL operator structure;
+this changes result binding, not the existing pattern/collation/membership/range
+coercion policy or source-lineage bounds. Native SQL NULL comparison results
+continue through the NULL-preserving encoder.
+
+Between's delimiter And is distinguished from a following logical And. Bounds
+and bounded IN-list expressions retain their supported native child bindings;
+IN subqueries retain their original source representation and existing guards.
+A trailing Not before Like/In/Between is preserved as SQL syntax while its left
+operand remains bound. Is Not Null is handled as SQL syntax before scalar Not
+binding, preventing the incorrect transformation into Is Not(Null).
+
+This is not full Jet pattern/collation coercion, arbitrary CASE/subquery grammar,
+Boolean membership normalization or Date/Currency BETWEEN equivalence. No
+business fixture, Access observation or catalog/CTest ID is invented.

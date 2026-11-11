@@ -449,7 +449,7 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
         if(value=="xor") return 3;
         if(value=="or") return 4;
         if(value=="and") return 5;
-        if(value=="=" || value=="<>" || value=="!=" || value=="<" || value==">" || value=="<=" || value==">=" || value=="like" || value=="is" || value=="in") return 7;
+        if(value=="=" || value=="<>" || value=="!=" || value=="<" || value==">" || value=="<=" || value==">=" || value=="like" || value=="is" || value=="in" || value=="between") return 7;
         if(value=="&" || value=="||") return 8;
         if(value=="+" || value=="-") return 9;
         if(value=="*" || value=="/" || value=="\\" || value=="%" || value=="mod") return 10;
@@ -476,11 +476,13 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
                 QVector<Token> code{{Token::Other,"("}}; code+=inner.code; code.append({Token::Other,")"}); return {inner.type,code};
             }
         }
-        qsizetype operation=-1; int lowest=100,nesting=0;
+        qsizetype operation=-1; int lowest=100,nesting=0;bool betweenBound=false;
         for(qsizetype i=0;i<expression.size();++i) {
             if(symbol(expression[i],"(")) { ++nesting; continue; }
             if(symbol(expression[i],")")) { --nesting; continue; }
             if(nesting) continue;
+            if(expression[i].kind==Token::Word && expression[i].value.compare("Between",Qt::CaseInsensitive)==0) betweenBound=true;
+            else if(betweenBound && expression[i].kind==Token::Word && expression[i].value.compare("And",Qt::CaseInsensitive)==0) {betweenBound=false;continue;}
             const auto rank=precedence(expression[i]); if(!rank) continue;
             if((symbol(expression[i],"+") || symbol(expression[i],"-")) && (i==0 || precedence(expression[i-1]) || symbol(expression[i-1],"(" ) || symbol(expression[i-1],","))) continue;
             if(rank<=lowest) { lowest=rank; operation=i; }
@@ -496,6 +498,38 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
             return unknown;
         }
         if(operation>=0) {
+            const auto primitive=expression[operation].value.toCaseFolded();
+            if(QSet<QString>{"like","in","between","is"}.contains(primitive)) {
+                const bool negated=primitive!="is" && operation>0 && expression[operation-1].kind==Token::Word && expression[operation-1].value.compare("Not",Qt::CaseInsensitive)==0;
+                auto left=parse(expression.mid(0,operation-(negated ? 1 : 0)),recursion+1);
+                auto right=expression.mid(operation+1);QVector<Token> code=left.code;
+                if(negated) code.append(expression[operation-1]);code.append(expression[operation]);
+                if(primitive=="is") {
+                    // NOT NULL is SQL syntax, not the scalar expression Not(Null).
+                    const bool isNull=right.size()==1 && right[0].kind==Token::Word && right[0].value.compare("Null",Qt::CaseInsensitive)==0;
+                    const bool isNotNull=right.size()==2 && right[0].kind==Token::Word && right[0].value.compare("Not",Qt::CaseInsensitive)==0 && right[1].kind==Token::Word && right[1].value.compare("Null",Qt::CaseInsensitive)==0;
+                    if(!isNull && !isNotNull) return unknown;
+                    code+=right;
+                } else if(primitive=="between") {
+                    int depth=0;qsizetype separator=-1;
+                    for(qsizetype at=0;at<right.size();++at) {
+                        if(symbol(right[at],"(")) ++depth;else if(symbol(right[at],")")) --depth;
+                        else if(!depth && right[at].kind==Token::Word && right[at].value.compare("And",Qt::CaseInsensitive)==0) {separator=at;break;}
+                    }
+                    if(separator<=0 || separator>=right.size()-1) return unknown;
+                    code+=parse(right.mid(0,separator),recursion+1).code;code.append(right[separator]);code+=parse(right.mid(separator+1),recursion+1).code;
+                } else if(primitive=="in" && right.size()>=2 && symbol(right.front(),"(") && symbol(right.back(),")")) {
+                    int depth=0;qsizetype first=1;code.append(right.front());bool subquery=false;
+                    for(const auto& token:right) if(token.kind==Token::Word && token.value.compare("Select",Qt::CaseInsensitive)==0) subquery=true;
+                    if(subquery) {code+=right.mid(1);}
+                    else for(qsizetype at=1;at<right.size();++at) {
+                        if((!depth && symbol(right[at],",")) || at==right.size()-1) {
+                            code+=parse(right.mid(first,at-first),recursion+1).code;code.append(right[at]);first=at+1;
+                        } else if(symbol(right[at],"(")) ++depth;else if(symbol(right[at],")")) --depth;
+                    }
+                } else code+=parse(right,recursion+1).code;
+                return {"BOOLEAN",predicateContext ? code : call("linaccess_jet_boolean_result",code)};
+            }
             auto left=parse(expression.mid(0,operation),recursion+1),right=parse(expression.mid(operation+1),recursion+1);
             const auto op=expression[operation].value;
             const auto logic=op.toCaseFolded();
@@ -518,13 +552,6 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
             if(dateComparisons.contains(op)) {
                 auto code=left.code;code.append(expression[operation]);code+=right.code;
                 return {"BOOLEAN",predicateContext ? code : call("linaccess_jet_boolean_result",code)};
-            }
-            if(left.type=="DATETIME" && op.compare("IS",Qt::CaseInsensitive)==0) {
-                auto operand=right.code;
-                while(operand.size()>=3 && symbol(operand.front(),"(") && symbol(operand.back(),")")) operand=operand.mid(1,operand.size()-2);
-                const bool null=operand.size()==1 && operand[0].kind==Token::Word && operand[0].value.compare("NULL",Qt::CaseInsensitive)==0;
-                const bool notNull=operand.size()==2 && operand[0].kind==Token::Word && operand[0].value.compare("NOT",Qt::CaseInsensitive)==0 && operand[1].kind==Token::Word && operand[1].value.compare("NULL",Qt::CaseInsensitive)==0;
-                if(null || notNull) {auto code=left.code;code.append(expression[operation]);code+=right.code;return {"BOOLEAN",call("linaccess_jet_cbool",code)};}
             }
             if(numericOnly && (left.type=="DATETIME" || right.type=="DATETIME" || left.type=="CURRENCY_REAL" || right.type=="CURRENCY_REAL")) return unknown;
             if(left.type=="DATETIME" || right.type=="DATETIME") {
