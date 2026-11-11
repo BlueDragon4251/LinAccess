@@ -90,6 +90,7 @@ private:
     void initializeControlDefaults(bool unbound);
     bool saveRecord();
     void checkPhysicalRecordSource() const;
+    QString physicalRowIdentity() const;
     QVariant boundFieldSqlValue(const linaccess::VbaValue& value,const QString& field,const QString& type) const;
     void setTimerInterval(int interval);
     void selectCurrentRecordForCommand();
@@ -236,6 +237,7 @@ private:
     int renderedControls_{};
     bool dataSourceAvailable_{};
     bool directTable_{};
+    QString recordIdentity_;
     bool openCancelled_{};
     bool opened_{};
     bool hasActivated_{};

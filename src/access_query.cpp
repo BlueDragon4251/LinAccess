@@ -431,7 +431,7 @@ void preserveComputedProjectionNames(QVector<Token>& tokens,qsizetype start) {
         tokens.insert(it->first,{Token::Word,"AS"}); tokens.insert(it->first+1,{Token::Identifier,it->second});
     }
 }
-QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype start,const QVector<AccessQueryParameter>& parameters,const QMap<QString,QString>& fields,const QMap<QString,QString>& functions,bool numericOnly=false,bool predicateContext=false) {
+QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype start,const QVector<AccessQueryParameter>& parameters,const QMap<QString,QString>& fields,const QMap<QString,QString>& functions,bool numericOnly=false,bool predicateContext=false,bool strictActionDates=false) {
     const auto word=[&](qsizetype i,const char* text) { return i<tokens.size() && tokens[i].kind==Token::Word && tokens[i].value.compare(text,Qt::CaseInsensitive)==0; };
     if(!word(start,"SELECT")) return {};
     int depth=0;
@@ -619,6 +619,8 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
                 QVector<Token> code=left.code;code.append({Token::Other,","});code+=right.code;
                 return {"BOOLEAN",call("linaccess_jet_bool_"+dateComparisons.value(op),{{Token::String,descriptor}},code)};
             }
+            if(strictActionDates && dateComparisons.contains(op) && (left.type=="DATETIME" || right.type=="DATETIME") && !nullLiteral(left) && !nullLiteral(right))
+                throw VbaRuntimeError(3251,"Mixed Date SQL comparison requires an explicit Date conversion");
             if(dateComparisons.contains(op)) {
                 auto code=left.code;code.append(expression[operation]);code+=right.code;
                 return {"BOOLEAN",predicateContext ? code : call("linaccess_jet_boolean_result",code)};
@@ -1660,9 +1662,9 @@ static int pureCurrencyParameterProjections(const QString& source,const QVector<
     }
     return 0;
 }
-static AccessQueryPlan compileCurrencyQuery(const QString& source,const QMap<QString,QString>& fields,const QMap<QString,QString>& functions={});
+static AccessQueryPlan compileCurrencyQuery(const QString& source,const QMap<QString,QString>& fields,const QMap<QString,QString>& functions={},bool strictActionDates=false);
 AccessQueryPlan compileAccessQuery(const QString& source) { return compileCurrencyQuery(source,{}); }
-static AccessQueryPlan compileCurrencyQuery(const QString& source,const QMap<QString,QString>& fields,const QMap<QString,QString>& functions) {
+static AccessQueryPlan compileCurrencyQuery(const QString& source,const QMap<QString,QString>& fields,const QMap<QString,QString>& functions,bool strictActionDates) {
     auto tokens = tokenize(source);
     require(!tokens.empty(), "Jet SQL: empty query");
     AccessQueryPlan plan;
@@ -1736,7 +1738,7 @@ static AccessQueryPlan compileCurrencyQuery(const QString& source,const QMap<QSt
         }
     }
     preserveComputedProjectionNames(tokens,pos);
-    plan.resultTypes=typedProjectionExpressions(tokens,pos,plan.parameters,fields,functions);
+    plan.resultTypes=typedProjectionExpressions(tokens,pos,plan.parameters,fields,functions,false,false,strictActionDates);
     auto clauseFields=fields;
     {
         static const QSet<QString> nativeAliasTypes{"DECIMAL_EXACT","DATETIME","BOOL","BOOLEAN","SINGLE_REAL","CURRENCY_REAL","CURRENCY_TICKS","INTEGER1","INTEGER2","INTEGER4","DOUBLE"};
@@ -2052,7 +2054,7 @@ static QString currencyParameterHeader(const AccessQueryPlan& plan) {
     return declarations.isEmpty()?QString{}:"PARAMETERS "+declarations.join(',')+"; ";
 }
 static QString currencyActionExpression(QSqlDatabase db,const AccessQueryPlan& plan,const QVector<Token>& code,const QMap<QString,QString>& fields={}) {
-    const auto compiled=compileCurrencyQuery(currencyParameterHeader(plan)+"SELECT "+renderJetTokens(code)+" AS [__la_currency_expr]",fields,nativeVbaSqlFunctionResultTypes(db)).sql;
+    const auto compiled=compileCurrencyQuery(currencyParameterHeader(plan)+"SELECT "+renderJetTokens(code)+" AS [__la_currency_expr]",fields,nativeVbaSqlFunctionResultTypes(db),true).sql;
     const QString prefix="SELECT ",suffix=" AS "+identifier("__la_currency_expr");
     if(!compiled.startsWith(prefix) || !compiled.endsWith(suffix)) throw VbaRuntimeError(3251,"Typed action expression shape unsupported");
     return compiled.mid(prefix.size(),compiled.size()-prefix.size()-suffix.size());
@@ -2159,6 +2161,40 @@ static QString checkedInsertSql(QSqlDatabase db,const AccessQueryPlan& plan) {
     return "INSERT INTO "+identifier(table)+'('+targets.join(',')+") VALUES ("+values.join(',')+')';
 }
 
+// Proven native input kinds are shared by UPDATE expressions and DELETE criteria.
+static QMap<QString,QString> nativeActionFieldTypes(QSqlDatabase db,const QString& table,const QString& alias,const QMap<QString,QString>& types) {
+    static const QSet<QString> supported{"DECIMAL_EXACT","DATETIME","DATE","BOOL","BOOLEAN","SINGLE_REAL","CURRENCY_REAL","INTEGER1","INTEGER2","INTEGER4","DOUBLE"};
+    QMap<QString,QString> fields;
+    for(auto it=types.cbegin();it!=types.cend();++it) if(supported.contains(it.value())) {
+        fields.insert(it.key(),it.value());fields.insert(table.toCaseFolded()+'.'+it.key(),it.value());
+        if(!alias.isEmpty()) fields.insert(alias.toCaseFolded()+'.'+it.key(),it.value());
+    }
+    if(fields.isEmpty()) return fields;
+    QSqlQuery proof(db);proof.prepare("SELECT 1 FROM main.sqlite_schema WHERE name=? COLLATE NOCASE AND type='table' AND NOT EXISTS(SELECT 1 FROM temp.sqlite_schema WHERE name=? COLLATE NOCASE)");
+    proof.addBindValue(table);proof.addBindValue(table);
+    if(!proof.exec() || !proof.next()) throw VbaRuntimeError(3251,"Typed action requires an unshadowed physical main table");
+    return fields;
+}
+static QString checkedDeleteSql(QSqlDatabase db,const AccessQueryPlan& plan) {
+    if(plan.source.isEmpty() || plan.sql!=plan.compiledSql) return plan.sql;
+    const auto tokens=tokenize(plan.source);
+    const auto word=[&](qsizetype i,const char* value) {return i<tokens.size() && tokens[i].kind==Token::Word && tokens[i].value.compare(value,Qt::CaseInsensitive)==0;};
+    const auto name=[&](qsizetype i) {return i<tokens.size() && (tokens[i].kind==Token::Word || tokens[i].kind==Token::Identifier);};
+    qsizetype pos=0;if(word(pos,"PARAMETERS")) {while(pos<tokens.size() && !symbol(tokens[pos],";")) ++pos;++pos;}
+    if(!word(pos,"DELETE") || !word(pos+1,"FROM") || !name(pos+2)) return plan.sql;
+    const auto requested=tokens[pos+2].value;pos+=3;QString table,alias;
+    for(const auto& candidate:db.tables(QSql::Tables)) if(candidate.compare(requested,Qt::CaseInsensitive)==0) {table=candidate;break;}
+    if(table.isEmpty()) return plan.sql;
+    if(word(pos,"AS")) {++pos;if(!name(pos)) return plan.sql;alias=tokens[pos++].value;}
+    else if(!word(pos,"WHERE") && name(pos)) alias=tokens[pos++].value;
+    if(!word(pos,"WHERE")) return plan.sql;
+    const auto start=++pos;auto end=tokens.size();if(end>start && symbol(tokens[end-1],";")) --end;
+    if(start>=end) return plan.sql;
+    const auto fields=nativeActionFieldTypes(db,table,alias,sqliteColumnTypes(db,table));if(fields.isEmpty()) return plan.sql;
+    const auto predicate=currencyActionExpression(db,plan,tokens.mid(start,end-start),fields);installJetSqlFunctions(db);
+    return "DELETE FROM "+identifier(table)+(alias.isEmpty()?QString{}:" AS "+identifier(alias))+" WHERE "+predicate;
+}
+
 // Only direct physical-table UPDATEs enter this path. Joined actions retain
 // their existing materialized-source/identity handling.
 static QString checkedUpdateSql(QSqlDatabase db,const AccessQueryPlan& plan) {
@@ -2191,11 +2227,7 @@ static QString checkedUpdateSql(QSqlDatabase db,const AccessQueryPlan& plan) {
     for(const auto& candidate:db.tables(QSql::Tables)) if(candidate.compare(requested,Qt::CaseInsensitive)==0) { table=candidate; break; }
     if(table.isEmpty()) return plan.sql;
     const auto types=sqliteColumnTypes(db,table);
-    QMap<QString,QString> fields;
-    for(auto it=types.cbegin();it!=types.cend();++it) if(it.value()=="CURRENCY_REAL") {
-        fields.insert(it.key(),it.value()); fields.insert(table.toCaseFolded()+'.'+it.key(),it.value());
-        if(!alias.isEmpty()) fields.insert(alias.toCaseFolded()+'.'+it.key(),it.value());
-    }
+    const auto fields=nativeActionFieldTypes(db,table,alias,types);
     struct Assignment { QString column; QVector<Token> expression; QString targetType; };
     QVector<Assignment> assignments; bool checkedTarget=false;
     separators.append(where>=0 ? where : end);
@@ -2209,9 +2241,10 @@ static QString checkedUpdateSql(QSqlDatabase db,const AccessQueryPlan& plan) {
         } else return plan.sql;
         if(pos>=stop) return plan.sql;
         const auto targetType=types.value(column.toCaseFolded());
+        if(targetType=="DECIMAL_EXACT") throw VbaRuntimeError(3251,"SQL Decimal target conversion is not implemented");
         checkedTarget|=checkedSqlStorageType(targetType); assignments.append({column,tokens.mid(pos,stop-pos),targetType}); pos=stop+1;
     }
-    if(!checkedTarget) return plan.sql;
+    if(!checkedTarget && fields.isEmpty()) return plan.sql;
     const auto expression=[&](const QVector<Token>& code) { return currencyActionExpression(db,plan,code,fields); };
     QStringList set;
     for(const auto& assignment:assignments) {
@@ -2255,7 +2288,9 @@ QString accessActionSql(QSqlDatabase db,const AccessQueryPlan& plan) {
 
     if (plan.updateTarget.isEmpty()) {
         const auto insert=checkedInsertSql(db,plan);
-        return insert==plan.sql ? checkedUpdateSql(db,plan) : insert;
+        if(insert!=plan.sql) return insert;
+        const auto update=checkedUpdateSql(db,plan);
+        return update==plan.sql ? checkedDeleteSql(db,plan) : update;
     }
     if (!db.tables(QSql::Tables).contains(plan.updateTarget,Qt::CaseInsensitive)) throw VbaRuntimeError(3251,"Joined UPDATE requires a writable table target");
     if (installAccessQueryViews(db)<0) throw VbaRuntimeError(3251,"Joined UPDATE query dependencies unavailable");

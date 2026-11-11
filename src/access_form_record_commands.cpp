@@ -62,7 +62,7 @@ void AccessFormPreview::deleteCurrentRecord() {
         QSqlQuery undo(db_); (void)undo.exec("ROLLBACK TO "+savepoint); (void)undo.exec("RELEASE "+savepoint);
         if (displayed) restore();
     });
-    if (!sql.prepare("DELETE FROM main."+identifier(layout_.recordSource.trimmed())+" WHERE rowid=?"))
+    if (!sql.prepare("DELETE FROM main."+identifier(layout_.recordSource.trimmed())+" WHERE "+identifier(recordIdentity_)+"=?"))
         throw VbaRuntimeError(3146,"Delete preparation failed");
     sql.addBindValue(oldId);
     {

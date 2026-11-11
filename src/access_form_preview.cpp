@@ -2133,7 +2133,7 @@ void AccessFormPreview::loadRecords() {
         ? rowIds_[currentRecordIndex_-1] : QVariant{};
     const int oldIndex = currentRecordIndex_;
     recordSelector_->blockSignals(true);
-    recordSelector_->clear(); recordRows_.clear(); rowIds_.clear(); dataColumns_.clear(); dataTypes_.clear(); tableLiteralDefaults_.clear();
+    recordSelector_->clear(); recordRows_.clear(); rowIds_.clear(); dataColumns_.clear(); dataTypes_.clear(); recordIdentity_.clear(); tableLiteralDefaults_.clear();
     dataSourceAvailable_ = false; directTable_ = false; dataTruncated_ = false;
     dataSourceErrorNumber_=0;
     const auto source = layout_.recordSource.trimmed();
@@ -2169,8 +2169,12 @@ void AccessFormPreview::loadRecords() {
                 linaccess::SqliteExecutionBudget budget(db_);
                 QSqlQuery query(db_);
                 auto name=source; name.replace(']',"]]");
-                QStringList sortColumns,sourceColumns{"rowid AS [__la_rowid]"};const auto record=db_.record(source);
-                for(int i=0;i<record.count();++i) {const auto field=record.fieldName(i);sortColumns.append(field);sourceColumns.append('['+QString(field).replace(']',"]]")+']');}
+                recordIdentity_=physicalRowIdentity();QString identityAlias="__la_rowid";
+                QStringList sortColumns;const auto record=db_.record(source);
+                for(int i=0;i<record.count();++i) sortColumns.append(record.fieldName(i));
+                while(sortColumns.contains(identityAlias,Qt::CaseInsensitive)) identityAlias+='_';
+                QStringList sourceColumns{'['+recordIdentity_+"] AS ["+identityAlias+']'};
+                for(const auto& field:sortColumns) sourceColumns.append('['+QString(field).replace(']',"]]")+']');
                 auto plan=linaccess::compileAccessQuery("SELECT "+sourceColumns.join(',')+" FROM ["+name+"]");
                 if(filterOn_ && !filter_.trimmed().isEmpty()) plan=linaccess::filterAccessQueryPlan(db_,plan,filter_);
                 const auto order=orderByOn_ ? linaccess::accessOrderByClause(orderBy_,sortColumns,source) : QString{};
@@ -2180,7 +2184,7 @@ void AccessFormPreview::loadRecords() {
                     const bool hasWhere=filterOn_ && !filter_.trimmed().isEmpty();
                     QStringList entryPlaceholders;
                     for(const auto id:dataEntryRows_) { entryPlaceholders.append("?"); entryBindings.append(id); }
-                    statement+=(hasWhere ? " AND " : " WHERE ")+(entryPlaceholders.isEmpty() ? QString("0") : "rowid IN ("+entryPlaceholders.join(',')+")");
+                    statement+=(hasWhere ? " AND " : " WHERE ")+(entryPlaceholders.isEmpty() ? QString("0") : sqlIdentifier(identityAlias)+" IN ("+entryPlaceholders.join(',')+")");
                 }
                 const bool prepared=query.prepare(statement+order);
                 if(prepared) for(const auto& id:entryBindings) query.addBindValue(id);
@@ -2452,6 +2456,15 @@ bool AccessFormPreview::commitControls() {
     return pendingControls_.isEmpty(); // Retain drafts created by a reentrant handler.
 }
 
+QString AccessFormPreview::physicalRowIdentity() const {
+    const auto source=layout_.recordSource.trimmed();const auto record=db_.record(source);
+    for(const auto* name:{"rowid","_rowid_","oid"}) {
+        bool shadowed=false;for(int i=0;i<record.count();++i) shadowed=shadowed || record.fieldName(i).compare(name,Qt::CaseInsensitive)==0;
+        if(shadowed) continue;
+        QSqlQuery proof(db_);if(proof.prepare("SELECT "+sqlIdentifier(source)+'.'+sqlIdentifier(name)+" FROM main."+sqlIdentifier(source)+" LIMIT 0")) return name;
+    }
+    throw linaccess::VbaRuntimeError(3251,"Form physical row identity is unavailable");
+}
 void AccessFormPreview::checkPhysicalRecordSource() const {
     if(!db_.isOpen()) throw linaccess::VbaRuntimeError(3420,"Form source connection is closed");
     const auto source=layout_.recordSource.trimmed();QSqlQuery query(db_);
@@ -2461,6 +2474,7 @@ void AccessFormPreview::checkPhysicalRecordSource() const {
     if(!query.prepare("SELECT 1 FROM main.sqlite_schema WHERE name=? COLLATE NOCASE AND type='table'")) throw linaccess::VbaRuntimeError(3146,"Form physical source cannot be checked");
     query.addBindValue(source);if(!query.exec()) throw linaccess::VbaRuntimeError(3146,"Form physical source cannot be checked");
     if(!query.next()) throw linaccess::VbaRuntimeError(3251,"Form physical main source is unavailable");
+    if(!recordIdentity_.isEmpty() && physicalRowIdentity()!=recordIdentity_) throw linaccess::VbaRuntimeError(3251,"Form physical row identity changed; requery required");
 }
 QVariant AccessFormPreview::boundFieldSqlValue(const linaccess::VbaValue& value,const QString& field,const QString& type) const {
     if(type.compare("DECIMAL_EXACT",Qt::CaseInsensitive)!=0) return linaccess::sqlFieldValue(value,type);
@@ -2532,10 +2546,10 @@ bool AccessFormPreview::saveRecord() {
     if (updating) {
         savedId = rowIds_[row]; QStringList assignments;
         for (const auto& column : columns) assignments << column + "=?";
-        query.prepare("UPDATE main." + sqlIdentifier(table) + " SET " + assignments.join(',') + " WHERE rowid=? RETURNING rowid");
+        query.prepare("UPDATE main." + sqlIdentifier(table) + " SET " + assignments.join(',') + " WHERE "+sqlIdentifier(recordIdentity_)+"=? RETURNING "+sqlIdentifier(recordIdentity_));
         values << savedId;
-    } else if (columns.empty()) query.prepare("INSERT INTO main."+sqlIdentifier(table)+" DEFAULT VALUES RETURNING rowid");
-    else query.prepare("INSERT INTO main." + sqlIdentifier(table) + " (" + columns.join(',') + ") VALUES (" + placeholders.join(',') + ") RETURNING rowid");
+    } else if (columns.empty()) query.prepare("INSERT INTO main."+sqlIdentifier(table)+" DEFAULT VALUES RETURNING "+sqlIdentifier(recordIdentity_));
+    else query.prepare("INSERT INTO main." + sqlIdentifier(table) + " (" + columns.join(',') + ") VALUES (" + placeholders.join(',') + ") RETURNING "+sqlIdentifier(recordIdentity_));
     for (const auto& value : values) query.addBindValue(value);
     if (!query.exec()) { status_->setText("SQL: " + query.lastError().text()); return false; }
     if(!query.next()) { status_->setText("Der Datensatz wurde nicht gespeichert; die Zeile ist nicht verfügbar."); return false; }

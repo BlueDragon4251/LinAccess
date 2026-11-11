@@ -5055,3 +5055,22 @@ nur betroffene GUI wiederholt: bestanden18,18s. Keine neueCTest-ID/Windows-
 Referenz. F014/F056/F067/F068/F373 offen, feste456/386/70 unverändert.
 Vorstand69bceb60/Baum5ff24c1e3f55fc77938d770f241ee74ae6e11ec4 privat/exakt
 veröffentlicht. Paket-/Originalbeleg e666/183,33s liegt vor diesen Schreibwegen.
+
+
+Physische Formularidentität und typisierte SQL-Aktionen (2026-11-11):
+PHYSICAL_FORM_ROW_IDENTITY.md / NATIVE_TYPED_SQL_ACTIONS.md. Formulare wählen
+belegt unüberdecktes rowid/_rowid_/oid für Lesen/Save/Insert-RETURNING/Delete;
+Alias kollidiert nicht mit eigenen Feldern, DataEntry filtert diese Identität.
+Geänderte Identitätsauflösung verlangt Requery; ohne verfügbare Identität3251.
+Echte GUI-Prüfung mit gleichen benutzerdefinierten rowid-Werten, Speichern,
+bestätigtem Löschen, DataEntry und vollständig überdeckten Namen bestanden18,36s.
+Physische UPDATE-Ausdrücke und DELETE-Kriterien nutzen bekannte native Typen/
+Aliase. Aufgelöster Aktionskontext verweigert unbelegte Date/NichtDate-Mischung
+statt SQLite-Text/Zahl-Fallback; Prüfung bleibt auf Schreibausdrücke begrenzt.
+Date/Date und Date/NULL erhalten bestehenden Pfad. Decimal-Zielkonvertierung
+weiter3251. App/Helper/DAO/Modell/GUI gebaut; nach Korrektur nur betroffene DAO/
+Modell wiederholt:2/2 in6,19s (5,74/0,45). Alle7 geschützten Hashwerte gleich.
+Keine neueCTest-ID/Windows-Referenz oder Gesamtparitätsbehauptung. F056/F057/
+F067/F068 offen; feste456/386 bestätigte Teilumfänge/70 Vollanforderungen.
+Vorstandc09a7182/Baum17a2e5e40019adaa150298ac0a3dda5262d9e85a privat/exakt
+veröffentlicht; nächster gemeinsamer Paket-/Originalbeleg folgt für Schreibwege.

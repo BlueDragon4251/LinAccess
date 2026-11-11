@@ -3328,6 +3328,26 @@ static void exerciseNativeDecimalClipboard() {
     QApplication::clipboard()->clear();sql.clear();db.close();
 }
 
+static void exercisePhysicalFormIdentity() {
+    using namespace linaccess;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","physical-form-identity");db.setDatabaseName(":memory:");assert(db.open());QSqlQuery sql(db);
+    assert(sql.exec("CREATE TABLE form_identity_probe(rowid INTEGER,__la_rowid INTEGER,v TEXT)"));assert(sql.exec("INSERT INTO form_identity_probe VALUES(7,91,'first'),(7,91,'second')"));sql.finish();
+    const QByteArray layout("Begin Form\nRecordSource =\"form_identity_probe\"\nWidth =3000\nBegin Section\nHeight =600\nBegin TextBox\nName =\"Value\"\nControlSource =\"v\"\nWidth =2400\nHeight =300\nEnd\nEnd\nEnd");
+    {
+        AccessFormPreview form("PhysicalIdentity",layout,{},db);form.show();QApplication::processEvents();assert(form.hasDataSource());auto root=makePreviewFormObject(form);auto value=root->member("Controls",{VbaValue::string("Value")}).object;
+        value->assign("Value",VbaValue::string("changed"));root->assign("Dirty",VbaValue::logical(false));
+        assert(sql.exec("SELECT v FROM form_identity_probe ORDER BY _rowid_") && sql.next() && sql.value(0).toString()=="changed" && sql.next() && sql.value(0).toString()=="second");sql.finish();
+        QTimer::singleShot(0,[] {auto* dialog=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="access-delete-confirm");dialog->done(QMessageBox::Yes);});makePreviewApplicationObject(form)->member("DoCmd",{}).object->member("RunCommand",{VbaValue::integer(223)});
+        assert(sql.exec("SELECT v FROM form_identity_probe") && sql.next() && sql.value(0).toString()=="second" && !sql.next());sql.finish();
+        root->assign("DataEntry",VbaValue::logical(true));value->assign("Value",VbaValue::string("added"));root->assign("Dirty",VbaValue::logical(false));assert(root->member("Recordset",{}).object->member("RecordCount",{}).asNumber()==1 && value->scalarValue().asText()=="added");assert(form.close());
+    }
+    assert(sql.exec("CREATE TABLE identity_unavailable(rowid INTEGER,_rowid_ INTEGER,oid INTEGER,v TEXT)"));assert(sql.exec("INSERT INTO identity_unavailable VALUES(1,1,1,'unchanged')"));sql.finish();
+    {
+        auto blockedLayout=layout;blockedLayout.replace("form_identity_probe","identity_unavailable");AccessFormPreview blocked("IdentityUnavailable",blockedLayout,{},db);assert(!blocked.hasDataSource() && blocked.dataSourceErrorNumber()==3251);assert(blocked.close());
+    }
+    assert(sql.exec("SELECT COUNT(*) FROM form_identity_probe") && sql.next() && sql.value(0).toInt()==2);sql.finish();sql.clear();db.close();
+}
+
 int main(int argc,char** argv) {
     QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
     QApplication app(argc,argv); app.setQuitOnLastWindowClosed(false); app.setApplicationName("LinAccessSyntheticGuiTest"); app.setOrganizationName("LinAccessSyntheticTests");
@@ -3345,6 +3365,7 @@ int main(int argc,char** argv) {
     QSettings::setPath(QSettings::IniFormat,QSettings::UserScope,temporary.path());
     exerciseNativeRelationDesigner();
     exerciseNativeDecimalClipboard();
+    exercisePhysicalFormIdentity();
     const auto first=temporary.filePath("first.linaccess"),second=temporary.filePath("second.linaccess");
     auto seed=QSqlDatabase::addDatabase("QSQLITE","mainwindow-seed"); seed.setDatabaseName(first); assert(seed.open());
     QSqlQuery initial(seed); assert(initial.exec("CREATE TABLE records(id INTEGER PRIMARY KEY,value TEXT)"));
