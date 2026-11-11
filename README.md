@@ -1543,3 +1543,17 @@ Decimal-Defaults53ff703d64e17d2e08fb072bbd2ca5ea44b9f334,
 Baumdf3b4972f7cea8bf675be7626fd0065a494839af privat/exaktveröffentlicht.
 LetzterPaket-/Originalbeleg dbd87ce/184,50s liegtvorDecimal-Defaults/Schlüsselwahl.
 Direktweiterarbeiten; keinevollständigeAccess-Parität.
+
+
+CurrencymitbelegtenGanzzahloperanden (2026-11-11):
+EXACT_CURRENCY_INTEGRAL_OPERANDS.md. +,-,*, Vergleiche/IN/BETWEEN akzeptieren
+belegteByte/Integer/Long/Boolean-Felder odertypisierteSkalarergebnisse nebenTicks.
+VorhandenerVBA-Currency-Kern, signed64-Ergebnis/Boolean-1/NULL erhalten. SQL-UPDATE
+nutztgleichenZieladapter, Überlauf6 rolltauchvorherigeZeilenänderungenzurück.
+UnbelegteLiterale/ungeprüfteSQLiteinteger/Floatingmischung unverändertverweigert;
+keine erfundeneJet-Promotion/Windows-Referenz. App/Parameter/DAO/Modellgebaut,
+Bündel3/3 in7,05s (0,22/6,32/0,51) bestanden,7geschützteHashesgleich.
+Keine neueCTest-ID;456/386Teilumfänge/70offen. Schlüsselwahl6a8da8714dc291a384b183b39655690064a57093,
+Baumc25c09c7301045c1b7ba8b7212950a1e965a6f92 privat/exaktveröffentlicht.
+LetzterGesamtpaket-/Originalbeleg dbd87ce/184,50s liegtvorDecimal-Defaults/
+Schlüsselwahl/dieserOperandenetappe. Direktweiterarbeiten.

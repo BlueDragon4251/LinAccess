@@ -549,7 +549,7 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
                     static const QSet<QString> special{"DECIMAL_EXACT","DATETIME","BOOL","BOOLEAN","SINGLE_REAL","CURRENCY_REAL","CURRENCY_TICKS"};
                     for(const auto& argument:arguments) {decimal=decimal || argument.type=="DECIMAL_EXACT";native=native || special.contains(argument.type);}
                     if(std::any_of(arguments.cbegin(),arguments.cend(),[](const auto& value) {return value.type=="CURRENCY_TICKS";}))
-                        for(const auto& value:arguments) if(value.type!="CURRENCY_TICKS" && value.type!="CURRENCY_REAL" && value.type!="DECIMAL_EXACT" && !nullLiteral(value)) throw VbaRuntimeError(3251,"Exact Currency predicates require proven numeric conversion");
+                        for(const auto& value:arguments) if(!QSet<QString>{"CURRENCY_TICKS","CURRENCY_REAL","DECIMAL_EXACT","INTEGER1","INTEGER2","INTEGER4","BOOL","BOOLEAN"}.contains(value.type) && !nullLiteral(value)) throw VbaRuntimeError(3251,"Exact Currency predicates require proven numeric conversion");
                     static const QSet<QString> numeric{"DATETIME","DECIMAL_EXACT","INTEGER1","INTEGER2","INTEGER4","SINGLE_REAL","DOUBLE","BOOL","BOOLEAN","CURRENCY_REAL","CURRENCY_TICKS"};
                     bool proven=true;for(const auto& argument:arguments) proven=proven && (numeric.contains(argument.type) || nullLiteral(argument));
                     // Initial compilation has no source schema. Defer native binding
@@ -607,9 +607,9 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
             }
             if(left.type=="CURRENCY_TICKS" || right.type=="CURRENCY_TICKS") {
                 static const QMap<QString,QString> comparisons{{"=","equal"},{"<>","not_equal"},{"!=","not_equal"},{"<","less"},{"<=","less_equal"},{">","greater"},{">=","greater_equal"}};
-                const auto money=[](const Expression& value) {return value.type=="CURRENCY_TICKS" || value.type=="CURRENCY_REAL";};
+                const auto money=[](const Expression& value) {static const QSet<QString> types{"CURRENCY_TICKS","CURRENCY_REAL","INTEGER1","INTEGER2","INTEGER4","BOOL","BOOLEAN"};return types.contains(value.type);};
                 static const QMap<QString,QString> arithmetic{{"+","add"},{"-","subtract"},{"*","multiply"}};
-                if((!comparisons.contains(op) && !arithmetic.contains(op)) || (!money(left) && !nullLiteral(left)) || (!money(right) && !nullLiteral(right))) throw VbaRuntimeError(3251,"Exact Currency operators require proven Currency operands or explicit conversion");
+                if((!comparisons.contains(op) && !arithmetic.contains(op)) || (!money(left) && !nullLiteral(left)) || (!money(right) && !nullLiteral(right))) throw VbaRuntimeError(3251,"Exact Currency operators require proven Currency/integral operands or explicit conversion");
                 auto code=left.code;code.append({Token::Other,","});code+=right.code;
                 return {arithmetic.contains(op) ? QString("CURRENCY_TICKS") : QString("BOOLEAN"),call("linaccess_jet_currency_bound_"+(arithmetic.contains(op) ? arithmetic.value(op) : comparisons.value(op)),{{Token::String,left.type+","+right.type}},code)};
             }

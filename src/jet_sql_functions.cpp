@@ -319,7 +319,7 @@ void boundScalarSqlFunction(sqlite3_context* context,int count,sqlite3_value** a
         if(decimalOperator && !declared.contains("DECIMAL_EXACT")) throw VbaRuntimeError(450,"Decimal operator requires a proven Decimal operand");
         if(currencyOperator) {
             if(!declared.contains("CURRENCY_TICKS")) throw VbaRuntimeError(450,"Exact Currency comparison requires a proven exact operand");
-            for(int at=0;at<arguments;++at) if(declared[at]!="CURRENCY_TICKS" && declared[at]!="CURRENCY_REAL" && !(declared[at].isEmpty() && native.type(args[at+offset])==SQLITE_NULL)) throw VbaRuntimeError(3251,"Exact Currency comparison input is not proven");
+            for(int at=0;at<arguments;++at) if(!QSet<QString>{"CURRENCY_TICKS","CURRENCY_REAL","INTEGER1","INTEGER2","INTEGER4","BOOL","BOOLEAN"}.contains(declared[at]) && !(declared[at].isEmpty() && native.type(args[at+offset])==SQLITE_NULL)) throw VbaRuntimeError(3251,"Exact Currency comparison input is not proven");
         }
         const bool infix=dateComparison || booleanOperator || decimalOperator || currencyOperator;
         VbaVariables values;std::string expression=infix ? std::string{} : std::string(builtin)+"(";

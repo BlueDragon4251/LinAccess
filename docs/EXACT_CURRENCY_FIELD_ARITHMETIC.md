@@ -22,3 +22,5 @@ F014/F055/F067/F068 remain open, fixed456/386/70 unchanged.
 
 Bounded physical Currency SQL target conversion is now described in
 [EXACT_CURRENCY_SQL_TARGETS.md](EXACT_CURRENCY_SQL_TARGETS.md).
+
+Known integral operands: [scope](EXACT_CURRENCY_INTEGRAL_OPERANDS.md).
