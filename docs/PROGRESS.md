@@ -8115,3 +8115,13 @@ bestanden. Keine neuen IDs,456/386/70 unverändert. Gezielter UI-Lauf folgt.
 Vorstandc4c4af5945328bb99d3ce8254ab4952936d06a6e/Baum86fb8ce6124c1aaf788931a01b79a765d7cc6dec
 privat veröffentlicht/exakt verifiziert; letzter Paketbeleg9f73a8c5 liegt vor
 SQL-Typabfragen/Boolean-Ausdrücken (167,90s,7Hashes gleich).
+
+
+Gezielter UI-Nachweis für SQL-Boolean-Ausdrücke (2026-11-11): App-/Desktop-
+Abhängigkeiten und vorhandenes Hauptfensterziel gebaut. Query-Designer-Referenz
+kodiert Vergleichsbuckets nun unabhängig mit CASE -1/0 statt rohem SQLite1/0;
+Gruppier-/Summen-/HAVING-/Sortiervergleich unverändert vollständig geprüft.
+Vorhandenes mainwindow_documents1/1 in15,10s (Test15,09) bestanden, unveränderter
+20s-Watchdog. Keine neue CTest-/Katalog-ID;456/386/70. Veröffentlichter Stand
+a599c2dd7a9c79f8eb1529de54bc288946f6d120/Baumaf0c0433d29584711ece0152e2467214fbd07b0f
+privat/exakt verifiziert. Kein neuer Windows-/Gesamtparitätsnachweis.
