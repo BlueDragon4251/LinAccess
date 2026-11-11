@@ -488,7 +488,7 @@ void verifyJetDecimalReference(const QString& path) {
     editable->member("MoveFirst",{});const auto copied=editable->member("GetRows",{VbaValue::longInteger(1)});assert(copied.kind==VbaValue::Kind::Array && vbaArrayLinearElement(copied,1).kind==VbaValue::Kind::Decimal);
     editable->member("AddNew",{});editable->assignItem("id",VbaValue::longInteger(6));editable->assignItem("large",decimalLiteral("-1.25"));editable->assignItem("small",decimalLiteral("0.0000000000000000000000000001"));editable->member("Update",{});editable->assign("Bookmark",editable->member("LastModified",{}));assert(editable->item("id").asNumber()==6 && editable->item("large").text=="-1.25");editable->member("Close",{});
     const auto computed=makeDaoDatabase(db)->member("OpenRecordset",{VbaValue::string("SELECT CDec('1') AS calculated")}).object;assert(!computed->member("Updatable",{}).truthy() && !computed->member("Fields",{VbaValue::string("calculated")}).object->member("DataUpdatable",{}).truthy());computed->member("Close",{});
-    assert(accessSourceDigest(path)==before);std::cout<<"Independent technical Jet Numeric raw bytes, exact values, precision/scale, NULL, ordering, CSV mismatch refusal and unchanged source hash verified\n";
+    assert(accessSourceDigest(path)==before);std::cout<<"Independent technical Jet4/ACE2010 Numeric raw bytes, exact values, precision/scale, NULL, ordering, CSV mismatch refusal and unchanged source hash verified\n";
 }
 
 void verifyJetSingleReference(const QString& path) {

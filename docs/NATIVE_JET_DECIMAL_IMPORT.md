@@ -65,3 +65,5 @@ Validation: app/metadata helper built. Existing GUI/import targets passed2/2
 in17.43s (17.08s/0.35s), including the real Jet fixture and actual copy/paste
 into a native text field. Seven protected source hashes rechecked unchanged.
 No new test target or Access execution oracle.
+
+Bounded ACE2010 Numeric extension: [scope](ACE2010_DECIMAL_IMPORT.md).

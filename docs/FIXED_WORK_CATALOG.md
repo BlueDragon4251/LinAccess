@@ -47,7 +47,7 @@ keine Tests oder Teilpunkte allein zur Erhöhung einer Fortschrittszahl anlegen.
 - [x] **F006** — Compensate for MDBTools 1.0.0's SQLite backend omitting keys/indices by reading structural metadata from its MySQL backend, without executing its SQL.
 - [x] **F007** — Full database import uses one hash-verified working copy and one transaction.
 - [ ] **F016** — Implement non-NULL OLE/attachment binary extraction and round trips.
-- [ ] **F017** — Exercise representative ACE/ACCDB fixtures and original-format write support.
+- [ ] **F017** — Bounded actual ACE2010 Numeric source import: [scope](ACE2010_DECIMAL_IMPORT.md). Exercise representative ACE/ACCDB fixtures and original-format write support.
 - [x] **F152** — Force UTF-8 only for MDBTools child processes; test Unicode MDB paths and original table names under an unchanged C-locale parent.
 
 ### Schema, Typen und Integrität

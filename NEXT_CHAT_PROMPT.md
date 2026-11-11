@@ -5074,3 +5074,21 @@ Keine neueCTest-ID/Windows-Referenz oder Gesamtparitätsbehauptung. F056/F057/
 F067/F068 offen; feste456/386 bestätigte Teilumfänge/70 Vollanforderungen.
 Vorstandc09a7182/Baum17a2e5e40019adaa150298ac0a3dda5262d9e85a privat/exakt
 veröffentlicht; nächster gemeinsamer Paket-/Originalbeleg folgt für Schreibwege.
+
+
+Begrenzter exakter ACE2010-Numeric-Import (2026-11-11): ACE2010_DECIMAL_IMPORT.md.
+MDBTools MDB_VER_ACCDB_2010 nutzt gegen unabhängige Datei belegtes17-Byte-Layout;
+p28/s4 und p28/s28, ±28stelligeWerte, >2^53,1e-28,Null ohneDouble. Optionaler
+Jackcess-Generator V2000/V2010 kompiliert und V2010-Datei wiedergeöffnet/geprüft.
+App/Helper/Import gebaut, bestehende Importprüfung mit echter Jet4-Datei0,46s
+und ACE2010-Datei0,26s bestanden; Roh-/CSV-/Wert-/DAO-/Constraint-/Quellhashwege.
+Andere ACE-Versionen/Properties/AutoNumber/Complex/VBA/Originalformat-Schreiben
+bleiben offen; keine Windows-Ausführung/neueCTest-ID/Katalogpunkte.456/386/70fest.
+Gemeinsamer Paket-/Originalbeleg der vorherigen Schreib-/Such-/Identitätswege:
+Quelle234057bb69b26e01ec5b5f606a09be32806c9f91,
+Baum7e3fb9b65cabbdb6e1f0904ed73d30b7de97c2fc, privat/exakt veröffentlicht.
+Integrationsbau/DEB/Paketprüfung bestanden, Inventar/Original2/2 in187,30s
+(55,73/131,58), alle7 geschützten Hashwerte gleich. Inventar unverändert78/100
+ausführbar,22 offen; bekannte Original-Makrogrenze bleibt, kein initialisierter
+Geschäftsablauf/volleAccess-Parität behauptet. Paket liegt vor ACE-Erweiterung:
+/workspace/work/decimal-forms-actions-package/package/linaccess-0.7.0-Linux.deb.

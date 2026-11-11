@@ -1,15 +1,18 @@
-// Independent actual Jet4 Numeric reference; no business records or VBA.
+// Independent actual Jet4/ACE2010 Numeric reference; no business records or VBA.
 import com.healthmarketscience.jackcess.*;
 import java.nio.file.*;
 import java.math.BigDecimal;
 import java.util.*;
 class JetDecimalReference {
  public static void main(String[] args) throws Exception {
-  Path root=Path.of(args[0]);Files.createDirectories(root);Path file=root.resolve("decimal-probe.mdb");
+  if(args.length<1 || args.length>2) throw new IllegalArgumentException("Output directory and optional V2000/V2010 format required");
+  Database.FileFormat format=args.length==2?Database.FileFormat.valueOf(args[1]):Database.FileFormat.V2000;
+  if(format!=Database.FileFormat.V2000 && format!=Database.FileFormat.V2010) throw new IllegalArgumentException("Only independently checked V2000 and V2010 formats are supported");
+  Path root=Path.of(args[0]);Files.createDirectories(root);Path file=root.resolve(format==Database.FileFormat.V2000?"decimal-probe.mdb":"decimal-probe.accdb");
   if(Files.exists(file)) throw new IllegalStateException("Refusing to replace fixture");
   String[] large={"999999999999999999999999.9999","-999999999999999999999999.9999","9007199254740993.0001","0",null};
   String[] small={"0.0000000000000000000000000001","-0.0000000000000000000000000001","0.1234567890123456789012345678","0",null};
-  try(Database db=DatabaseBuilder.create(Database.FileFormat.V2000,file.toFile())) {
+  try(Database db=DatabaseBuilder.create(format,file.toFile())) {
    Table table=new TableBuilder("decimal_probe").addColumn(new ColumnBuilder("id",DataType.LONG))
     .addColumn(new ColumnBuilder("large",DataType.NUMERIC).setPrecision(28).setScale(4))
     .addColumn(new ColumnBuilder("small",DataType.NUMERIC).setPrecision(28).setScale(28)).toTable(db);
@@ -24,6 +27,6 @@ class JetDecimalReference {
    }
   }
   if(count!=large.length) throw new IllegalStateException("Row count mismatch");
-  System.out.println("Independent Jet4 Numeric values, precision/scale and NULL verified");
+  System.out.println("Independent Numeric values, precision/scale and NULL verified: "+format);
  }
 }

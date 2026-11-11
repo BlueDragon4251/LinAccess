@@ -69,9 +69,9 @@ int main(int argc,char** argv) {
             if(column->col_type==MDB_NUMERIC) {
                 // MDBTools numeric(p,s) export exposes precision as col_scale and
                 // fractional scale as col_prec (also its numeric(p,s) export).
-                // The asymmetric independent Jet fixture verifies these roles.
+                // Independent asymmetric Jet4 and ACE2010 fixtures verify these roles.
                 const auto precision=column->col_scale,scale=column->col_prec;
-                if(mdb->f->jet_version!=MDB_VER_JET4 || column->col_size!=17 || precision<1 || precision>28 || scale<0 || scale>precision) throw 1;
+                if((mdb->f->jet_version!=MDB_VER_JET4 && mdb->f->jet_version!=MDB_VER_ACCDB_2010) || column->col_size!=17 || precision<1 || precision>28 || scale<0 || scale>precision) throw 1;
                 decimalNames.append(name);decimalFields.append(column);decimalColumns.append(QJsonObject{{"name",name},{"precision",precision},{"scale",scale}});
             }
         }
