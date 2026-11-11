@@ -710,6 +710,22 @@ template<bool Between,bool RequireDecimal=true> void typedNumericPredicate(sqlit
       catch(...) {functionError(context,VbaRuntimeError(7,"Decimal predicate failed"));}
 }
 
+void currencyFieldStore(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
+    auto& native=api();try {
+        if(count!=3 || native.type(args[0])!=SQLITE_TEXT || native.type(args[1])!=SQLITE_TEXT) throw VbaRuntimeError(450,"Currency store requires target/input kind and value");
+        const auto target=scalarText(args[0]),kind=scalarText(args[1]);
+        if(target!="CURRENCY_TICKS" && target!="CURRENCY_REAL") throw VbaRuntimeError(3251,"Currency store target is not supported");
+        static const QSet<QString> supported{"","DECIMAL_EXACT","DATETIME","BOOL","BOOLEAN","SINGLE_REAL","CURRENCY_REAL","CURRENCY_TICKS","INTEGER1","INTEGER2","INTEGER4","DOUBLE","TEXT"};
+        if(!supported.contains(kind)) throw VbaRuntimeError(3251,"Currency store input kind is not proven");
+        const auto value=qtFieldValue(boundSqlStorage(args[2],kind=="DECIMAL_EXACT"),kind);
+        const auto stored=sqlFieldValue(value,target);
+        if(stored.isNull()) native.nullResult(context);
+        else if(target=="CURRENCY_TICKS") native.integerResult(context,stored.toLongLong());
+        else native.numberResult(context,stored.toDouble());
+    } catch(const VbaRuntimeError& failure) {functionError(context,failure);}
+      catch(...) {functionError(context,VbaRuntimeError(7,"Currency field conversion failed"));}
+}
+
 void decimalFieldStore(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
     auto& native=api();try {
         if(count!=4 || native.type(args[0])!=SQLITE_TEXT || native.type(args[2])!=SQLITE_INTEGER || native.type(args[3])!=SQLITE_INTEGER) throw VbaRuntimeError(450,"Decimal store requires input kind, value and precision/scale");
@@ -1359,6 +1375,7 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_decimal_between",-1,&typedNumericPredicate<true>,nullptr,nullptr);
     ensure("linaccess_jet_decimal_field_valid",3,&decimalFieldValid,nullptr,nullptr);
     ensure("linaccess_jet_decimal_store",4,&decimalFieldStore,nullptr,nullptr);
+    ensure("linaccess_jet_currency_field_store",3,&currencyFieldStore,nullptr,nullptr);
     ensure("linaccess_jet_decimal_sum",1,nullptr,&decimalSumStep,&decimalSumFinal);
     ensure("linaccess_jet_currency_sum",1,nullptr,&currencySumStep<false>,&currencySumFinal<false>);
     ensure("linaccess_jet_currency_sum_ticks",1,nullptr,&currencySumStep<true>,&currencySumFinal<true>);

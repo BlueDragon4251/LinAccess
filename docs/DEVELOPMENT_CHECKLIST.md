@@ -6330,3 +6330,22 @@ Vorstand1631a03b/Baum6519c5d6d0dd9ab93a220e16f85fb05419b09959 privat/exakt
 veröffentlicht. Gemeinsamer Paket-/Originalbeleg folgt nach dieserEtappe;
 letzter a4/185,44s liegt vor SetWarnings und Currency-Snapshot/Quellarithmetik.
 Direkt weiterentwickeln, keineGesamtparitätbehaupten.
+
+
+Currency-SQL-Zielkonvertierung (2026-11-11):
+EXACT_CURRENCY_SQL_TARGETS.md. Geprüfte INSERT VALUES/einzelne INSERT SELECT/
+direkte UPDATE übertragen belegte Eingabetypen in Tick-/LegacyREAL-Currencyziele.
+Signed64/letzte1e-4-Stelle, Tickkopie nachREAL, Decimal-Rundung, Null/Defaults,
+Überlauf6/Binary13/Legacygrenze3251 und atomarer Abbruch geprüft. Nichtadaptierte
+Tick-Joins verweigert; SQLiteRETURNING vor Schreibwirkung3251. Parametertest
+fand lokaleTick-Inferenz trotz äußererREAL-Bindung; Optimierung im Aktionsausdruck
+unterbunden. App/Helper/Parameter/Insert/Update/DAO/Modell gebaut; Insert/Update/
+DAO/Modell0,13/0,14/6,25/0,50s bestanden, nur betroffeneParameterprüfung wiederholt:
+0,18s bestanden. Keine neueCTest-ID/Windows-Referenz.456/386Teilumfänge/70offen.
+Gemeinsamer Paket-/Originalbeleg vor dieserEtappe: bb7e08fc276da8b239330c74687eef91ca7e7303,
+Baum03dbb085759ce528e42d49c20ef8fcf9efad4c9c, privat/exakt veröffentlicht.
+Integrationsbau/DEB/Paketprüfung bestanden, Inventar/Original2/2 in183,19s
+(53,14/130,05),7Hashesgleich; Inventar78/100 ausführbar,22offen, bekannte
+Original-Makrogrenze unverändert. Paket currency-warnings-package enthält
+SetWarnings/Currency-Snapshots/Quellarithmetik, noch nicht dieseZielkonvertierung.
+Direkt weiterarbeiten; keine vollständigeAccess-Parität.

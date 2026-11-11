@@ -19,3 +19,6 @@ Actual signed64 endpoints, last1e-4 digits, unary/operation/sum overflow6,
 NULL accumulation and arithmetic in a checked derived filter are covered.
 All seven protected hashes unchanged. No new ID;
 F014/F055/F067/F068 remain open, fixed456/386/70 unchanged.
+
+Bounded physical Currency SQL target conversion is now described in
+[EXACT_CURRENCY_SQL_TARGETS.md](EXACT_CURRENCY_SQL_TARGETS.md).

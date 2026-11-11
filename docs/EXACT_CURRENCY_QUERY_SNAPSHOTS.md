@@ -22,3 +22,6 @@ implemented Access True=-1 and refusing the uncovered raw SUM path, only the
 affected parameter scope was repeated: final0.27s passed, including binding-root
 substitution rejection. No new CTest ID; seven protected hashes unchanged. No new ID;
 F014/F054/F055/F067/F068 remain open, fixed456/386/70 unchanged.
+
+Bounded physical Currency SQL target conversion is now described in
+[EXACT_CURRENCY_SQL_TARGETS.md](EXACT_CURRENCY_SQL_TARGETS.md).

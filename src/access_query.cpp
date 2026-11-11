@@ -1743,6 +1743,12 @@ static AccessQueryPlan compileCurrencyQuery(const QString& source,const QMap<QSt
         else if(command=="CREATE" || command=="ALTER" || command=="DROP") plan.daoQueryType=96;
     }
 
+    if(plan.daoQueryType==32 || plan.daoQueryType==48 || plan.daoQueryType==64) {
+        int depth=0;for(qsizetype at=pos+1;at<tokens.size();++at) {
+            if(symbol(tokens[at],"(")) ++depth;else if(symbol(tokens[at],")")) --depth;
+            else if(!depth && tokens[at].kind==Token::Word && tokens[at].value.compare("RETURNING",Qt::CaseInsensitive)==0 && !(at>0 && symbol(tokens[at-1],"."))) throw VbaRuntimeError(3251,"SQL action RETURNING is not supported by the Access2003 adapter");
+        }
+    }
     if(crosstab.pivotHeadings) plan.daoQueryType=16;
     // Access's single-target DELETE * FROM means DELETE FROM in SQLite.
     if(plan.daoQueryType==32 && pos+2<tokens.size() && symbol(tokens[pos+1],"*") && tokens[pos+2].kind==Token::Word && tokens[pos+2].value.compare("FROM",Qt::CaseInsensitive)==0) tokens.remove(pos+1);
@@ -1952,7 +1958,7 @@ static AccessQueryPlan compileCurrencyQuery(const QString& source,const QMap<QSt
         plan.daoQueryType=80;
     }
     QString exactProjectionSql;
-    if(const int count=pureCurrencyParameterProjections(source,plan.parameters,&exactProjectionSql)) {for(auto& parameter:plan.parameters) if(parameter.type=="currency") parameter.currencyTicks=true;plan.sql=exactProjectionSql;plan.resultTypes=QVector<QString>(count,"CURRENCY_TICKS");}
+    if(const int count=strictActionDates ? 0 : pureCurrencyParameterProjections(source,plan.parameters,&exactProjectionSql)) {for(auto& parameter:plan.parameters) if(parameter.type=="currency") parameter.currencyTicks=true;plan.sql=exactProjectionSql;plan.resultTypes=QVector<QString>(count,"CURRENCY_TICKS");}
     plan.source=source; plan.compiledSql=plan.sql;
     return plan;
 }
@@ -2084,13 +2090,12 @@ static QMap<QString,QPair<int,int>> decimalActionShapes(QSqlDatabase db,const QS
     return nativeTableDecimalTypes(db,table);
 }
 static QString checkedSqlStorageValue(const QString& type,const QString& value,const QString& inputKind={},QPair<int,int> decimalShape={0,0}) {
-    if(type=="CURRENCY_TICKS") throw VbaRuntimeError(3251,"Physical exact Currency SQL target conversion is not implemented");
+    if(type=="CURRENCY_TICKS" || type=="CURRENCY_REAL") return "linaccess_jet_currency_field_store("+literal(type)+','+literal(inputKind)+','+value+')';
     if(type=="DECIMAL_EXACT") {
         if(decimalShape.first<1 || decimalShape.first>28 || decimalShape.second<0 || decimalShape.second>decimalShape.first) throw VbaRuntimeError(3251,"Decimal action target precision/scale is not proven");
         return "linaccess_jet_decimal_store("+literal(inputKind)+','+value+','+QString::number(decimalShape.first)+','+QString::number(decimalShape.second)+')';
     }
-    if(inputKind=="DECIMAL_EXACT") throw VbaRuntimeError(3251,"Decimal action input requires a Decimal target or explicit conversion");
-    if(type=="CURRENCY_REAL") return "linaccess_jet_currency_store("+value+')';
+    if(inputKind=="DECIMAL_EXACT" || inputKind=="CURRENCY_TICKS") throw VbaRuntimeError(3251,"Decimal action input requires a Decimal target or explicit conversion");
     if(checkedSqlStorageType(type)) return "linaccess_jet_field_store("+literal(type)+','+value+')';
     return value;
 }
@@ -2108,7 +2113,8 @@ static QString currencyActionExpression(QSqlDatabase db,const AccessQueryPlan& p
     return compiled.mid(prefix.size(),compiled.size()-prefix.size()-suffix.size());
 }
 
-static QString checkedInsertSql(QSqlDatabase db,const AccessQueryPlan& plan) {
+static QString checkedInsertSql(QSqlDatabase db,const AccessQueryPlan& plan,bool* acceptedInsert=nullptr) {
+    if(acceptedInsert) *acceptedInsert=false;
     if(plan.source.isEmpty() || plan.sql!=plan.compiledSql) return plan.sql;
     const auto tokens=tokenize(plan.source);
     const auto word=[&](qsizetype i,const char* value) { return i<tokens.size() && tokens[i].kind==Token::Word && tokens[i].value.compare(value,Qt::CaseInsensitive)==0; };
@@ -2146,7 +2152,8 @@ static QString checkedInsertSql(QSqlDatabase db,const AccessQueryPlan& plan) {
         if(defaults.lastError().isValid()) throw VbaRuntimeError(3146,"Single defaults unavailable");
     }
     if(defaultOnly && !defaultTargets.isEmpty()) {installJetSqlFunctions(db);return "INSERT INTO "+identifier(table)+'('+defaultTargets.join(',')+") VALUES ("+defaultValues.join(',')+')';}
-    bool checked=false;
+    if(defaultOnly) {auto end=pos+2;if(end<tokens.size() && symbol(tokens[end],";")) ++end;if(end!=tokens.size()) return plan.sql;installJetSqlFunctions(db);if(acceptedInsert) *acceptedInsert=true;return plan.sql;}
+    bool checked=types.values().contains("CURRENCY_TICKS");
     for(const auto& column:columns) checked|=checkedSqlStorageType(types.value(column.toCaseFolded()));
     if(!checked) return plan.sql;
     if(word(pos,"SELECT")) {
@@ -2181,7 +2188,7 @@ static QString checkedInsertSql(QSqlDatabase db,const AccessQueryPlan& plan) {
             values.append(checkedSqlStorageValue(types.value(columns[i].toCaseFolded()),label,select.resultTypes.value(i),decimalShapes.value(columns[i].toCaseFolded())));
         }
         installJetSqlFunctions(db);
-        targets+=defaultTargets;values+=defaultValues;
+        targets+=defaultTargets;values+=defaultValues;if(acceptedInsert) *acceptedInsert=true;
         return "WITH "+identifier(cte)+'('+labels.join(',')+") AS MATERIALIZED ("+source+") INSERT INTO "+identifier(table)+'('+targets.join(',')+") SELECT "+values.join(',')+" FROM "+identifier(cte);
     }
     if(!word(pos,"VALUES") || pos+1>=tokens.size() || !symbol(tokens[pos+1],"(")) return plan.sql;
@@ -2206,7 +2213,7 @@ static QString checkedInsertSql(QSqlDatabase db,const AccessQueryPlan& plan) {
         values.append(value);
     }
     installJetSqlFunctions(db);
-    targets+=defaultTargets;values+=defaultValues;
+    targets+=defaultTargets;values+=defaultValues;if(acceptedInsert) *acceptedInsert=true;
     return "INSERT INTO "+identifier(table)+'('+targets.join(',')+") VALUES ("+values.join(',')+')';
 }
 
@@ -2250,7 +2257,8 @@ static QString checkedDeleteSql(QSqlDatabase db,const AccessQueryPlan& plan) {
 
 // Only direct physical-table UPDATEs enter this path. Joined actions retain
 // their existing materialized-source/identity handling.
-static QString checkedUpdateSql(QSqlDatabase db,const AccessQueryPlan& plan) {
+static QString checkedUpdateSql(QSqlDatabase db,const AccessQueryPlan& plan,bool* acceptedUpdate=nullptr) {
+    if(acceptedUpdate) *acceptedUpdate=false;
     if(plan.source.isEmpty() || plan.sql!=plan.compiledSql) return plan.sql;
     const auto tokens=tokenize(plan.source);
     const auto word=[&](qsizetype i,const char* value) { return i<tokens.size() && tokens[i].kind==Token::Word && tokens[i].value.compare(value,Qt::CaseInsensitive)==0; };
@@ -2307,7 +2315,7 @@ static QString checkedUpdateSql(QSqlDatabase db,const AccessQueryPlan& plan) {
     }
     auto result="UPDATE "+identifier(table)+(alias.isEmpty()?QString{}:" AS "+identifier(alias))+" SET "+set.join(',');
     if(where>=0) result+=" WHERE "+expression(tokens.mid(where+1,end-where-1));
-    installJetSqlFunctions(db);
+    installJetSqlFunctions(db);if(acceptedUpdate) *acceptedUpdate=true;
     return result;
 }
 AccessQueryPlan accessMakeTableSource(QSqlDatabase db,const AccessQueryPlan& plan) {
@@ -2329,6 +2337,20 @@ AccessQueryPlan accessMakeTableSource(QSqlDatabase db,const AccessQueryPlan& pla
         throw VbaRuntimeError(3251,"Complex typed make-table source unsupported");
     return select;
 }
+static bool actionUsesExactCurrencyStorage(QSqlDatabase db,const AccessQueryPlan& plan) {
+    if(plan.daoQueryType!=48 && plan.daoQueryType!=64) return false;
+    const auto tokens=tokenize(plan.source);QMap<QString,QString> tables;for(const auto& name:db.tables()) tables.insert(name.toCaseFolded(),name);QSet<QString> visited;
+    for(qsizetype at=0;at+1<tokens.size();++at) {
+        if(tokens[at].kind!=Token::Word || !QSet<QString>{"update","into","from","join"}.contains(tokens[at].value.toCaseFolded())) continue;
+        auto nameAt=at+1;if(nameAt+2<tokens.size() && symbol(tokens[nameAt+1],".") && tokens[nameAt].value.compare("main",Qt::CaseInsensitive)==0) nameAt+=2;
+        if(tokens[nameAt].kind!=Token::Word && tokens[nameAt].kind!=Token::Identifier) continue;
+        const auto table=tables.value(tokens[nameAt].value.toCaseFolded());if(table.isEmpty() || visited.contains(table)) continue;
+        if(visited.size()>=128) throw VbaRuntimeError(3251,"Typed action table bound exceeded");visited.insert(table);
+        if(sqliteColumnTypes(db,table).values().contains("CURRENCY_TICKS")) return true;
+    }
+    return false;
+}
+
 QString accessActionSql(QSqlDatabase db,const AccessQueryPlan& plan) {
     if(!plan.makeTable.isEmpty()) {
         const auto functions=nativeVbaSqlFunctionResultTypes(db); const auto tokens=tokenize(plan.source);
@@ -2340,14 +2362,16 @@ QString accessActionSql(QSqlDatabase db,const AccessQueryPlan& plan) {
     }
 
     if (plan.updateTarget.isEmpty()) {
-        const auto insert=checkedInsertSql(db,plan);
-        if(insert!=plan.sql) return insert;
-        const auto update=checkedUpdateSql(db,plan);
-        if(update!=plan.sql) return update;
+        bool acceptedInsert=false;const auto insert=checkedInsertSql(db,plan,&acceptedInsert);
+        if(insert!=plan.sql || acceptedInsert) return insert;
+        bool acceptedUpdate=false;const auto update=checkedUpdateSql(db,plan,&acceptedUpdate);
+        if(update!=plan.sql || acceptedUpdate) return update;
         const auto erased=checkedDeleteSql(db,plan);
         if(plan.deferredDecimalAction && erased==plan.sql) throw VbaRuntimeError(3251,"Decimal action has no proven physical conversion path");
+        if(erased==plan.sql && actionUsesExactCurrencyStorage(db,plan)) throw VbaRuntimeError(3251,"Exact Currency action requires a checked physical conversion path");
         return erased;
     }
+    if(actionUsesExactCurrencyStorage(db,plan)) throw VbaRuntimeError(3251,"Joined exact Currency actions are not implemented");
     if (!db.tables(QSql::Tables).contains(plan.updateTarget,Qt::CaseInsensitive)) throw VbaRuntimeError(3251,"Joined UPDATE requires a writable table target");
     if (installAccessQueryViews(db)<0) throw VbaRuntimeError(3251,"Joined UPDATE query dependencies unavailable");
     const auto record=db.record(plan.updateTarget); QString identity;
