@@ -10,8 +10,9 @@ Known CURRENCY_TICKS inputs preserve Currency through CVar/CCur and supported
 scalar calls, including exact CStr and VarType. Comparisons use proven Currency
 operands or explicit Decimal conversion; unknown numeric mixing refuses3251.
 NULL keeps existing SQL propagation. Native declared tick sources order by their
-actual signed64 values. Unsupported field arithmetic, unary negation, lossy CAST,
-aggregates and physical SQL target conversion remain refused. Existing bounded
+actual signed64 values. Proven Currency arithmetic, checked negation and SUM are now documented in
+EXACT_CURRENCY_FIELD_ARITHMETIC.md. Lossy CAST, remaining aggregates and physical
+SQL target conversion remain refused. Existing bounded
 parameter-only arithmetic is unchanged. Original-format MONEY import, arbitrary
 promotion/locale/round-trip/Windows equivalence remain outside this scope.
 

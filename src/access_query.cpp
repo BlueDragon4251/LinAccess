@@ -608,9 +608,10 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
             if(left.type=="CURRENCY_TICKS" || right.type=="CURRENCY_TICKS") {
                 static const QMap<QString,QString> comparisons{{"=","equal"},{"<>","not_equal"},{"!=","not_equal"},{"<","less"},{"<=","less_equal"},{">","greater"},{">=","greater_equal"}};
                 const auto money=[](const Expression& value) {return value.type=="CURRENCY_TICKS" || value.type=="CURRENCY_REAL";};
-                if(!comparisons.contains(op) || (!money(left) && !nullLiteral(left)) || (!money(right) && !nullLiteral(right))) throw VbaRuntimeError(3251,"Exact Currency operators require proven Currency operands or explicit conversion");
+                static const QMap<QString,QString> arithmetic{{"+","add"},{"-","subtract"},{"*","multiply"}};
+                if((!comparisons.contains(op) && !arithmetic.contains(op)) || (!money(left) && !nullLiteral(left)) || (!money(right) && !nullLiteral(right))) throw VbaRuntimeError(3251,"Exact Currency operators require proven Currency operands or explicit conversion");
                 auto code=left.code;code.append({Token::Other,","});code+=right.code;
-                return {"BOOLEAN",call("linaccess_jet_currency_bound_"+comparisons.value(op),{{Token::String,left.type+","+right.type}},code)};
+                return {arithmetic.contains(op) ? QString("CURRENCY_TICKS") : QString("BOOLEAN"),call("linaccess_jet_currency_bound_"+(arithmetic.contains(op) ? arithmetic.value(op) : comparisons.value(op)),{{Token::String,left.type+","+right.type}},code)};
             }
             const auto logic=op.toCaseFolded();
             if(QSet<QString>{"and","or","xor","eqv","imp"}.contains(logic) && (boolean(left) || nullLiteral(left)) && (boolean(right) || nullLiteral(right))) {
@@ -675,7 +676,7 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
         if(expression.size()>1 && (symbol(expression.front(),"+") || symbol(expression.front(),"-"))) {
             auto inner=parse(expression.mid(1),recursion+1); if(inner.type.isEmpty()) return unknown();
             if(inner.type=="DECIMAL_EXACT") return symbol(expression.front(),"+") ? inner : Expression{"DECIMAL_EXACT",call("linaccess_jet_decimal_negate",{{Token::String,"DECIMAL_EXACT"}},inner.code)};
-            if(inner.type=="CURRENCY_TICKS") {if(symbol(expression.front(),"+")) return inner;throw VbaRuntimeError(3251,"Exact Currency unary arithmetic requires explicit conversion");}
+            if(inner.type=="CURRENCY_TICKS") return symbol(expression.front(),"+") ? inner : Expression{"CURRENCY_TICKS",call("linaccess_jet_currency_bound_negate",{{Token::String,"CURRENCY_TICKS"}},inner.code)};
             if(numericOnly && (inner.type=="DATETIME" || inner.type=="CURRENCY_REAL")) return unknown();
             if(inner.type=="DATETIME" && symbol(expression.front(),"-")) throw VbaRuntimeError(3251,"Date SQL negation is not validated");
             QVector<Token> code{expression.front(),{Token::Other,"("}}; code+=inner.code; code.append({Token::Other,")"});
@@ -718,6 +719,7 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
         if(function.startsWith("linaccess_jet_currency_bound_") && expression.size()>=6 && expression[2].kind==Token::String && expression[2].value.split(',').contains("CURRENCY_TICKS")) {
             const auto operation=function.mid(QString("linaccess_jet_currency_bound_").size());
             if(QSet<QString>{"equal","not_equal","less","less_equal","greater","greater_equal"}.contains(operation)) return {"BOOLEAN",expression};
+            if(QSet<QString>{"add","subtract","multiply","negate"}.contains(operation)) return {"CURRENCY_TICKS",expression};
             return unknown();
         }
         if(function=="linaccess_jet_cvar_typed" && expression.size()>=6 && expression[2].kind==Token::String && symbol(expression[3],",")) {
@@ -932,7 +934,7 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
         }
         if(nesting) return unknown();
         auto argument=parse(expression.mid(2,expression.size()-3),recursion+1);
-        if(sum && argument.type=="CURRENCY_TICKS") throw VbaRuntimeError(3251,"Exact Currency aggregate requires explicit Decimal conversion");
+        if(sum && argument.type=="CURRENCY_TICKS") return {"CURRENCY_TICKS",call("linaccess_jet_currency_sum_ticks",argument.code)};
         if(sum && argument.type=="DECIMAL_EXACT") return {"DECIMAL_EXACT",call("linaccess_jet_decimal_sum",argument.code)};
         if(sum && argument.type!="CURRENCY_REAL") {
             if(argument.type=="DATETIME") return {{},call("linaccess_jet_date_sum",argument.code)};

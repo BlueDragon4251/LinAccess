@@ -1446,3 +1446,22 @@ F014/F054/F055/F067/F068 offen; feste456/386 Teilumfänge/70 Vollanforderungen.
 Vorstand83c6e0c8/Baumb3953096aaef66ae517f93425c6ff19168a3f6b9 privat/exakt
 veröffentlicht. Letzter Gesamtpaket-/Originalbeleg a4/185,44s vor SetWarnings/
 Currency-Erweiterungen. Unmittelbar weiterentwickeln; keine Gesamtparität.
+
+
+Exakte Currency-Quellarithmetik/SUM (2026-11-11):
+EXACT_CURRENCY_FIELD_ARITHMETIC.md. Belegte Currency-Operanden mit Tickquelle
+rechnen +,-,* im bestehenden VBA-Currency-Kern und liefern signed64-Ticks/Typ5;
+Negation geprüft bisMIN-Überlauf6. Tick-SUM verwendet bestehende geprüfteCurrency-
+Akkumulation mitInteger-Ein-/Ausgabe,Nullskip/Nullfürleer und Fehler6beiÜberlauf,
+auchbeiZwischenüberlauf. Keine ungemesseneJet-Aggregatreihenfolge behauptet.
+LegacyREAL-SUM behält Transport/Grenzen. UnbelegteZahlenmischung/AVG/Statistik/
+CAST/physischeTick-SQL-Zielkonvertierung bleiben offen/gesperrt.
+App/Helper/Parameter/DAO/Modell/SUM gebaut; bestehendes Bündel3/3 in6,89s
+(0,13/6,30/0,45), bestehender Legacy-SUM-Bereich0,09s bestanden. Tatsächliche
+64-Bit-Grenzen/1e-4-Stellen, Grundrechenarten, Negation, Null, SUM und Überlauf,
+Arithmetik in gehashtem abgeleitetemFilter geprüft. Alle7 geschütztenHashesgleich.
+Keine neueCTest-ID/Windows-Referenz;456/386 bestätigteTeilumfänge/70 Vollanforderungen.
+Vorstand1631a03b/Baum6519c5d6d0dd9ab93a220e16f85fb05419b09959 privat/exakt
+veröffentlicht. Gemeinsamer Paket-/Originalbeleg folgt nach dieserEtappe;
+letzter a4/185,44s liegt vor SetWarnings und Currency-Snapshot/Quellarithmetik.
+Direkt weiterentwickeln, keineGesamtparitätbehaupten.

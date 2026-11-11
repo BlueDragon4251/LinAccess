@@ -335,7 +335,7 @@ void boundScalarSqlFunction(sqlite3_context* context,int count,sqlite3_value** a
         if(builtin=="Nz" && arguments==1) {
             values.emplace("_la_nz_default",VbaValue::string(""));expression+=",_la_nz_default";
         }
-        if((booleanOperator || decimalOperator) && arguments==1) expression=std::string(builtin)+" "+expression;
+        if((booleanOperator || decimalOperator || currencyOperator) && arguments==1) expression=std::string(builtin)+" "+expression;
         if(!infix) expression+=')';ScalarStringHost host;
         const auto result=evaluateVbaExpression(expression,host,values);
         returnBoundSqlValue(context,result,declared.contains("CURRENCY_TICKS"));
@@ -343,8 +343,8 @@ void boundScalarSqlFunction(sqlite3_context* context,int count,sqlite3_value** a
       catch(...) { native.error(context,"SQL bound scalar evaluation failed",-1); }
 }
 template<int Operation> void exactCurrencyComparison(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
-    static constexpr const char* operations[]{"=","<>","<","<=",">",">="};
-    boundScalarSqlFunction(context,count,args,operations[Operation],2,2,true,false,false,false,true);
+    static constexpr const char* operations[]{"=","<>","<","<=",">",">=","+","-","*","-"};
+    boundScalarSqlFunction(context,count,args,operations[Operation],Operation==9 ? 1 : 2,Operation==9 ? 1 : 2,true,false,false,false,true);
 }
 void decimalConversion(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"CDec",1,1,false);}
 void decimalConversionTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"CDec",1,1,true);}
@@ -762,25 +762,27 @@ void decimalSumFinal(sqlite3_context* context) noexcept {
 }
 
 struct CurrencySumState { std::int64_t units; int error; bool seen; };
-void currencySumStep(sqlite3_context* context,int,sqlite3_value** args) noexcept {
+template<bool Ticks=false> void currencySumStep(sqlite3_context* context,int,sqlite3_value** args) noexcept {
     auto& native=api(); auto* state=static_cast<CurrencySumState*>(native.aggregate(context,sizeof(CurrencySumState)));
     if(!state) { native.error(context,"LinAccess SQL function error 7",-1); return; }
     if(state->error || native.type(args[0])==SQLITE_NULL) return;
     try {
         const auto type=native.type(args[0]);
         if(type!=SQLITE_INTEGER && type!=SQLITE_FLOAT) throw VbaRuntimeError(13,"Currency sum requires numeric encoding");
-        const auto value=currencyFromRealStorage(native.number(args[0]));
+        if constexpr(Ticks) if(type!=SQLITE_INTEGER) throw VbaRuntimeError(13,"Exact Currency sum requires integer ticks");
+        const auto value=Ticks ? VbaValue::currency(native.integer(args[0])) : currencyFromRealStorage(native.number(args[0]));
         state->units=currencyBinary("+",VbaValue::currency(state->units),value).currencyUnits;
         state->seen=true;
     } catch(const VbaRuntimeError& failure) { state->error=failure.number; functionError(context,failure); }
       catch(...) { state->error=7; native.error(context,"LinAccess SQL function error 7",-1); }
 }
-void currencySumFinal(sqlite3_context* context) noexcept {
+template<bool Ticks=false> void currencySumFinal(sqlite3_context* context) noexcept {
     auto& native=api(); const auto* state=static_cast<CurrencySumState*>(native.aggregate(context,0));
     try {
         if(state && state->error) throw VbaRuntimeError(state->error,"Currency sum failed");
         if(!state || !state->seen) { native.nullResult(context); return; }
-        native.numberResult(context,currencyToRealStorage(VbaValue::currency(state->units)));
+        if constexpr(Ticks) native.integerResult(context,state->units);
+        else native.numberResult(context,currencyToRealStorage(VbaValue::currency(state->units)));
     } catch(const VbaRuntimeError& failure) { functionError(context,failure); }
       catch(...) { native.error(context,"SQL Currency sum failed",-1); }
 }
@@ -1282,6 +1284,10 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_currency_bound_less_equal",3,&exactCurrencyComparison<3>,nullptr,nullptr);
     ensure("linaccess_jet_currency_bound_greater",3,&exactCurrencyComparison<4>,nullptr,nullptr);
     ensure("linaccess_jet_currency_bound_greater_equal",3,&exactCurrencyComparison<5>,nullptr,nullptr);
+    ensure("linaccess_jet_currency_bound_add",3,&exactCurrencyComparison<6>,nullptr,nullptr);
+    ensure("linaccess_jet_currency_bound_subtract",3,&exactCurrencyComparison<7>,nullptr,nullptr);
+    ensure("linaccess_jet_currency_bound_multiply",3,&exactCurrencyComparison<8>,nullptr,nullptr);
+    ensure("linaccess_jet_currency_bound_negate",2,&exactCurrencyComparison<9>,nullptr,nullptr);
     ensure("linaccess_jet_decimal_not_equal",-1,&decimalOperation<5>,nullptr,nullptr);
     ensure("linaccess_jet_decimal_less",-1,&decimalOperation<6>,nullptr,nullptr);
     ensure("linaccess_jet_decimal_less_equal",-1,&decimalOperation<7>,nullptr,nullptr);
@@ -1354,7 +1360,8 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_decimal_field_valid",3,&decimalFieldValid,nullptr,nullptr);
     ensure("linaccess_jet_decimal_store",4,&decimalFieldStore,nullptr,nullptr);
     ensure("linaccess_jet_decimal_sum",1,nullptr,&decimalSumStep,&decimalSumFinal);
-    ensure("linaccess_jet_currency_sum",1,nullptr,&currencySumStep,&currencySumFinal);
+    ensure("linaccess_jet_currency_sum",1,nullptr,&currencySumStep<false>,&currencySumFinal<false>);
+    ensure("linaccess_jet_currency_sum_ticks",1,nullptr,&currencySumStep<true>,&currencySumFinal<true>);
     ensure("linaccess_jet_currency_add",2,&currencyAdd,nullptr,nullptr);
     ensure("linaccess_jet_currency_subtract",2,&currencySubtract,nullptr,nullptr);
     ensure("linaccess_jet_currency_multiply",2,&currencyMultiply,nullptr,nullptr);
