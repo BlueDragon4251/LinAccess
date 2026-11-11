@@ -6,9 +6,11 @@ is required; additional partial-cell areas are refused rather than interpreted
 as requests to delete other records. Existing single-record behavior remains.
 
 The bounded multi-record path requires a bounded manual-submit model, a stable
-keyed table source and non-NULL saved primary keys. Existing updates, insert
+keyed table source and non-NULL primary keys on saved rows. Existing updates, insert
 default state and unrelated deletions are captured before staging and preserved.
-Selected new/already-deleted records are refused. Persistent row anchors preserve the selected
+Already-deleted records are refused. Selected pending inserts are removed from
+the cache; mixed selections are staged in descending physical order. Their
+supplied values and omitted defaults are retained in the pre-action snapshot. Persistent row anchors preserve the selected
 records through validation. Reentrant deletion and disappeared/replaced views
 are rejected. Rows are staged in descending order. A staging failure restores
 the captured pre-action cache.
@@ -21,7 +23,7 @@ batch save. The table guidance now describes ordinary cell-save behavior without
 claiming that every command waits for the Save button.
 
 No complete Access confirmation/SetWarnings, BeforeDelConfirm/AfterDelConfirm,
-clipboard/mixed new-row selection, multi-record Undo, concurrency or Windows
+external clipboard formats, concurrency or Windows
 event/selection equivalence is claimed. F168/F148 remain open.
 
 The existing mainwindow target drives Ctrl+Minus for noncontiguous rows, protects

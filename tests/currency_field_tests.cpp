@@ -492,6 +492,30 @@ End Function
     }
 
     {
+        assert(sql.exec("CREATE TABLE delete_mixed_scope(id INTEGER PRIMARY KEY AUTOINCREMENT,note TEXT,payload BLOB,extra TEXT DEFAULT 'kept')"));
+        assert(sql.exec("INSERT INTO delete_mixed_scope(note,payload) VALUES('a',x'01'),('b',x'02'),('c',x'03')"));sql.finish();
+        linaccess::AccessTableModel cells(nullptr,db);cells.setTable("delete_mixed_scope");cells.setEditStrategy(QSqlTableModel::OnManualSubmit);assert(cells.select());
+        linaccess::AccessTableView sheet;sheet.setModel(&cells);sheet.show();
+        assert(cells.setDataBlock(3,1,{{"new-one"},{"new-two"}}) && cells.rowCount()==5);
+        sheet.setCurrentIndex(cells.index(1,1));sheet.selectionModel()->select(cells.index(1,0),QItemSelectionModel::ClearAndSelect|QItemSelectionModel::Rows);
+        sheet.selectionModel()->select(cells.index(3,0),QItemSelectionModel::Select|QItemSelectionModel::Rows);
+        assert(sheet.deleteCurrentRecord() && cells.rowCount()==4 && cells.isPendingRecordDeleted(1) && cells.clipboardText(cells.index(3,1))=="new-two");
+        assert(cells.undoBlock() && cells.rowCount()==5 && !cells.isPendingRecordDeleted(1) && cells.clipboardText(cells.index(3,1))=="new-one");
+        assert(cells.undoBlock() && cells.rowCount()==3 && !cells.isDirty());
+        assert(cells.redoBlock() && cells.redoBlock() && cells.rowCount()==4 && cells.isPendingRecordDeleted(1));
+        assert(cells.submitTransactionally());
+        assert(sql.exec("SELECT id,note,extra FROM delete_mixed_scope ORDER BY id") && sql.next() && sql.value(0).toInt()==1 && sql.value(1).toString()=="a");
+        assert(sql.next() && sql.value(0).toInt()==3 && sql.value(1).toString()=="c");
+        assert(sql.next() && sql.value(1).toString()=="new-two" && sql.value(2).toString()=="kept" && !sql.next());sql.finish();
+        assert(cells.insertRow(cells.rowCount()));const int empty=cells.rowCount()-1;
+        sheet.setCurrentIndex(cells.index(empty,1));sheet.selectionModel()->clearSelection();
+        assert(sheet.deleteCurrentRecord() && !cells.isDirty() && cells.canUndoBlock());
+        assert(cells.undoBlock() && cells.isDirty() && cells.rowCount()==4 && cells.canRedoBlock());
+        assert(cells.redoBlock() && !cells.isDirty() && cells.rowCount()==3);
+        assert(cells.undoBlock() && cells.undoPendingRecord(3) && !cells.isDirty());
+    }
+
+    {
         assert(sql.exec("CREATE TABLE current_save(id INTEGER PRIMARY KEY AUTOINCREMENT,n INTEGER CHECK(n>=0),note TEXT,payload BLOB)"));
         assert(sql.exec("INSERT INTO current_save VALUES(1,10,NULL,x''),(2,20,'original',x'01'),(3,30,NULL,NULL)"));
         linaccess::AccessTableModel current(nullptr,db);current.setTable("current_save");current.setEditStrategy(QSqlTableModel::OnManualSubmit);assert(current.select());

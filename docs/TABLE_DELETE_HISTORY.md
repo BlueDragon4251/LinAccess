@@ -1,12 +1,12 @@
 # Pending multi-record deletion history
 
-The bounded keyed table stored single-record and multi-selection paths stage selected stored rows as
+The bounded keyed table single-record and multi-selection paths stage selected stored rows as
 one model history action. Ctrl+Z restores exactly those pending deletions in the
 existing cache; Ctrl+Y stages the same rows again. Neither action executes SQL or reselects the source. Dirty pre-action caches
 use the existing raw snapshot restoration, including pending inserted row/default
 state and unrelated deletions.
 The existing selection and non-NULL primary-key validation remain in force.
-Duplicate/out-of-range/new/already-deleted row requests, oversized caches, read-only sources and
+Duplicate/out-of-range/already-deleted row requests, oversized caches, read-only sources and
 reentrant mutation are refused before staging. A failed stage restores the pre-action cache.
 
 A transactional Save failure retains the deletion action, so Undo/Redo remains
@@ -30,9 +30,22 @@ checks Undo/Redo before the existing successful transactional deletion. Existing
 currency_field_documents covers the shared paste history. No new CTest target.
 
 Saved single-record deletion uses the same history action even with other drafts.
-New and keyless single-row paths retain their existing behavior. Existing GUI coverage
+Pending new rows now use the same history when the table has a primary key;
+keyless single-row paths retain their existing behavior. Existing GUI coverage
 checks singleton Undo/Redo, invalidation by subsequent cell edits, duplicate and
 out-of-range requests and read-only refusal without modifying saved data.
 
 The draft-preserving deletion extension passed the existing UI/field bundle2/2
 in16.21s (15.56/0.64s); no new CTest target or Windows observation.
+
+Mixed saved/inserted selections (2026-11-11)
+------------------------------------------
+Pending inserts can be removed together with stored rows. Undo restores their
+positions, supplied values and omitted defaults; Redo removes the same records.
+The history records the reduced post-action row count. Removing the only empty
+pending insert can produce a clean cache and still has a valid Undo action.
+Older native range actions remain traversable across this topology change.
+No generated key is reserved for an unsaved removed row; SQL remains untouched
+until normal Save. Existing UI/field bundle2/2 passed16.60s (16.01/0.58s), including
+mixed selection, multi-action replay, generated Save/defaults and empty new row.
+No new CTest/Windows oracle; full confirmation/events/concurrency remain open.

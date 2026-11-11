@@ -88,7 +88,7 @@ private:
     QVector<CachedUpdate> captureUpdates() const;
     bool restoreUpdates(const QVector<CachedUpdate>& updates,int originalRows);
     struct BlockHistory {
-        int firstRow{},firstColumn{},originalRows{};bool applied{},skipGenerated{};
+        int firstRow{},firstColumn{},originalRows{},removedInserts{};bool applied{},skipGenerated{};
         QVector<int> deletions;
         QVector<QVector<QVariant>> values;QVector<int> columns;QMap<QString,QVariant> dateDefaults;QVector<CachedUpdate> before;QSet<int> suppliedColumns;
     };

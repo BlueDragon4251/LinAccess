@@ -7582,3 +7582,17 @@ geprüft. Keine neue CTest-ID/Windows-Ereignisbehauptung; F168/F340/F148 bleiben
 offen, feste456 IDs/386 bestätigte Teilumfänge/70 offene Vollanforderungen.
 Vorstandf8998d375f20f1d768d50a8ce253921cf5bfac24/Baum121f335b044eff366da329d4dc6066870723b021
 privat/exakt veröffentlicht; gültiger Gesamtpaketbeleg weiterhincf9d6933.
+
+
+Gemischte gespeicherte/neue Datensatzlöschung (2026-11-11):
+TABLE_DELETE_HISTORY.md/TABLE_MULTI_DELETE_RUNTIME.md. Neue Pending-Inserts
+auch zusammen mit gespeicherten Zeilen absteigend entfernen; Snapshot erhält
+Positionen/gelieferte Werte/ausgelassene Defaults. Undo/Redo und vorherige
+Bereichsaktionen berücksichtigen verringerte Zeilenzahl. Entfernen des einzigen
+leeren Inserts darf sauberen Cache ergeben und bleibt rückgängig machbar. Kein
+SQL/keine reservierte neue ID vor normalem Save. App gebaut, bestehendes UI-/
+Feldbündel2/2 in16,60s (16,01/0,58s) bestanden: echte gemischte Auswahl, zwei
+Aktionen Undo/Redo, Save/Default/Generated-Schlüssel und leere neue Zeile.
+Keine neue CTest-ID/Windows-Parität; F168/F340 bleiben offen,456/386/70 gleich.
+Vorstandb3a279cfea3876c394dc1707f600719c29304ba4/Baum9c5c7b33c0c83fc1fc8273d92e4fb9afc470f7df
+privat/exakt nach verzögerter Ref-Lesebestätigung adoptiert.

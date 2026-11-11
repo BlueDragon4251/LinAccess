@@ -334,8 +334,8 @@ public:
                 if(index.row()!=currentIndex().row()) return refuse(3251,"Zum Löschen mehrerer Datensätze vollständige Zeilen auswählen.");
             if(!finishEditing() || !self || !typed || model()!=typed || !currentIndex().isValid()) return false;
             const auto row=currentIndex().row(),column=currentIndex().column();
-            bool useHistory=typed->isStoredRecord(row) && !typed->isPendingRecordDeleted(row) && typed->editStrategy()==QSqlTableModel::OnManualSubmit && !typed->primaryKey().isEmpty();
-            if(useHistory) {
+            bool useHistory=!typed->isPendingRecordDeleted(row) && typed->editStrategy()==QSqlTableModel::OnManualSubmit && !typed->primaryKey().isEmpty();
+            if(useHistory && typed->isStoredRecord(row)) {
                 const auto values=typed->record(row);const auto key=typed->primaryKey();
                 for(int field=0;field<key.count();++field) if(values.value(key.fieldName(field)).isNull()) useHistory=false;
             }
@@ -345,13 +345,13 @@ public:
             return true;
         }
         if(selected.size()>1000000 || typed->editStrategy()!=QSqlTableModel::OnManualSubmit || typed->primaryKey().isEmpty())
-            return refuse(3251,"Mehrfachlöschung erfordert gespeicherte Datensätze mit Primärschlüssel.");
+            return refuse(3251,"Mehrfachlöschung erfordert eine Tabelle mit Primärschlüssel.");
         QSet<int> rows; QVector<QPersistentModelIndex> anchors;
         const auto primary=typed->primaryKey(); const auto source=typed->tableName();
         for(const auto& index:selected) {
             rows.insert(index.row()); anchors.append(index);
             const auto record=typed->record(index.row());
-            for(int field=0;field<primary.count();++field)
+            for(int field=0;typed->isStoredRecord(index.row()) && field<primary.count();++field)
                 if(record.value(primary.fieldName(field)).isNull()) return refuse(3251,"Neue Datensätze zuerst speichern oder verwerfen.");
         }
         if(selectionModel()) for(const auto& index:selectionModel()->selectedIndexes())

@@ -135,17 +135,23 @@ bool AccessTableModel::stageRecordDeletions(const QVector<int>& rows) {
     auto ordered=rows;std::sort(ordered.begin(),ordered.end(),std::greater<int>());
     for(int i=0;i<ordered.size();++i) {
         const int row=ordered[i];
-        if(row<0 || row>=rowCount() || (i && ordered[i-1]==row) || !isStoredRecord(row) || deletedRows_.contains(row)) return reject(3251);
+        if(row<0 || row>=rowCount() || (i && ordered[i-1]==row) || deletedRows_.contains(row)) return reject(3251);
+        if(!isStoredRecord(row)) continue;
         const auto values=record(row);const auto key=primaryKey();
         for(int field=0;field<key.count();++field) if(values.value(key.fieldName(field)).isNull()) return reject(3251);
     }
     BlockHistory history;history.originalRows=rowCount();history.applied=true;history.deletions=ordered;
     QVector<BlockHistory> nextHistory;
-    try {history.before=captureUpdates();if(!replayingHistory_) nextHistory=prepareBlockHistory(history);}
+    QVector<int> staged;
+    try {
+        history.before=captureUpdates();
+        for(const int row:ordered) if(!isStoredRecord(row)) ++history.removedInserts;
+        if(!replayingHistory_) nextHistory=prepareBlockHistory(history);
+        staged.reserve(ordered.size());
+    }
     catch(const VbaRuntimeError& error) {return rejectEdit(error.number,QString::fromUtf8(error.what()));}
     catch(const std::bad_alloc&) {return reject(7);}
     const QScopedValueRollback<bool> mutation(blockMutation_,true);
-    QVector<int> staged;
     for(const int row:ordered) {
         if(!removeRows(row,1)) {
             const auto problem=lastError();
@@ -716,7 +722,7 @@ QVector<AccessTableModel::BlockHistory> AccessTableModel::prepareBlockHistory(co
     auto next=undoHistory_;
     if(!next.isEmpty()) {
         const auto& previous=next.back();
-        const auto rows=qMax<qint64>(previous.originalRows,static_cast<qint64>(previous.firstRow)+previous.values.size());
+        const auto rows=qMax<qint64>(previous.originalRows,static_cast<qint64>(previous.firstRow)+previous.values.size())-previous.removedInserts;
         if(history.originalRows!=rows) next.clear(); // New physical fetch boundary.
     }
     next.append(history);
@@ -727,9 +733,9 @@ QVector<AccessTableModel::BlockHistory> AccessTableModel::prepareBlockHistory(co
     return next;
 }
 bool AccessTableModel::canUndoBlock() const {
-    if(readOnly_ || saving_ || changing_ || undoHistory_.isEmpty() || !isDirty()) return false;
+    if(readOnly_ || saving_ || changing_ || undoHistory_.isEmpty()) return false;
     const auto& history=undoHistory_.back();
-    return rowCount()==qMax<qint64>(history.originalRows,static_cast<qint64>(history.firstRow)+history.values.size());
+    return rowCount()==qMax<qint64>(history.originalRows,static_cast<qint64>(history.firstRow)+history.values.size())-history.removedInserts;
 }
 bool AccessTableModel::canRedoBlock() const {
     if(readOnly_ || saving_ || changing_ || redoHistory_.isEmpty()) return false;
