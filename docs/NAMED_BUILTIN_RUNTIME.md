@@ -27,3 +27,20 @@ Reference: https://learn.microsoft.com/en-us/office/vba/api/access.application.n
 Existing core and DAO targets cover named/reordered calls, overload/default/error
 cases, the documented Nz examples and actual SQL persistence through named Join.
 No new CTest target is added.
+
+
+Native SQL Nz (2026-11-11)
+-------------------------
+Nz now has actual registered SQL callbacks for one or two arguments. Its omitted
+SQL fallback is explicitly bound as a zero-length String before using the shared
+native evaluator; VBA's Empty default remains unchanged. Evaluation remains eager,
+including the explicit fallback expression. This is not SQLite COALESCE laziness.
+
+Proven matching branch kinds (Date, Boolean, Single, integral and bounded Currency)
+retain result metadata and actual DAO values/types. A literal NULL branch can
+combine with the other proven kind. TEXT results remain without guessed Jet
+Text/Memo declarations. Mixed/unknown branch kinds have unknown metadata; in
+particular Nz(DateField) can contain Date-encoded text or the SQL empty String
+and does not acquire a fake Date declaration. Full heterogeneous Variant identity
+through nested SQL consumers is not implemented by this transport. Source-kind,
+object/array, precision and locale guards remain; no new Windows oracle follows.

@@ -307,6 +307,9 @@ void boundScalarSqlFunction(sqlite3_context* context,int count,sqlite3_value** a
             values.emplace(name,exactFormatInteger ? decimalLiteral(std::to_string(native.integer(argument))) : qtFieldValue(storage,declared.value(index)));
             if(index) expression+=infix ? std::string(builtin) : ",";expression+=name;
         }
+        if(builtin=="Nz" && arguments==1) {
+            values.emplace("_la_nz_default",VbaValue::string(""));expression+=",_la_nz_default";
+        }
         if(booleanOperator && arguments==1) expression=std::string(builtin)+" "+expression;
         if(!infix) expression+=')';ScalarStringHost host;
         const auto result=evaluateVbaExpression(expression,host,values);
@@ -368,6 +371,8 @@ void state_isempty(sqlite3_context* context,int count,sqlite3_value** args) noex
 void state_isempty_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"IsEmpty",1,1,true);}
 void state_iserror(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"IsError",1,1,false);}
 void state_iserror_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"IsError",1,1,true);}
+void nullReplacement(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Nz",1,2,false);}
+void nullReplacementTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Nz",1,2,true);}
 void stringCStr(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"CStr",1,1,false);}
 void stringCStrTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"CStr",1,1,true);}
 void stringStr(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Str",1,1,false);}
@@ -935,6 +940,8 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_next_counter",2,&nextAccessCounter,nullptr,nullptr);
     ensure("linaccess_jet_iif",3,&iif,nullptr,nullptr);
     ensure("linaccess_jet_rgb",-1,&rgbColor,nullptr,nullptr);
+    ensure("linaccess_jet_nz",-1,&nullReplacement,nullptr,nullptr);
+    ensure("linaccess_jet_nz_typed",-1,&nullReplacementTyped,nullptr,nullptr);
     ensure("linaccess_jet_isnull",-1,&state_isnull,nullptr,nullptr);
     ensure("linaccess_jet_isnull_typed",-1,&state_isnull_typed,nullptr,nullptr);
     ensure("linaccess_jet_isempty",-1,&state_isempty,nullptr,nullptr);

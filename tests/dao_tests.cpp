@@ -2345,6 +2345,32 @@ FROM calendar_inputs WHERE marker=1)SQL");
             int actual=0;try{(void)database->member("OpenRecordset",{linaccess::VbaValue::string(failure.first)});}catch(const linaccess::VbaRuntimeError& error){actual=error.number;}
             if(actual!=failure.second) std::cerr<<"SQL value-state error actual="<<actual<<" expected="<<failure.second<<"\n";assert(actual==failure.second);
         }
+        calendarPhase="native SQL Nz fallback block";
+        const auto nzSource=QStringLiteral("SELECT Nz(stamp,#2000-01-01#) AS stamp_value,Nz(enabled,False) AS logical_value,Nz(amount,CCur(0)) AS money_value,Nz(elapsed,CSng(0)) AS single_value,Nz(marker,CInt(0)) AS integer_value,Nz(stamp,Null) AS nullable_stamp,Nz(Null,enabled) AS nullable_flag,Nz(Null,TypeName(stamp)) AS state_name,Nz(Null) AS default_text,Nz('') AS blank,Nz('x') AS retained,VarType(Nz(enabled,False)) AS logical_type,TypeName(Nz(stamp,Null)) AS nullable_name,Nz(Null,CCur('0.0001')) AS tiny FROM calendar_inputs ORDER BY marker");
+        const auto nzValues=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery(nzSource),{});
+        assert(nzValues.rows.size()==2 && nzValues.columnTypes==QVector<QString>({"DATETIME","BOOLEAN","CURRENCY_REAL","SINGLE_REAL","INTEGER2","DATETIME","BOOLEAN","TEXT","TEXT","TEXT","TEXT","INTEGER2","TEXT","CURRENCY_REAL"}));
+        assert(nzValues.rows[0][0].toString()=="2024-02-28 12:34:56" && nzValues.rows[1][0].toString()=="2000-01-01 00:00:00");
+        assert(nzValues.rows[0][1].toInt()==-1 && nzValues.rows[1][1].toInt()==0 && nzValues.rows[0][2].toDouble()==1.5 && nzValues.rows[1][2].toDouble()==0);
+        assert(nzValues.rows[0][3].toDouble()==16777216 && nzValues.rows[1][3].toDouble()==0 && nzValues.rows[0][4].toInt()==1 && nzValues.rows[1][4].toInt()==2);
+        assert(nzValues.rows[0][5].toString()=="2024-02-28 12:34:56" && nzValues.rows[1][5].isNull() && nzValues.rows[0][6].toInt()==-1 && nzValues.rows[1][6].isNull());
+        for(int row=0;row<2;++row) {
+            assert(nzValues.rows[row][7].toString()==(row==0 ? "Date" : "Null"));
+            assert(!nzValues.rows[row][8].isNull() && nzValues.rows[row][8].toString().isEmpty() && !nzValues.rows[row][9].isNull() && nzValues.rows[row][9].toString().isEmpty() && nzValues.rows[row][10].toString()=="x");
+            assert(nzValues.rows[row][11].toInt()==11 && nzValues.rows[row][12].toString()==(row==0 ? "Date" : "Null") && linaccess::qtFieldValue(nzValues.rows[row][13],"CURRENCY_REAL").currencyUnits==1);
+        }
+        const auto nzFields=database->member("OpenRecordset",{linaccess::VbaValue::string(nzSource.toStdString())}).object;
+        assert(nzFields->member("Fields",{linaccess::VbaValue::string("stamp_value")}).object->member("Type",{}).asNumber()==8 && nzFields->item("stamp_value").kind==linaccess::VbaValue::Kind::Date);
+        assert(nzFields->member("Fields",{linaccess::VbaValue::string("money_value")}).object->member("Type",{}).asNumber()==5 && nzFields->item("single_value").numericType==linaccess::VbaValue::NumericType::Single);nzFields->member("Close",{});
+        const auto nzFilter=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT marker FROM calendar_inputs WHERE Nz(enabled,False)=True"),{});
+        assert(nzFilter.rows.size()==1 && nzFilter.rows[0][0].toInt()==1);
+        const auto nzGroups=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT Nz(stamp,#2000-01-01#) AS stamp_value,Count(*) AS tally FROM calendar_inputs GROUP BY Nz(stamp,#2000-01-01#) ORDER BY Nz(stamp,#2000-01-01#) DESC"),{});
+        assert(nzGroups.rows.size()==2 && nzGroups.columnTypes[0]=="DATETIME" && nzGroups.rows[0][0].toString()=="2024-02-28 12:34:56" && nzGroups.rows[1][0].toString()=="2000-01-01 00:00:00");
+        const auto nzMixed=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT Nz(stamp) AS mixed FROM calendar_inputs ORDER BY marker"),{});
+        assert(nzMixed.rows.size()==2 && nzMixed.columnTypes[0].isEmpty() && nzMixed.rows[0][0].toString()=="2024-02-28 12:34:56" && !nzMixed.rows[1][0].isNull() && nzMixed.rows[1][0].toString().isEmpty());
+        for(const auto& failure:std::vector<std::pair<std::string,int>>{{"SELECT Nz()",450},{"SELECT Nz(1,2,3)",450},{"SELECT Nz(1,1/0)",11}}) {
+            int actual=0;try{(void)database->member("OpenRecordset",{linaccess::VbaValue::string(failure.first)});}catch(const linaccess::VbaRuntimeError& error){actual=error.number;}
+            if(actual!=failure.second) std::cerr<<"SQL Nz error actual="<<actual<<" expected="<<failure.second<<"\n";assert(actual==failure.second);
+        }
         calendarPhase="DAO fields";
         const auto calendarFields=database->member("OpenRecordset",{linaccess::VbaValue::string(calendarSource.toStdString())}).object;
         assert(calendarFields->member("Fields",{linaccess::VbaValue::string("shifted")}).object->member("Type",{}).asNumber()==8);
