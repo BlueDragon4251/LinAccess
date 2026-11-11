@@ -409,14 +409,31 @@ public:
     bool moveByRecordPage(bool down) {
         const QPointer<AccessTableView> self=this;
         QPointer<AccessTableModel> typed=qobject_cast<AccessTableModel*>(model());
-        if(!typed || !recordNavigationHandler_ || !finishEditing() || !self || !typed || !currentIndex().isValid()) return false;
-        const auto origin=currentIndex();
+        if(!typed || !recordNavigationHandler_ || !finishEditing() || !self || !typed || model()!=typed || !currentIndex().isValid()) return false;
+        const QPersistentModelIndex origin=currentIndex();
+        if(down && typed->canFetchMore()) {
+            constexpr int rowLimit=1000000;int scanned=origin.row()+1;qint64 pixels=0;
+            const qint64 needed=qMax(1,viewport()->height())+qMax(1,rowHeight(origin.row()));
+            while(pixels<needed) {
+                while(scanned<typed->rowCount() && pixels<needed) {
+                    if(!isRowHidden(scanned)) pixels+=qMax(0,rowHeight(scanned));
+                    ++scanned;
+                }
+                if(pixels>=needed || !typed->canFetchMore()) break;
+                if(typed->rowCount()>=rowLimit) return refuse(3251,"Datensatzmenge überschreitet die Navigationsgrenze.");
+                const auto before=typed->rowCount();typed->fetchMore();
+                if(!self || !typed) return false;
+                if(model()!=typed || !origin.isValid() || currentIndex()!=origin) return refuse(2501,"Die Datenquelle oder aktuelle Zeile wurde beim Laden geändert.");
+                if(typed->rowCount()>rowLimit) return refuse(3251,"Datensatzmenge überschreitet die Navigationsgrenze.");
+                if(typed->rowCount()==before) return refuse(typed->lastError().isValid() ? 3146 : 3251,"Die nächste Datensatzseite konnte nicht geladen werden.");
+            }
+        }
         const auto candidate=QTableView::moveCursor(down ? MovePageDown : MovePageUp,Qt::NoModifier);
         if(!self || !typed || model()!=typed) return false;
         if(!candidate.isValid() || candidate.model()!=typed) return refuse(2105,"Keine verfügbare Datensatzseite.");
         const int distance=down ? candidate.row()-origin.row() : origin.row()-candidate.row();
         if(!distance) {
-            if(down && typed->canFetchMore()) return refuse(3251,"Seitenwechsel über den geladenen Bereich hinaus ist noch nicht implementiert.");
+            if(down && typed->canFetchMore()) return refuse(2105,"Keine nächste sichtbare Datensatzseite verfügbar.");
             return true;
         }
         if(distance<0) return refuse(3251,"Die vorgeschlagene Seitenrichtung wird nicht unterstützt.");
@@ -447,12 +464,15 @@ public:
         }
         return true;
     }
-    bool cutSelection() {
+    bool cutSelection() { return mutateSelectedCells(true); }
+    bool clearSelectedCells() { return mutateSelectedCells(false); }
+private:
+    bool mutateSelectedCells(bool publishClipboard) {
         const QPointer<AccessTableView> self=this;QPointer<AccessTableModel> typed=qobject_cast<AccessTableModel*>(model());
         if(!typed || !finishEditing() || !self || !typed || model()!=typed) return false;
         if(typed->isReadOnly()) return refuse(2448,"Die Datenquelle ist schreibgeschützt.");
         if(!typed->canPasteOverUpdates()) return refuse(3251,"Der vorhandene Entwurfsumfang überschreitet die native Bereichsgrenze.");
-        if(typed->editStrategy()!=QSqlTableModel::OnManualSubmit) return refuse(3251,"Bereichsausschneiden ist in dieser Ansicht nicht verfügbar.");
+        if(typed->editStrategy()!=QSqlTableModel::OnManualSubmit) return refuse(3251,"Bereichsänderungen sind in dieser Ansicht nicht verfügbar.");
         if(!selectionModel()) return false;
         const auto selected=selectionModel()->selection();const auto visible=visibleModelColumns();
         const int originalRows=typed->rowCount();
@@ -469,9 +489,9 @@ public:
                 previous=index.row();cells.push_back(QVariant{});return QString{};
             });
             if(!cells.isEmpty()) cleared.push_back(cells);
-        } catch(const VbaRuntimeError& error) {return refuse(error.number,"Die Auswahl kann nicht als zusammenhängender Bereich ausgeschnitten werden.");}
+        } catch(const VbaRuntimeError& error) {return refuse(error.number,"Die Auswahl kann nicht als zusammenhängender Bereich geleert werden.");}
           catch(const std::bad_alloc&) {return refuse(7,"Der Bereich konnte nicht im Speicher vorbereitet werden.");}
-        if(!copySelection() || !self || !typed || model()!=typed || !first.isValid()) return false;
+        if((publishClipboard && !copySelection()) || !self || !typed || model()!=typed || !first.isValid()) return false;
         // Clipboard publication can synchronously invoke application callbacks.
         // Clear only the exact records/fields/values that were copied.
         if(!selectionModel() || selectionModel()->selection()!=selected || visibleModelColumns()!=visible || typed->rowCount()!=originalRows)
@@ -485,6 +505,7 @@ public:
         }
         return typed->setTypedDataBlock(first.row(),columns,cleared);
     }
+public:
     bool copySelection() {
         auto* typed=qobject_cast<AccessTableModel*>(model());
         if(!typed || !selectionModel() || !finishEditing()) return false;
@@ -655,6 +676,7 @@ protected:
         auto* native=qobject_cast<AccessTableModel*>(model());
         auto* copy=add("copy","&Kopieren\tStrg+C",native && selectionModel()->hasSelection());
         auto* cut=add("cut","&Ausschneiden\tStrg+X",canCutSelection());
+        auto* clear=add("clear-values","Feldwerte &leeren\tEntf",canCutSelection());
         const auto* clipboard=QApplication::clipboard()->mimeData();
         auto* paste=add("paste","&Einfügen\tStrg+V",canPasteSelection() && clipboard && clipboard->hasText());
         auto* append=add("paste-append","Datensätze &anfügen",canAppendRecords() && clipboard && clipboard->hasText());
@@ -671,6 +693,7 @@ protected:
         if(!self) return;
         if(chosen==copy) (void)copySelection();
         else if(chosen==cut) (void)cutSelection();
+        else if(chosen==clear) (void)clearSelectedCells();
         else if(chosen==paste) (void)pasteSelection();
         else if(chosen==append) (void)pasteSelection(true);
         else if(chosen==zoom) (void)zoomCurrentCell();
@@ -771,6 +794,11 @@ protected:
         }
         if((event->key()==Qt::Key_Z || event->key()==Qt::Key_Y) && selectionModifiers==Qt::ControlModifier) {
             (void)undoPastedBlock(event->key()==Qt::Key_Y);event->accept();return;
+        }
+        if(event->key()==Qt::Key_Delete && selectionModifiers==Qt::NoModifier && !activeEditor()) {
+            if(selectionModel() && !selectionModel()->selectedRows().isEmpty()) (void)deleteCurrentRecord();
+            else (void)clearSelectedCells();
+            event->accept();return;
         }
         if((event->key()==Qt::Key_X && selectionModifiers==Qt::ControlModifier) || (event->key()==Qt::Key_Delete && selectionModifiers==Qt::ShiftModifier)) {
             (void)cutSelection();event->accept();return;

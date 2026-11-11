@@ -516,6 +516,37 @@ End Function
     }
 
     {
+        assert(sql.exec("CREATE TABLE clear_scope(id INTEGER PRIMARY KEY AUTOINCREMENT,note TEXT,n INTEGER4,payload BLOB,extra TEXT DEFAULT 'kept')"));
+        assert(sql.exec("INSERT INTO clear_scope(note,n,payload) VALUES('a',1,x'01'),('b',2,x'02'),('c',3,x'03')"));sql.finish();
+        linaccess::AccessTableModel cells(nullptr,db);cells.setTable("clear_scope");cells.setEditStrategy(QSqlTableModel::OnManualSubmit);assert(cells.select());
+        linaccess::AccessTableView sheet;sheet.setModel(&cells);sheet.show();QApplication::setActiveWindow(&sheet);sheet.setFocus();
+        assert(cells.setDataBlock(3,1,{{"new"}}));QApplication::clipboard()->setText("preserve-clear-clipboard");
+        sheet.setCurrentIndex(cells.index(0,1));sheet.selectionModel()->select(QItemSelection(cells.index(0,1),cells.index(1,2)),QItemSelectionModel::ClearAndSelect);
+        QTest::keyClick(&sheet,Qt::Key_Delete);
+        assert(cells.QSqlTableModel::data(cells.index(0,1),Qt::EditRole).isNull() && cells.QSqlTableModel::data(cells.index(1,2),Qt::EditRole).isNull());
+        assert(QApplication::clipboard()->text()=="preserve-clear-clipboard" && cells.clipboardText(cells.index(3,1))=="new" && cells.QSqlTableModel::data(cells.index(0,3),Qt::EditRole).toByteArray()==QByteArray::fromHex("01"));
+        assert(cells.undoBlock() && cells.clipboardText(cells.index(0,1))=="a" && cells.redoBlock());
+        assert(sql.exec("SELECT note,n FROM clear_scope WHERE id=1") && sql.next() && sql.value(0).toString()=="a" && sql.value(1).toInt()==1);sql.finish();
+        assert(cells.undoBlock());
+        sheet.selectionModel()->select(cells.index(0,1),QItemSelectionModel::ClearAndSelect);sheet.selectionModel()->select(cells.index(2,1),QItemSelectionModel::Select);
+        assert(!sheet.clearSelectedCells() && cells.clipboardText(cells.index(0,1))=="a" && cells.clipboardText(cells.index(2,1))=="c");
+        sheet.setCurrentIndex(cells.index(2,3));sheet.selectionModel()->select(cells.index(2,3),QItemSelectionModel::ClearAndSelect);
+        QTimer::singleShot(0,&sheet,[&] {
+            auto* menu=qobject_cast<QMenu*>(QApplication::activePopupWidget());assert(menu);
+            auto* clear=menu->findChild<QAction*>("datasheet-clear-values");assert(clear && clear->isEnabled());menu->setActiveAction(clear);QTest::keyClick(menu,Qt::Key_Return);
+        });
+        const auto point=sheet.visualRect(cells.index(2,3)).center();QContextMenuEvent context(QContextMenuEvent::Mouse,point,sheet.viewport()->mapToGlobal(point));QApplication::sendEvent(sheet.viewport(),&context);
+        assert(cells.QSqlTableModel::data(cells.index(2,3),Qt::EditRole).isNull() && QApplication::clipboard()->text()=="preserve-clear-clipboard");
+        assert(cells.undoBlock());sheet.setCurrentIndex(cells.index(0,0));sheet.selectionModel()->select(QItemSelection(cells.index(0,0),cells.index(0,1)),QItemSelectionModel::ClearAndSelect);
+        assert(!sheet.clearSelectedCells() && cells.QSqlTableModel::data(cells.index(0,0),Qt::EditRole).toInt()==1);
+        sheet.setCurrentIndex(cells.index(1,1));sheet.selectionModel()->select(cells.index(1,0),QItemSelectionModel::ClearAndSelect|QItemSelectionModel::Rows);QTest::keyClick(&sheet,Qt::Key_Delete);
+        assert(cells.isPendingRecordDeleted(1) && cells.undoBlock() && !cells.isPendingRecordDeleted(1));
+        assert(cells.submitTransactionally() && cells.rowCount()==4);
+        sheet.setCurrentIndex(cells.index(0,1));sheet.selectionModel()->select(cells.index(0,1),QItemSelectionModel::ClearAndSelect);
+        assert(cells.setReadOnly(true) && !sheet.clearSelectedCells() && !cells.isDirty() && QApplication::clipboard()->text()=="preserve-clear-clipboard" && cells.setReadOnly(false));
+    }
+
+    {
         assert(sql.exec("CREATE TABLE current_save(id INTEGER PRIMARY KEY AUTOINCREMENT,n INTEGER CHECK(n>=0),note TEXT,payload BLOB)"));
         assert(sql.exec("INSERT INTO current_save VALUES(1,10,NULL,x''),(2,20,'original',x'01'),(3,30,NULL,NULL)"));
         linaccess::AccessTableModel current(nullptr,db);current.setTable("current_save");current.setEditStrategy(QSqlTableModel::OnManualSubmit);assert(current.select());

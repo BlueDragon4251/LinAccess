@@ -4672,3 +4672,37 @@ F067/F068/F107/F014 bleiben offen;456 IDs/386 Teilumfänge/70 Vollanforderungen.
 Vorstand31d10e557d8426600705104de8a09dd384a0d4bb/Baum4286400bdc9d32a93e42558b4284307f25beb135
 privat/exakt veröffentlicht. Gemeinsamer aktualisierter Paket-/Originalbeleg
 folgt; bis dahin positiver Gesamtpaketbeleg weiterhincf9d6933.
+
+
+Aktualisierter gemeinsamer Paket-/Originalbeleg (2026-11-11):
+Quelle2adda672e629e57ca5029186d725c529852279a9,
+Baumacd6b4835f0859dca3d9f7b9b1c9e7e220cafc01, privat/exakt veröffentlicht.
+DEB: work/selector-history-package/package/linaccess-0.7.0-Linux.deb.
+Integrationsbau/CPack/check-deb bestanden; vorhandenes Original-/Inventarbündel
+2/2 in180,90s (Inventar52,95/Original127,95s).7 geschützte Hashes unverändert.
+Privates Inventar bleibt100/78/22; Status73 ausgeführt ohne Access-Oracle,
+5 mit technischen Parametern ohne Oracle,3 Quellspalten offen,9 Abhängigkeiten
+fehlen,10 Jet/Binding nicht unterstützt. Original behält bekannte Makrogrenze;
+keine vollständige initialisierte Geschäfts-/Windows-Parität. Dieser Paketstand
+enthält mehrstufige Bereichshistorie, Entwurfs-/gemischte Datensatzlöschung und
+native typisierte Auswahlaggregate; neu vorbereitete Feldwert-/PageDown-Änderung
+liegt danach. Katalog456/386/70 unverändert, kein Zwischenabschluss.
+
+
+Native Feldwert-Leerung und PageDown-Nachladen (2026-11-11): GRID_VALUE_CLEAR.md/
+TABLE_PAGE_FETCH.md. Entf außerhalb Editor leert echten zusammenhängenden
+Zellbereich zu Pending-NULL, Kontextmenü nutzt denselben Pfad ohne Clipboard-
+Änderung. Vollständige Zeilenauswahl nutzt gestufte Datensatzlöschung. Cut/Leeren
+teilen Schutz-/Mapping-/Snapshot-/Undo-Strecke; kein implizites SQL-Save.
+PageDown lädt ausreichend reale Zeilen für tatsächliche Viewport-/Zeilenhöhen
+und versteckte Zeilen nach; 1M-Zeilengrenze, Fortschritt und persistente aktuelle
+Zeile/Modell nach jedem Fetch validiert. Gemeinsamer Navigationshandler behält
+aktuellen Save-/Fehlerpfad und fremde Entwürfe. App gebaut, vorhandenes UI/Feld-
+Bündel2/2 in16,24s (15,70/0,54s) bestanden: echte Entf-/Kontextaktionen, NULL/
+Clipboard/Undo/Redo/Save, Binär-/geschützte/readonly/disjunkte Ziele; tatsächliches
+Hauptfenster PageDown über ursprüngliche Fetchgrenze mit anderem Entwurf,
+bisherige Save-/Fehler-/PageUp-Fälle. Keine neue CTest-ID/Windows-Oracle.
+F148/F168/F340/F368/F178 bleiben offen;456/386/70 unverändert.
+Vorstand2adda672e629e57ca5029186d725c529852279a9 privat/exakt publiziert, neuer
+positiver Gesamtpaket-/Originalbeleg dieses Vorstands180,90s/7Hashes gleich
+steht oben. Diese Feld-/PageDown-Erweiterung liegt nach diesem Paket.

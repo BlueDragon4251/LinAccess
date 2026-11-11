@@ -128,3 +128,7 @@ in 0.58 s after correcting a regression expectation to the preceding pending
 value. Coverage includes three actions backwards/forwards, append removal/default
 preservation, branch replacement, failed conversion/Save, successful Save and
 delete/Cut interleaving. No new CTest ID or Windows oracle. F340/F168 remain open.
+
+Native Delete/context field-value clearing now shares the bounded range path
+without modifying the clipboard: [scope](GRID_VALUE_CLEAR.md). Whole-row Delete
+uses staged record deletion; complete Access event/selection equivalence remains open.

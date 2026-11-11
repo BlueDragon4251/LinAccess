@@ -47,3 +47,7 @@ bleiben verweigert. Bestehende GUI-Prüfung1/1 (6,42s), App gebaut: tatsächlich
 RunCommand/VBA-Aufrufe, SQL-Abgrenzung, anderer Entwurf, neuer Zeilenfokus und Escape
 ohne fremden Datenverlust. Keine neue CTest-ID/Windows-Beobachtung. F368/F173/F168
 und456/384/72 unverändert. Direkt weiter.
+
+Native PageDown now fetches enough bounded source rows for the actual viewport
+before calculating its destination; [scope](TABLE_PAGE_FETCH.md). Other drafts
+remain pending through the shared navigation handler.

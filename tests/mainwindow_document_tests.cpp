@@ -948,9 +948,7 @@ void exerciseRecordEscape(MainWindow& window,QSqlDatabase db) {
 }
 void exercisePageNavigation(MainWindow& window,QSqlDatabase db) {
     QSqlQuery sql(db); assert(sql.exec("CREATE TABLE command_page_navigation(id INTEGER PRIMARY KEY,value TEXT UNIQUE)"));
-    for(int row=1;row<=60;++row) {
-        sql.prepare("INSERT INTO command_page_navigation VALUES(?,?)"); sql.addBindValue(row); sql.addBindValue(QString("page-row-%1").arg(row)); assert(sql.exec());
-    }
+    assert(sql.exec("WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<600) INSERT INTO command_page_navigation SELECT i,'page-row-'||i FROM n"));
     assert(window.openTableDocument("command_page_navigation",0,1)==0);
     auto* tabs=window.findChild<QTabWidget*>(); assert(tabs && tabs->currentWidget());
     linaccess::AccessTableView* view=nullptr;
@@ -972,6 +970,13 @@ void exercisePageNavigation(MainWindow& window,QSqlDatabase db) {
     assert(view->currentIndex().row()==0 && model->isDirty());
     assert(sql.exec("SELECT value FROM command_page_navigation WHERE id=1") && sql.next() && sql.value(0).toString()=="saved-by-page-down"); sql.finish();
     QTest::keyClick(view,Qt::Key_Escape); assert(!model->isDirty());
+    assert(model->canFetchMore() && model->setData(model->index(0,1),"unrelated-page-draft"));
+    const int loadedBoundary=model->rowCount();view->setCurrentIndex(model->index(loadedBoundary-2,1));
+    QTest::keyClick(view,Qt::Key_PageDown);
+    assert(view->currentIndex().row()>=loadedBoundary && model->rowCount()>loadedBoundary && model->hasPendingRecord(0));
+    assert(model->index(0,1).data(Qt::EditRole).toString()=="unrelated-page-draft");
+    assert(sql.exec("SELECT value FROM command_page_navigation WHERE id=1") && sql.next() && sql.value(0).toString()=="saved-by-page-down");sql.finish();
+    assert(model->undoPendingRecord(0) && !model->isDirty());
     assert(window.closeTableDocument(0,"command_page_navigation",2).value("error").toInt()==0); dispose();
 }
 void exerciseTableSave(MainWindow& window,QSqlDatabase db) {
