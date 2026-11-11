@@ -8431,3 +8431,22 @@ Vorstand15f231dd880b3678b536983a1246d1a7eb77d9f1/Baum1beb35eee9ae1fba35dbb6233ce
 privat/exakt veröffentlicht. Letzter positiver Paket-/Originalstand918c2c4
 182,07s/7Hashes gleich enthält neueVal/CVDate-/Compilerkorrekturen noch nicht.
 Direkt fortsetzen, kein Zwischen-/Gesamtabschluss.
+
+
+Native SQL-CVar-Identität (2026-11-11): SQL_CVAR_RUNTIME.md. MS-VBAL6.1.2.3.1.13
+fordert Rückgabe des Argumentdatenwerts. Belegte native Quellarten über
+Felddekodierung/CVar-Kern/Resultatmetadaten erhalten; spätere Typeinspektion/
+Date-Prädikate erkennen Datum/Currency/Bool/Single/Integral statt rohem SQLite-
+Transport. NULL erhält belegte Feldmetadaten. Unbelegte SQLite-Werte per
+sqlite3_result_value exakt kopieren (volleInt64/Binär/NULL/Leertext), kein
+VBA-LongLong oder unbekannter Jet-Typ erfunden. Kein Abfangen früherer SQL-
+Argumentfehler, keine allgemeine heterogene Variant-/Object-/Array-/SCODE-
+SQL-Brücke. Separater Access-Eval-CVar-Guard bleibt begrenzt. App gebaut,
+bestehendes DAO1/1 in5,82s bestanden: echte Type/Value, Nullzeile, Datefilter/
+Typinspektion,>2^53/BLOB/Leertext und Arity-/Auswertungsfehler gemeinsam.
+Keine neue CTest-ID/Windows-Referenz; bestehender CVar-Sprachkern wiederverwendet.
+F041/F067/F068/F118 offen, feste456/386/70 unverändert.
+Vorstand30bbc5de4c52a487ce0f5df7c7960ae540872600/Baumdb4eccc2e7b0a109b799ad289abdcb0bdb8820f9
+privat/exakt veröffentlicht; letzter positiver Gesamtpaket-/Originalbeleg
+weiterhin918c2c4 mit182,07s/7Hashes gleich vor Val/CVDate/CVar/Validierungsfix.
+Direkt weiterentwickeln, kein Zwischen-/Gesamtabschluss.

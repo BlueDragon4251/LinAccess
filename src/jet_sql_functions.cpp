@@ -335,6 +335,12 @@ void boundScalarSqlFunction(sqlite3_context* context,int count,sqlite3_value** a
     } catch(const VbaRuntimeError& failure) { functionError(context,failure); }
       catch(...) { native.error(context,"SQL bound scalar evaluation failed",-1); }
 }
+void variantIdentity(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
+    auto& native=api();if(count!=1) {native.error(context,"LinAccess SQL function error 450",-1);return;}
+    // Preserve unproven SQLite storage exactly; do not invent a VBA numeric subtype.
+    native.result(context,args[0]);
+}
+void variantIdentityTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"CVar",1,1,true);}
 void bound_rgb(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"RGB",3,3,true);}
 void bound_qbcolor(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"QBColor",1,1,true);}
 void bound_partition(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Partition",4,4,true);}
@@ -1168,6 +1174,8 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_dateserial_typed",-1,&calendarDateSerialTyped,nullptr,nullptr);
     ensure("linaccess_jet_timeserial",-1,&calendarTimeSerial,nullptr,nullptr);
     ensure("linaccess_jet_timeserial_typed",-1,&calendarTimeSerialTyped,nullptr,nullptr);
+    ensure("linaccess_jet_cvar",-1,&variantIdentity,nullptr,nullptr);
+    ensure("linaccess_jet_cvar_typed",-1,&variantIdentityTyped,nullptr,nullptr);
     ensure("linaccess_jet_cvdate",-1,&calendarCVDate,nullptr,nullptr);
     ensure("linaccess_jet_cvdate_typed",-1,&calendarCVDateTyped,nullptr,nullptr);
     ensure("linaccess_jet_cdate",-1,&calendarCDate,nullptr,nullptr);
