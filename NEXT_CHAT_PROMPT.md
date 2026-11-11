@@ -5266,3 +5266,16 @@ Keine neueCTest-ID;456/386Teilumfänge/70offen. Schlüsselwahl6a8da8714dc291a384
 Baumc25c09c7301045c1b7ba8b7212950a1e965a6f92 privat/exaktveröffentlicht.
 LetzterGesamtpaket-/Originalbeleg dbd87ce/184,50s liegtvorDecimal-Defaults/
 Schlüsselwahl/dieserOperandenetappe. Direktweiterarbeiten.
+
+
+CurrencyinbedingtenSQL-Ergebnissen (2026-11-11):
+EXACT_CURRENCY_CONDITIONALS.md. Nz/IIf/Choose/Switch vereinheitlichenbelegteCurrency-
+Tick-/REAL-Wertzweige zuTicks; typisierteWiederanalyse verwendetgleichenTyp.
+Bedingung/Auswahlindex/Round-PräzisionmitTicks bestimmtjetztnichtfälschlichdas
+REAL-Ergebnisencoding. BestehendeeagerAuswertung/Mischtypgrenzen bleiben.
+App/Core/Parameter/DAO/Modellgebaut, Bündel4/4 in7,36s (0,53/0,32/5,93/0,57)
+bestanden,7geschützteHashesgleich. Keine neueCTest-ID/Windows-Referenz;
+456/386Teilumfänge/70offen. VorigeGanzzahletappefad7b1ae7e1472eaf6ea7b1c42591d93ad1b12c5,
+Baum0a5d9a4227a4897a163954c9e583e769004b9013 privat/exaktveröffentlicht.
+LetzterPaket-/Originalbeleg dbd87ce/184,50s liegtvorDecimal-Defaults/
+Schlüsselwahl/Ganzzahloperanden/Bedingungen. Direktweiterarbeiten.

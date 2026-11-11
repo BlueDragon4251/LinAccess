@@ -466,6 +466,12 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
         else if(!aliasDepth && word(at,"AS") && at+1<tokens.size() && name(tokens[at+1])) ++aliasCounts[tokens[at+1].value.toCaseFolded()];
     }
     struct Expression { QString type; QVector<Token> code; };
+    const auto commonValueType=[](QString left,QString right) -> QString {
+        if(left=="BOOL") left="BOOLEAN";if(right=="BOOL") right="BOOLEAN";
+        if(left==right) return left;
+        const auto money=[](const QString& value) {return value=="CURRENCY_TICKS" || value=="CURRENCY_REAL";};
+        return money(left) && money(right) ? QString("CURRENCY_TICKS") : QString{};
+    };
     const auto call=[](const QString& function,const QVector<Token>& first,const QVector<Token>& second=QVector<Token>{}) {
         QVector<Token> code{{Token::Word,function},{Token::Other,"("}}; code+=first;
         if(!second.empty()) { code.append({Token::Other,","}); code+=second; }
@@ -812,8 +818,9 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
                     const auto& branch=arguments[at];if(nullLiteral(branch)) continue;
                     const auto kind=branch.type=="BOOL" ? QString("BOOLEAN") : !branch.type.isEmpty() ? branch.type : branch.code.size()==1 && branch.code.front().kind==Token::String && !branch.code.front().dateLiteral ? QString("TEXT") : QString{};
                     valueType|=typed.contains(kind);
-                    if(kind.isEmpty() || (!resultType.isEmpty() && resultType!=kind)) compatible=false;
-                    if(resultType.isEmpty()) resultType=kind;
+                    if(kind.isEmpty()) compatible=false;
+                    else if(resultType.isEmpty()) resultType=kind;
+                    else {const auto common=commonValueType(resultType,kind);if(common.isEmpty()) compatible=false;else resultType=common;}
                 }
                 if(!compatible) resultType.clear();
                 // Raw IIf already preserves arbitrary SQLite int64 branch values.
@@ -823,7 +830,7 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
             else if(scalarFunction=="linaccess_jet_nz") {
                 const auto kind=[](const Expression& value) {if(value.type=="BOOL") return QString("BOOLEAN");if(!value.type.isEmpty()) return value.type;return value.code.size()==1 && value.code.front().kind==Token::String && !value.code.front().dateLiteral ? QString("TEXT") : QString{};};
                 const auto first=kind(arguments[0]);const auto fallback=arguments.size()==1 ? QString("TEXT") : kind(arguments[1]);
-                resultType=!first.isEmpty() && first==fallback ? first : nullLiteral(arguments[0]) ? fallback : arguments.size()==2 && nullLiteral(arguments[1]) ? first : QString{};
+                const auto common=commonValueType(first,fallback);resultType=!common.isEmpty() ? common : nullLiteral(arguments[0]) ? fallback : arguments.size()==2 && nullLiteral(arguments[1]) ? first : QString{};
             }
             else if(scalarFunction=="linaccess_jet_ccur") resultType=types.value(0)=="CURRENCY_TICKS" ? "CURRENCY_TICKS" : "CURRENCY_REAL";
             else if(scalarFunction=="linaccess_jet_sgn") resultType="INTEGER2";
@@ -850,8 +857,9 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
                     if(nullLiteral(Expression{{},parts[at]})) continue;
                     auto kind=descriptors.value(at-1);if(kind=="BOOL") kind="BOOLEAN";
                     if(kind.isEmpty()) {const auto branch=parse(parts[at],recursion+1);kind=branch.type;if(kind.isEmpty() && parts[at].size()==1 && parts[at][0].kind==Token::String && !parts[at][0].dateLiteral) kind="TEXT";}
-                    if(kind.isEmpty() || (!result.isEmpty() && kind!=result)) compatible=false;
-                    if(result.isEmpty()) result=kind;
+                    if(kind.isEmpty()) compatible=false;
+                    else if(result.isEmpty()) result=kind;
+                    else {const auto common=commonValueType(result,kind);if(common.isEmpty()) compatible=false;else result=common;}
                 }
                 return {compatible ? result : QString{},expression};
             }
@@ -869,7 +877,7 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
                     const auto canonical=[](QString type) {return type=="BOOL" ? QString("BOOLEAN") : type;};
                     const auto firstType=canonical(descriptors[0]),fallback=parts.size()==2 ? QString("TEXT") : canonical(descriptors[1]);
                     const bool firstNull=nullLiteral(Expression{{},parts[1]}),secondNull=parts.size()==3 && nullLiteral(Expression{{},parts[2]});
-                    return {!firstType.isEmpty() && firstType==fallback ? firstType : firstNull ? fallback : secondNull ? firstType : QString{},expression};
+                    const auto common=commonValueType(firstType,fallback);return {!common.isEmpty() ? common : firstNull ? fallback : secondNull ? firstType : QString{},expression};
                 }
             }
             return unknown();

@@ -338,7 +338,16 @@ void boundScalarSqlFunction(sqlite3_context* context,int count,sqlite3_value** a
         if((booleanOperator || decimalOperator || currencyOperator) && arguments==1) expression=std::string(builtin)+" "+expression;
         if(!infix) expression+=')';ScalarStringHost host;
         const auto result=evaluateVbaExpression(expression,host,values);
-        returnBoundSqlValue(context,result,declared.contains("CURRENCY_TICKS"));
+        // Only value-producing operands determine Currency's SQL encoding.
+        // A Currency Choose index, condition or Round precision is not a value branch.
+        bool currencyTicks=currencyOperator;
+        if(!infix) {
+            if(builtin=="IIf" || builtin=="Choose" || builtin=="Switch" || builtin=="Nz") {
+                const int first=builtin=="Nz" ? 0 : 1,step=builtin=="Switch" ? 2 : 1;
+                for(int at=first;at<declared.size();at+=step) currencyTicks|=declared[at]=="CURRENCY_TICKS";
+            } else currencyTicks=declared.value(0)=="CURRENCY_TICKS";
+        }
+        returnBoundSqlValue(context,result,currencyTicks);
     } catch(const VbaRuntimeError& failure) { functionError(context,failure); }
       catch(...) { native.error(context,"SQL bound scalar evaluation failed",-1); }
 }
