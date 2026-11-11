@@ -46,3 +46,7 @@ and rejection of fake constraint text. No new CTest/catalog ID or Windows oracle
 
 App/helper build and existing GUI/import bundle passed: 2/2 in17.78s
 (17.52/0.25), including the independent Jet fixture.
+
+Exact non-NULL Decimal numeric literal defaults now use the bounded encoded
+path in [EXACT_DECIMAL_DEFAULTS.md](EXACT_DECIMAL_DEFAULTS.md). General
+Decimal default expressions and native field property editing remain open.

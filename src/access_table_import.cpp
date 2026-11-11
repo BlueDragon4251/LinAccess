@@ -370,7 +370,10 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
             throw fail("Spaltenname/-typ stimmt nicht mit MDBTools überein");
         if(column.sqliteType=="DECIMAL_EXACT") {
             if(column.sourcePrecision<1 || column.sourcePrecision>28 || column.sourceScale<0 || column.sourceScale>column.sourcePrecision || (column.sourceType!="DECIMAL" && column.sourceType!="NUMERIC")) throw fail("Decimal benötigt belegte Präzision/Skala und Quelltyp");
-            if(column.hasDefault && column.sqlDefault.compare("NULL",Qt::CaseInsensitive)!=0) throw fail("Nicht-NULL-Decimal-Standardwerte sind noch nicht nachgewiesen");
+            if(column.hasDefault && column.sqlDefault.compare("NULL",Qt::CaseInsensitive)!=0) {
+                if(!QRegularExpression(R"(^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)$)").match(column.sqlDefault).hasMatch()) throw fail("Decimal-Standardwert benötigt ein genaues Zahlenliteral");
+                if(!decimalFitsField(decimalLiteral(column.sqlDefault.toStdString()),column.sourcePrecision,column.sourceScale)) throw fail("Decimal-Standardwert überschreitet Präzision/Skala");
+            }
         } else if(column.sourcePrecision || column.sourceScale) throw fail("Decimal-Präzision/Skala auf anderem Spaltentyp");
         if(column.hasDefault) {
             const auto literal=nativeDefaultLiteral(column.sourceDefault);
@@ -381,10 +384,15 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
         const auto properties=sourceDisplay ? sourceDisplay->value(column.name.toCaseFolded()) : AccessSourceFieldDisplay{};
         if(properties.allowZeroLength && (column.sqliteType!="TEXT" || (column.sourceType!="VARCHAR" && column.sourceType!="TEXT" && column.sourceType!="MEMO"))) throw fail("AllowZeroLength benötigt einen nachgewiesenen Text-/Memo-Quelltyp");
         const bool jetManaged=sourceCounterStates.contains(column.name);
+        auto storedDefault=column.sqlDefault;
+        if(column.sqliteType=="DECIMAL_EXACT" && column.hasDefault && storedDefault!="NULL") {
+            const auto encoded=decimalSqlKey(decimalLiteral(storedDefault.toStdString()));
+            storedDefault="X'"+QString::fromLatin1(QByteArray(reinterpret_cast<const char*>(encoded.data()),encoded.size()).toHex())+"'";
+        }
         definitions << sqlQuote(column.name) + ' ' + (jetManaged ? QString("INT") : column.sqliteType)
             + (nativeCounter(column) ? " PRIMARY KEY AUTOINCREMENT" : descendingSinglePrimary && column.primaryKeyOrder ? " PRIMARY KEY DESC" : QString{})
             + (!nativeCounter(column) && column.autoNumber ? " DEFAULT ("+accessCounterDefault(tableName,column.name)+")" : QString{})
-            + (!column.autoNumber && column.hasDefault ? " DEFAULT "+column.sqlDefault : QString{})
+            + (!column.autoNumber && column.hasDefault ? " DEFAULT "+storedDefault : QString{})
             + (column.sqliteType=="DECIMAL_EXACT" ? " CHECK (linaccess_jet_decimal_field_valid("+sqlQuote(column.name)+","+QString::number(column.sourcePrecision)+","+QString::number(column.sourceScale)+"))" : QString{})
             + (column.required || properties.required.value_or(false) || column.primaryKeyOrder || column.autoNumber ? " NOT NULL" : "")
             + (properties.allowZeroLength && !*properties.allowZeroLength ? " CHECK (linaccess_jet_nonempty_text("+sqlQuote(column.name)+"))" : QString{})

@@ -8161,3 +8161,23 @@ Bündel3/3 in6,73s (0,20/6,07/0,45) bestanden. Keine neueCTest-ID/Windows-Refere
 Baum94832e55adfc5b66322a952fdf4d73eb25a9ce73 privat/exaktveröffentlicht.
 Gesamtpaket-/Originalbeleg für gemeinsameSQL-/Datenblatt-/Selektoretappen folgt.
 Direkt weiterarbeiten; keinevollständigeParitätbehaupten.
+
+
+Exakte Decimal-Literalstandardwerte (2026-11-11):
+EXACT_DECIMAL_DEFAULTS.md. Belegte p/s-Decimalspalten übernehmen passende numerische
+Standardwerte direkt als24Byte-Schlüssel ohneDouble-SQL-Auswertung. Quellenlexik
+bleibtMetadatum; DAO.DefaultValue kanonisch, AddNew/Datenblattneuzeilen/Formulardraft
+exakt, reineAnzeige schreibtkeineZeile. FehlerhafteSkala/Bereich/Nichtzahl vorDDL
+verweigert. RohesDefaultliteralnurmitbelegterDecimalspalte/echtemCHECK interpretiert.
+UnabhängigerJet-Generator prüftp/s/Werte/Defaults/NULL nachWiederöffnung;
+Jackcess-DefaultbehandlungimGenerator nachexplizitenNULL-Zeilen gesetzt. Fehlenden
+Decimal-Header vorPrüfung ergänzt. App/Helper/Import/DAO/GUI gebaut;
+Bündel3/3 in25,62s (18,97/6,33/0,32) bestanden, alle7geschütztenHashesgleich.
+Keine neueCTest-ID/Windows-Referenz; F014/F015/F055 offen,456/386Teilumfänge/70offen.
+LetzterGesamtpaket-/Originalbeleg dbd87ce1009e199e89d92437262c22bcb1c71f1f,
+Baumec121029cfc544f90849d65ea998fbc6387fe11f, privat/exaktveröffentlicht:
+Bau/DEB/Paketprüfung bestanden, Inventar/Original2/2 in184,50s (54,79/129,70),
+7Hashesgleich. Paket currency-exact-package enthältSQL-/Datenblatt-/Currency-
+Selektoretappen, liegtvorDecimal-Defaults. Inventar weiterhin78/100 ausführbar,
+22offen; bekannteOriginalmakrogrenze bleibt, keinevollständigeParität.
+Direkt weiterarbeiten.

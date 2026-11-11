@@ -67,3 +67,7 @@ into a native text field. Seven protected source hashes rechecked unchanged.
 No new test target or Access execution oracle.
 
 Bounded ACE2010 Numeric extension: [scope](ACE2010_DECIMAL_IMPORT.md).
+
+Exact non-NULL Decimal numeric literal defaults now use the bounded encoded
+path in [EXACT_DECIMAL_DEFAULTS.md](EXACT_DECIMAL_DEFAULTS.md). General
+Decimal default expressions and native field property editing remain open.

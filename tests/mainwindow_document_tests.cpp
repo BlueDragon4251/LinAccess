@@ -3309,6 +3309,15 @@ static void exerciseExactCurrencyGrid() {
     sheet.setCurrentIndex(source.index(0,0));sheet.selectionModel()->select(source.index(0,0),QItemSelectionModel::ClearAndSelect);assert(sheet.clearSelectedCells() && source.submitTransactionally());assert(sql.exec("SELECT COUNT(*) FROM exact_money WHERE v IS NULL") && sql.next() && sql.value(0).toInt()==1);sql.finish();assert(sheet.close());
 }
 
+static void exerciseExactDecimalDefaultForm() {
+    using namespace linaccess;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","decimal-default-form");db.setDatabaseName(":memory:");assert(db.open());QSqlQuery sql(db);assert(sql.exec("CREATE TABLE _la_import_log(source_file,kind,name,status,details)"));sql.finish();
+    const auto schema=parseMdbSchema("CREATE TABLE `decimal_default_form`\n(\n`v` NUMERIC(28,4) DEFAULT 9007199254740993.0001\n);\n");importAccessTable(db,"technical-default-form","decimal_default_form",schema,parseCsvDetailed("v\n"));
+    const QByteArray layout("Begin Form\nRecordSource =\"decimal_default_form\"\nBegin Section\nBegin TextBox\nName =\"Value\"\nControlSource =\"v\"\nWidth =2400\nHeight =300\nEnd\nEnd\nEnd");
+    AccessFormPreview form("DecimalDefaultForm",layout,{},db);form.show();QApplication::processEvents();auto root=makePreviewFormObject(form);assert(root->member("NewRecord",{}).truthy() && !root->member("Dirty",{}).truthy() && root->member("Controls",{VbaValue::string("Value")}).object->scalarValue().asText()=="9007199254740993.0001");
+    assert(sql.exec("SELECT COUNT(*) FROM decimal_default_form") && sql.next() && sql.value(0).toInt()==0);sql.finish();assert(form.close());
+}
+
 static void exerciseNativeDecimalClipboard() {
     using namespace linaccess;
     auto db=QSqlDatabase::addDatabase("QSQLITE","decimal-grid-clipboard");db.setDatabaseName(":memory:");assert(db.open());QSqlQuery sql(db);assert(sql.exec("CREATE TABLE _la_import_log(source_file,kind,name,status,details)"));sql.finish();
@@ -3401,6 +3410,7 @@ int main(int argc,char** argv) {
     QSettings::setPath(QSettings::IniFormat,QSettings::UserScope,temporary.path());
     exerciseNativeRelationDesigner();
     exerciseNativeDecimalClipboard();
+    exerciseExactDecimalDefaultForm();
     exerciseExactCurrencyGrid();
     exercisePhysicalFormIdentity();
     exerciseNativeWarnings();

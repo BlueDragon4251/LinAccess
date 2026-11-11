@@ -1,5 +1,6 @@
 #include "dao_database.hpp"
 #include "vba_currency.hpp"
+#include "vba_decimal.hpp"
 #include "dao_schema_change.hpp"
 #include "native_schema_editor.hpp"
 #include "native_field_defaults.hpp"
@@ -324,11 +325,16 @@ void observeNativeTableCatalog(QSqlDatabase db,const QStringList& before) {
         ++generation;
     }
 }
-QString sqliteLiteralDefaultSql(const QVariant& declaration) {
+QString sqliteLiteralDefaultSql(const QVariant& declaration,const QString& type={}) {
     if(declaration.isNull()) return {};
     auto token=declaration.toString().trimmed();
     // The SQL compiler separates a unary sign from its numeric token.
     if(token.startsWith('+') || token.startsWith('-')) token=token.left(1)+token.mid(1).trimmed();
+    if(type=="DECIMAL_EXACT" && QRegularExpression("^[xX]'[0-9a-fA-F]{48}'$").match(token).hasMatch()) {
+        const auto bytes=QByteArray::fromHex(token.mid(2,48).toLatin1());
+        (void)decimalFromSqlKey(std::vector<unsigned char>(bytes.cbegin(),bytes.cend()));
+        return "X'"+QString::fromLatin1(bytes.toHex())+"'";
+    }
     const auto literal=accessLiteralDefaultSql(token);
     // Raw SQLite TRUE is1; imported Access TRUE is already normalized to-1.
     return token.compare("TRUE",Qt::CaseInsensitive)==0 ? QString("1") : literal.value_or(QString{});
@@ -342,6 +348,12 @@ std::optional<QString> nativeFieldDefaultExpression(const TableSchemaColumn& fie
     if(!field.hasDefault) return QString{};
     if(field.sourceType==8 && field.nativeAttributes) if(const auto clock=nativeDateDefaultExpression(field.storedDefault)) return *clock;
     auto expression=field.literalDefault;
+    if(field.type=="DECIMAL_EXACT" && expression.startsWith("X'")) {
+        const auto bytes=QByteArray::fromHex(expression.mid(2,48).toLatin1());
+        const auto value=decimalFromSqlKey(std::vector<unsigned char>(bytes.cbegin(),bytes.cend()));
+        if(!decimalFitsField(value,field.decimalPrecision,field.decimalScale)) throw VbaRuntimeError(6,"Decimal default exceeds field precision/scale");
+        return QString::fromStdString(value.asText());
+    }
     if(field.sourceType==5 && field.nativeAttributes && field.type=="CURRENCY_REAL" && !expression.isEmpty() && expression!="NULL")
         return QString::fromStdString(convertCurrency(VbaValue::string(expression.toStdString())).asText());
     if(expression.isEmpty() || expression.size()>512) return {};
@@ -364,6 +376,7 @@ QString nativeStoredFieldDefault(const TableSchemaColumn& column) {
     }
     return column.literalDefault;
 }
+QMap<QString,QPair<int,int>> checkedDecimalStorage(QSqlDatabase db,const QString& table,const QVector<TableSchemaColumn>& columns);
 QVector<TableSchemaColumn> readTableSchemaColumns(QSqlDatabase db,const QString& tableName) {
     QSqlQuery shadow(db);
     shadow.prepare("SELECT 1 FROM temp.sqlite_schema WHERE type IN ('table','view') AND (name=? COLLATE NOCASE OR name='_la_table_schema' COLLATE NOCASE)");
@@ -377,7 +390,7 @@ QVector<TableSchemaColumn> readTableSchemaColumns(QSqlDatabase db,const QString&
     QVector<TableSchemaColumn> columns;QMap<QString,bool> notNull;
     while(query.next()) {
         const auto name=query.value(1).toString();
-        columns.push_back({name,types.value(name.toCaseFolded()),0,0,sqliteLiteralDefaultSql(query.value(4)),!query.value(4).isNull()});
+        columns.push_back({name,types.value(name.toCaseFolded()),0,0,sqliteLiteralDefaultSql(query.value(4),types.value(name.toCaseFolded())),!query.value(4).isNull()});
         columns.last().storedDefault=query.value(4).toString();
         notNull.insert(name.toCaseFolded(),query.value(3).toBool());
     }
@@ -455,6 +468,14 @@ QVector<TableSchemaColumn> readTableSchemaColumns(QSqlDatabase db,const QString&
     for(auto& column:columns) {
         if(column.nativeAttributes && (*column.nativeAttributes&16) && !counter32.contains(column.name.toCaseFolded())) throw VbaRuntimeError(3251,"DAO native AutoNumber attribute lacks a generator");
         if(counter32.contains(column.name.toCaseFolded())) {column.type="INTEGER4";column.sourceType=4;column.generatorAttributes=17;}
+    }
+    bool encodedDefault=false;for(const auto& column:columns) encodedDefault|=column.type=="DECIMAL_EXACT" && column.literalDefault.startsWith("X'");
+    if(encodedDefault) {
+        const auto proven=checkedDecimalStorage(db,tableName,columns);
+        for(const auto& column:columns) if(column.type=="DECIMAL_EXACT" && column.literalDefault.startsWith("X'")) {
+            if(!proven.contains(column.name.toCaseFolded())) throw VbaRuntimeError(3251,"Decimal default requires proven field precision/scale and constraint");
+            (void)nativeFieldDefaultExpression(column);
+        }
     }
     return columns;
 }

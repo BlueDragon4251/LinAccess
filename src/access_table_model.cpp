@@ -1,6 +1,7 @@
 #include "native_schema_editor.hpp"
 #include "access_format.hpp"
 #include "native_field_defaults.hpp"
+#include "dao_database.hpp"
 #include "access_table_model.hpp"
 #include "access_autonumber.hpp"
 #include "vba_qt_value.hpp"
@@ -27,6 +28,14 @@ QVariant checkedInput(const QString& type,const QVariant& input) {
         && (type=="CURRENCY_REAL" || type=="CURRENCY_TICKS" || type.contains("INT",Qt::CaseInsensitive) || type.contains("REAL",Qt::CaseInsensitive) || type.contains("DATE",Qt::CaseInsensitive));
     const auto scalar=emptyNumeric ? VbaValue{} : qtFieldValue(input,(type.contains("BOOL",Qt::CaseInsensitive) || type.contains("DATE",Qt::CaseInsensitive))?type:QString{});
     return sqlFieldValue(scalar,type);
+}
+QMap<QString,QVariant> pendingScalarDefaults(QSqlDatabase db,const QString& table,const QMap<QString,QString>& types) {
+    auto result=nativeTableDateDefaults(db,table);
+    if(types.values().contains("DECIMAL_EXACT")) {
+        const auto defaults=nativeTableLiteralDefaults(db,table);
+        for(auto it=defaults.cbegin();it!=defaults.cend();++it) if(types.value(it.key())=="DECIMAL_EXACT") result.insert(it.key(),it.value());
+    }
+    return result;
 }
 QString editMessage(int number) {
     if(number==6) return QStringLiteral("Zahlenwert außerhalb des zulässigen Bereichs.");
@@ -124,7 +133,7 @@ bool AccessTableModel::insertRows(int row,int count,const QModelIndex& parent) {
     if(saving_ || changing_) return reject(2501);
     if(readOnly_) return reject(2448);
     const QScopedValueRollback<bool> changing(changing_,true);
-    QMap<QString,QVariant> dateDefaults;if(count>0 && editStrategy()==OnManualSubmit) {try {dateDefaults=nativeTableDateDefaults(database(),tableName());}catch(const VbaRuntimeError& error) {return reject(error.number);}}
+    QMap<QString,QVariant> dateDefaults;if(count>0 && editStrategy()==OnManualSubmit) {try {dateDefaults=pendingScalarDefaults(database(),tableName(),types_);}catch(const VbaRuntimeError& error) {return reject(error.number);}}
     const auto dirtyAnchors=rowAnchors(dirtyRows_),deleteAnchors=rowAnchors(deletedRows_);
     const bool accepted=QSqlTableModel::insertRows(row,count,parent);
     if(accepted && !dateDefaults.isEmpty()) for(int inserted=row;inserted<row+count;++inserted) for(auto it=dateDefaults.cbegin();it!=dateDefaults.cend();++it) {const int column=fieldIndex(it.key());if(column>=0) QSqlTableModel::setData(index(inserted,column),it.value(),Qt::EditRole);}
@@ -613,7 +622,7 @@ bool AccessTableModel::applyDataBlock(int firstRow,int firstColumn,const QVector
     QVector<BlockHistory> nextHistory;
     try {
         history.before=captureUpdates();
-        if(appended) dateDefaults=restoredDefaults ? *restoredDefaults : nativeTableDateDefaults(database(),tableName());
+        if(appended) dateDefaults=restoredDefaults ? *restoredDefaults : pendingScalarDefaults(database(),tableName(),types_);
         history.dateDefaults=dateDefaults;
         checked.reserve(values.size()*columns);
         for(qsizetype row=0;row<values.size();++row) {

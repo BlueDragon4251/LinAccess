@@ -123,3 +123,7 @@ The shared Date literal reader is also used by field rules. Invalid dates refuse
 before schema mutation; table-dialog errors retain input. This does not change
 the MDB import default parser or claim Windows lexical/locale equivalence.
 GUI/DAO2/2 (7.98s), app built; no new target or full-suite claim.
+
+Exact non-NULL Decimal numeric literal defaults now use the bounded encoded
+path in [EXACT_DECIMAL_DEFAULTS.md](EXACT_DECIMAL_DEFAULTS.md). General
+Decimal default expressions and native field property editing remain open.
