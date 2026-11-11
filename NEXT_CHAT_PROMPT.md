@@ -5029,3 +5029,15 @@ Baum4624e67ce04b00e31652d2016b44169f248bc330, Integrationsbau/DEB/Paketprüfung
 bestanden, Inventar/Original2/2 in183,33s (54,43/128,89), alle7 Hashwerte gleich.
 Dieses Paket enthält den exakten Jet-Import, noch nicht die Feldbearbeitung.
 Bekannte Original-Makrogrenze unverändert; keine vollständige Access-Parität.
+
+
+Exakte physische Decimal-Formularbearbeitung (2026-11-11):
+NATIVE_DECIMAL_FORM_WRITES.md. Controls/Value, direkte Datensatzfelder, Save und
+Dirty-Vergleich nutzen belegtes p/s und tatsächlichen CHECK; Konvertierung vor
+Pufferänderung. App/Helper gebaut; bestehender Import bestanden (0,24s), nach
+Korrektur der technischen GUI-Formulardefinition ausschließlich betroffene GUI-
+Prüfung wiederholt: bestanden18,62s. Exakte Speicherung >2^53, ungültige Skala
+Fehler6 ohne Wert-/Dirty-Verlust, NULL-Speicherung. Keine neue CTest-ID.
+F014/F055/F056 offen; feste456/386 Teilumfänge/70 Vollanforderungen unverändert.
+Vorstandd68581f2/Baumc94b77ed32a48a980a8390bed20131b8ea191a7c privat/exakt
+veröffentlicht; Paket-/Originalbeleg e666/183,33s liegt vor Schreibwegen.

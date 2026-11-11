@@ -3308,6 +3308,14 @@ static void exerciseNativeDecimalClipboard() {
         assert(!source.setData(source.index(0,0),QString("1.00001")) && !source.isDirty() && source.index(0,0).data().toString()=="9007199254740994.0001");
         sourceView.setCurrentIndex(source.index(0,0));sourceView.selectionModel()->select(source.index(0,0),QItemSelectionModel::ClearAndSelect);assert(sourceView.clearSelectedCells() && source.index(0,0).data(Qt::EditRole).isNull() && source.submitTransactionally());assert(sql.exec("SELECT v FROM decimal_copy_probe") && sql.next() && sql.value(0).isNull());sql.finish();sourceView.close();
     }
+    {
+        const QByteArray layout("Version =20\nBegin Form\nRecordSource =\"decimal_copy_probe\"\nWidth =3000\nBegin Section\nHeight =600\nBegin TextBox\nName =\"Value\"\nControlSource =\"v\"\nWidth =2400\nHeight =300\nEnd\nEnd\nEnd");
+        AccessFormPreview form("DecimalForm",layout,{},db);form.show();QApplication::processEvents();auto root=makePreviewFormObject(form);auto value=root->member("Controls",{VbaValue::string("Value")}).object;
+        value->assign("Value",VbaValue::string("9007199254740993.0001"));assert(value->scalarValue().asText()=="9007199254740993.0001");root->assign("Dirty",VbaValue::logical(false));
+        assert(sql.exec("SELECT v FROM decimal_copy_probe") && sql.next() && qtFieldValue(sql.value(0),"DECIMAL_EXACT").asText()=="9007199254740993.0001");sql.finish();
+        int error=0;try {value->assign("Value",VbaValue::string("1.00001"));}catch(const VbaRuntimeError& failure) {error=failure.number;}assert(error==6 && !root->member("Dirty",{}).boolean && value->scalarValue().asText()=="9007199254740993.0001");
+        value->assign("Value",VbaValue{});root->assign("Dirty",VbaValue::logical(false));assert(sql.exec("SELECT v FROM decimal_copy_probe") && sql.next() && sql.value(0).isNull());sql.finish();assert(form.close());
+    }
     QApplication::clipboard()->clear();sql.clear();db.close();
 }
 

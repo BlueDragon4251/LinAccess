@@ -43,6 +43,7 @@
 #include "vba_calendar.hpp"
 #include "dao_database.hpp"
 #include "vba_qt_value.hpp"
+#include "native_schema_editor.hpp"
 #include "access_query.hpp"
 #include "access_value_list.hpp"
 #include "access_autonumber.hpp"
@@ -2349,6 +2350,7 @@ void AccessFormPreview::loadRecord() {
             else type = "TEXT";
         }
         widget->setProperty("la_sql_type",type);
+        widget->setProperty("la_sql_field",index>=0 ? dataColumns_[index] : QString{});
         setText(widget,qobject_cast<QLineEdit*>(widget) ? linaccess::qtFieldText(value,type) : value.toString(),value.isNull()); widget->setProperty("la_null",value.isNull());
         if(control.type=="TextBox" && (!control.format.isEmpty() || widget->property("la_format_owned_value").toBool())) displayFormattedControl(widget,control.name,linaccess::qtFieldValue(value,type),linaccess::qtFieldText(value,type));
         widget->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Text));
@@ -2459,6 +2461,15 @@ void AccessFormPreview::checkPhysicalRecordSource() const {
     query.addBindValue(source);if(!query.exec()) throw linaccess::VbaRuntimeError(3146,"Form physical source cannot be checked");
     if(!query.next()) throw linaccess::VbaRuntimeError(3251,"Form physical main source is unavailable");
 }
+QVariant AccessFormPreview::boundFieldSqlValue(const linaccess::VbaValue& value,const QString& field,const QString& type) const {
+    if(type.compare("DECIMAL_EXACT",Qt::CaseInsensitive)!=0) return linaccess::sqlFieldValue(value,type);
+    if(!directTable_ || columnIndex(field,dataColumns_)<0) throw linaccess::VbaRuntimeError(3251,"Decimal field has no physical write context");
+    checkPhysicalRecordSource();
+    const auto shapes=linaccess::nativeTableDecimalTypes(db_,layout_.recordSource.trimmed());
+    const auto shape=shapes.constFind(field.toCaseFolded());
+    if(shape==shapes.cend()) throw linaccess::VbaRuntimeError(3251,"Decimal field precision/scale is not proven");
+    return linaccess::sqlDecimalFieldValue(value,shape->first,shape->second);
+}
 bool AccessFormPreview::saveRecord() {
     if (saving_ || recordCommandRunning_ || insertionEventRunning_) return false;
     if (currentRecordIndex_==0 && !layout_.allowAdditions) return !dirty_;
@@ -2491,14 +2502,14 @@ bool AccessFormPreview::saveRecord() {
             if(generated.contains(dataColumns_[fieldIndex].toCaseFolded())) {
                 if(currentRecordIndex_>0) {
                     if(currentRecordIndex_>recordRows_.size()) {status_->setText("Der Datensatz ist nicht mehr verfügbar.");return false;}
-                    const auto converted=linaccess::sqlFieldValue(value,widget->property("la_sql_type").toString());
+                    const auto converted=boundFieldSqlValue(value,dataColumns_[fieldIndex],widget->property("la_sql_type").toString());
                     if(converted!=recordRows_[currentRecordIndex_-1][fieldIndex]) {status_->setText("AutoWert-Feld ist schreibgeschützt.");return false;}
                     continue;
                 }
                 if(value.kind==linaccess::VbaValue::Kind::Null) continue;
             }
             columns << column; placeholders << "?";
-            values << linaccess::sqlFieldValue(value,widget->property("la_sql_type").toString());
+            values << boundFieldSqlValue(value,dataColumns_[fieldIndex],widget->property("la_sql_type").toString());
         } catch (const std::exception& error) { status_->setText(QString::fromUtf8(error.what())); return false; }
     }
     for(auto it=recordFieldEdits_.cbegin();it!=recordFieldEdits_.cend();++it) {
@@ -2915,8 +2926,8 @@ void AccessFormPreview::setRecordFieldValue(const QString& name,const linaccess:
         return index;
     };
     (void)writable();const QPointer<AccessFormPreview> alive(this);const auto scalar=linaccess::scalarVbaValue(value);if(!alive) throw linaccess::VbaRuntimeError(2450,"Form destroyed during field evaluation");
-    const int index=writable();const auto canonical=dataColumns_[index].toCaseFolded();const auto converted=linaccess::sqlFieldValue(scalar,dataTypes_.value(canonical));
-    const auto previous=getFieldValue(name.toUtf8().toStdString());if(linaccess::sqlFieldValue(previous,dataTypes_.value(canonical))==converted) return;
+    const int index=writable();const auto canonical=dataColumns_[index].toCaseFolded();const auto converted=boundFieldSqlValue(scalar,dataColumns_[index],dataTypes_.value(canonical));
+    const auto previous=getFieldValue(name.toUtf8().toStdString());if(boundFieldSqlValue(previous,dataColumns_[index],dataTypes_.value(canonical))==converted) return;
     recordFieldEdits_.insert(canonical,converted);markDirty({});if(!alive || closed_ || openCancelled_) throw linaccess::VbaRuntimeError(2450,"Form closed during field assignment");refreshCalculatedControls();
 }
 
@@ -2966,10 +2977,10 @@ void AccessFormPreview::setFieldValue(std::string_view name,const linaccess::Vba
     if (qobject_cast<QGroupBox*>(widget)) widget->setProperty("la_option_error",0);
     if (!widget->property("la_option_group_name").toString().isEmpty()) throw linaccess::VbaRuntimeError(3251,"Individual grouped option assignment unsupported");
     const auto type = widget->property("la_sql_type").toString();
-    const auto converted = linaccess::sqlFieldValue(assigned,type);
+    const auto converted = boundFieldSqlValue(assigned,widget->property("la_sql_field").toString(),type);
     const auto priorFormatted=formattedControlValues_.value(QString::fromUtf8(name.data(),name.size()).toCaseFolded());
     const auto rawAfter=qobject_cast<QLineEdit*>(widget) ? linaccess::qtFieldText(converted,type) : converted.toString();
-    const auto differs=priorFormatted ? linaccess::sqlFieldValue(*priorFormatted,type)!=converted : textOf(widget)!=rawAfter;
+    const auto differs=priorFormatted ? boundFieldSqlValue(*priorFormatted,widget->property("la_sql_field").toString(),type)!=converted : textOf(widget)!=rawAfter;
     formattedControlValues_.remove(QString::fromUtf8(name.data(),name.size()).toCaseFolded());
     clearDefaultError(widget);
     const bool wasNull = widget->property("la_null").toBool();
@@ -3352,7 +3363,7 @@ void AccessFormPreview::updateDirtyFromRecord() {
         if (bufferedTextControls_.contains(definition.name)) { dirty_=true; continue; }
         const auto expected=row>=0 && row<recordRows_.size() ? recordRows_[row][column] : QVariant{};
         try {
-            const auto actual=linaccess::sqlFieldValue(getFieldValue(definition.name.toStdString()),dataTypes_.value(dataColumns_[column].toCaseFolded()));
+            const auto actual=boundFieldSqlValue(getFieldValue(definition.name.toStdString()),dataColumns_[column],dataTypes_.value(dataColumns_[column].toCaseFolded()));
             if (actual.isNull()!=expected.isNull() || (!actual.isNull() && actual!=expected)) dirty_=true;
         } catch (const std::exception&) { dirty_=true; }
     }
@@ -3529,7 +3540,7 @@ QString AccessFormPreview::findNextRecord(QString text,QString field,int mode,bo
             if(formatted) {
                 const auto type=self->dataTypes_.value(self->dataColumns_[column].toCaseFolded());const auto actual=editedValue ? *editedValue : linaccess::qtFieldValue(value,type);
                 if(actual.kind==linaccess::VbaValue::Kind::Null) continue;
-                candidate=!masks[selection].isEmpty() ? QString::fromStdString(linaccess::formatAccessValue(actual,masks[selection].toStdString(),true).asText()) : precise[selection] && actual.kind==linaccess::VbaValue::Kind::Number ? QString::number(actual.number,'g',std::numeric_limits<double>::max_digits10) : linaccess::qtFieldText(editedValue ? linaccess::sqlFieldValue(actual,type) : value,type);
+                candidate=!masks[selection].isEmpty() ? QString::fromStdString(linaccess::formatAccessValue(actual,masks[selection].toStdString(),true).asText()) : precise[selection] && actual.kind==linaccess::VbaValue::Kind::Number ? QString::number(actual.number,'g',std::numeric_limits<double>::max_digits10) : linaccess::qtFieldText(editedValue ? self->boundFieldSqlValue(actual,self->dataColumns_[column],type) : value,type);
             }
             if(formatted) {
                 if(candidate.contains(QChar(0)) || !candidate.isValidUtf16()) throw VbaRuntimeError(3251,"Formatted search cell is not representable");

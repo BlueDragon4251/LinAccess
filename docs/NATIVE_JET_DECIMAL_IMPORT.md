@@ -26,9 +26,10 @@ the existing import savepoint/project transaction rolls back partial work.
 The invariant CSV mode can also import explicitly declared Numeric(p,s) values;
 it does not claim independent MDB evidence from a source filename.
 
-The data grid displays/copies exact text and keeps Decimal cells read-only.
-DAO/SQL read values retain Decimal/dbDecimal20; Field.DataUpdatable is False. Native creation/editing of Decimal
-fields, full Field.Size/Precision/Scale/Properties identity, non-NULL Decimal
+The data grid displays/copies exact text. Proven physical fields now support
+bounded exact-fit grid/DAO edits (NATIVE_DECIMAL_FIELD_WRITES.md); computed
+outputs retain their read-only contract. DAO/SQL values retain Decimal/dbDecimal20.
+Native creation of Decimal fields, full Field.Size/Precision/Scale/Properties identity, non-NULL Decimal
 source defaults, all validation/format/relationship semantics, signed-zero/scale
 bit identity and original-format writing/round trips remain open. Non-NULL
 Decimal defaults explicitly refuse. Existing approximate Numeric imports are not

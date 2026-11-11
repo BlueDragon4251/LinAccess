@@ -55,7 +55,7 @@ keine Tests oder Teilpunkte allein zur Erhöhung einer Fortschrittszahl anlegen.
 - [x] **F003** — Isolate the SQLite backend's standalone primary-key clause parser failure.
 - [x] **F008** — Retain all relationship metadata and enforcement/cascade flags. Enforce relationships marked for referential integrity between imported tables.
 - [x] **F011** — Exercise recipe foreign-key rejection and cascading deletion on a SQLite copy.
-- [ ] **F014** — Native exact Jet Numeric import: [scope](NATIVE_JET_DECIMAL_IMPORT.md). Native exact SQL Decimal results: [scope](EXACT_SQL_DECIMAL.md). Preserve original Jet column types, precision/scale, Currency and Decimal exactly.
+- [ ] **F014** — Bounded exact physical Decimal edits: [scope](NATIVE_DECIMAL_FIELD_WRITES.md). Native exact Jet Numeric import: [scope](NATIVE_JET_DECIMAL_IMPORT.md). Native exact SQL Decimal results: [scope](EXACT_SQL_DECIMAL.md). Preserve original Jet column types, precision/scale, Currency and Decimal exactly.
 - [ ] **F015** — Preserve AutoNumber seeds, defaults, validation, lookups and collations exactly. Native literal SQL/DAO/bound-form defaults are implemented in SOURCE_LITERAL_DEFAULTS.md; the complete requirement remains open. Native Currency validation: [scope](NATIVE_CURRENCY_VALIDATION.md).
 - [ ] **F130** — Full Jet/locale collation, comparison-aware Like/StrComp/InStr and complete SELECT INTO metadata/AutoNumber/index/default/validation propagation.
 - [x] **F169** — Preserve 21 original AutoNumber flags and native managed generation for the 16 single-primary-key counters, retaining actual imported values and verifying no-reuse on isolated copies (AUTONUMBER_IMPORT.md).
@@ -327,7 +327,7 @@ keine Tests oder Teilpunkte allein zur Erhöhung einer Fortschrittszahl anlegen.
 - [x] **F046** — Imported-form Forms/Controls collections, guarded references, typed cross-form data writes and basic Access control constants.
 - [x] **F047** — Value/reference contexts for Set and property assignment, dynamic Me(control), DAO Field bang references; six property writes in one original Form_Load verified.
 - [x] **F048** — Unlinked native embedded child forms, Form references, Requery, typed edits and parent-close cancellation; original complex Form_Load and 15 actual data-driven Tags verified.
-- [ ] **F056** — Form record sources, filters/sort, focus and control state with real persistence. Bounded direct-table DataEntry is implemented; writable-query/complete Windows semantics remain open (DATA_ENTRY_RUNTIME.md).
+- [ ] **F056** — Exact-fit physical Decimal edits: [scope](NATIVE_DECIMAL_FORM_WRITES.md). Form record sources, filters/sort, focus and control state with real persistence. Bounded direct-table DataEntry is implemented; writable-query/complete Windows semantics remain open (DATA_ENTRY_RUNTIME.md).
 - [ ] **F058** — Mouse/keyboard/timer/combo/subform events; real Kassa UI actions verified.
 - [ ] **F079** — Complete form/report query binding, implicit parameters and editable joins where valid. Bounded keyed single-table alias/filter/multifield sorting is in OPEN_QUERY_RUNTIME.md and explicit physical field projections in EDITABLE_QUERY_PROJECTIONS.md; the complete requirement remains open.
 - [x] **F103** — Actual native activation, deferred first Current, form-switch and close-cancellation tests; original Open/Load/Activate/Current complete.

@@ -90,6 +90,7 @@ private:
     void initializeControlDefaults(bool unbound);
     bool saveRecord();
     void checkPhysicalRecordSource() const;
+    QVariant boundFieldSqlValue(const linaccess::VbaValue& value,const QString& field,const QString& type) const;
     void setTimerInterval(int interval);
     void selectCurrentRecordForCommand();
     void deleteCurrentRecord();
