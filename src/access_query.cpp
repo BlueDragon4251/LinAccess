@@ -2707,10 +2707,12 @@ QMap<QString,QVariant> bindAccessQueryParameters(const AccessQueryPlan& plan, co
 }
 namespace {
 struct PreparedAccessQuery { QSqlQuery query; bool hiddenRank; QVector<QString> types; QVector<QString> columnTypes; QVector<QPair<QString,QString>> fieldOrigins; };
+std::optional<AccessQueryPlan> exactUnionPlan(QSqlDatabase db,const AccessQueryPlan& input);
 PreparedAccessQuery prepareAccessQuery(QSqlDatabase db,const AccessQueryPlan& untyped) {
-    const auto plan=resolveCurrencyQuery(db,untyped);
+    auto plan=resolveCurrencyQuery(db,untyped);
     if (!plan.sql.trimmed().startsWith("SELECT",Qt::CaseInsensitive))
         throw VbaRuntimeError(3065,"Query result requires SELECT");
+    if(const auto compound=exactUnionPlan(db,plan)) plan=*compound;
     const bool topOne=useTopOneBoundary(db,plan);
     const auto source=topOne ? plan.topOneSql : useLeftJoin(db,plan) ? plan.rightJoinSql : plan.sql;
     if (missingSqlDependency(db,source)) throw VbaRuntimeError(3078,"SQL dependency unavailable");
@@ -2760,6 +2762,90 @@ PreparedAccessQuery prepareAccessQuery(QSqlDatabase db,const AccessQueryPlan& un
         }
     }
     return {std::move(query),plan.hiddenRank && !topOne,types,columnTypes,fieldOrigins};
+}
+std::optional<AccessQueryPlan> exactUnionPlan(QSqlDatabase db,const AccessQueryPlan& input) {
+    if(input.source.isEmpty() || input.sql!=input.compiledSql) return {};
+    auto tokens=tokenize(input.source);if(!tokens.isEmpty() && symbol(tokens.back(),";")) tokens.removeLast();
+    const auto word=[&](qsizetype at,const char* text) {return at<tokens.size() && tokens[at].kind==Token::Word && tokens[at].value.compare(text,Qt::CaseInsensitive)==0;};
+    QVector<qsizetype> splits;qsizetype order=-1;int depth=0;bool unsupported=false;
+    for(qsizetype at=0;at<tokens.size();++at) {
+        if(symbol(tokens[at],"(")) ++depth;else if(symbol(tokens[at],")")) --depth;
+        else if(!depth) {if(word(at,"UNION")) splits.append(at);else if(word(at,"INTERSECT") || word(at,"EXCEPT")) unsupported=true;else if(word(at,"ORDER")) order=at;}
+    }
+    if(splits.isEmpty() && !unsupported) return {};
+    const auto physicalExact=[&] {
+        for(const auto& token:tokens) if(token.kind==Token::Word && (token.value.compare("CDec",Qt::CaseInsensitive)==0 || token.value.startsWith("linaccess_jet_decimal_",Qt::CaseInsensitive))) return true;
+        for(qsizetype at=0;at+1<tokens.size();++at) if(word(at,"FROM") || word(at,"JOIN")) {
+            auto table=tokens[at+1].value;if(at+3<tokens.size() && symbol(tokens[at+2],".")) table=tokens[at+3].value;
+            const auto types=sqliteColumnTypes(db,table);
+            if(types.values().contains("CURRENCY_TICKS") || types.values().contains("DECIMAL_EXACT")) return true;
+        }
+        return false;
+    };
+    if(unsupported || !input.parameters.isEmpty() || input.daoQueryType!=128 || !word(0,"SELECT") || splits.size()>31) {
+        if(physicalExact()) throw VbaRuntimeError(3251,"Exact compound query shape is not implemented");return {};
+    }
+    struct Arm {QString sql;QStringList names;QVector<QString> types;};QVector<Arm> arms;QStringList operations;
+    qsizetype first=0;bool exact=false;installJetSqlFunctions(db);
+    for(qsizetype which=0;which<=splits.size();++which) {
+        const auto end=which<splits.size() ? splits[which] : order>=0 ? order : tokens.size();
+        if(first>=end || !word(first,"SELECT")) throw VbaRuntimeError(3251,"UNION requires SELECT arms");
+        auto branch=compileAccessQuery(renderJetTokens(tokens.mid(first,end-first)));
+        auto prepared=prepareAccessQuery(db,branch);
+        if(prepared.hiddenRank || branch.topLimit || !branch.makeTable.isEmpty()) {if(physicalExact()) throw VbaRuntimeError(3251,"Exact UNION arm boundary unsupported");return {};}
+        const auto handle=prepared.query.result()->handle();
+        if(!handle.isValid() || QByteArray(handle.typeName())!="sqlite3_stmt*") throw VbaRuntimeError(3251,"UNION metadata is unavailable");
+        auto* statement=*static_cast<sqlite3_stmt* const*>(handle.constData());if(!statement) throw VbaRuntimeError(3251,"UNION statement is unavailable");
+        const auto count=sqlite3_column_count(statement);if(count<1 || count>256) throw VbaRuntimeError(3251,"UNION column bound exceeded");
+        Arm arm{prepared.query.lastQuery(),{},prepared.types};arm.types.resize(count);
+        for(int column=0;column<count;++column) {
+            arm.names.append(QString::fromUtf8(sqlite3_column_name(statement,column)));
+            if(arm.types[column].isEmpty()) arm.types[column]=prepared.columnTypes.value(column);
+            const auto origin=prepared.fieldOrigins.value(column);
+            if(!origin.first.isEmpty()) {const auto type=sqliteColumnTypes(db,origin.first).value(origin.second.toCaseFolded());if(type=="CURRENCY_TICKS" || type=="DECIMAL_EXACT") arm.types[column]=type;}
+            exact|=arm.types[column]=="CURRENCY_TICKS" || arm.types[column]=="DECIMAL_EXACT";
+        }
+        arms.append(std::move(arm));
+        if(which<splits.size()) {first=end+1;const bool all=word(first,"ALL");if(all) ++first;operations.append(all ? " UNION ALL " : " UNION ");}
+    }
+    if(!exact) {if(physicalExact()) throw VbaRuntimeError(3251,"Exact UNION requires proven output types");return {};}
+    const auto count=arms.front().names.size();QVector<QString> common=arms.front().types;
+    const auto money=[](const QString& kind) {return kind=="CURRENCY_REAL" || kind=="CURRENCY_TICKS";};
+    for(const auto& arm:arms) {
+        if(arm.names.size()!=count) throw VbaRuntimeError(3251,"Exact UNION column counts differ");
+        QSet<QString> names;for(const auto& name:arm.names) {if(name.isEmpty() || names.contains(name.toCaseFolded())) throw VbaRuntimeError(3251,"Exact UNION requires distinct output names in each arm");names.insert(name.toCaseFolded());}
+        for(int column=0;column<count;++column) if(common[column]!=arm.types[column]) {
+            if(money(common[column]) && money(arm.types[column])) common[column]="CURRENCY_TICKS";
+            else if(common[column]=="DECIMAL_EXACT" || arm.types[column]=="DECIMAL_EXACT" || common[column]=="CURRENCY_TICKS" || arm.types[column]=="CURRENCY_TICKS") throw VbaRuntimeError(3251,"Exact UNION output types are not compatible");
+            else common[column].clear();
+        }
+    }
+    QString sql;
+    for(int at=0;at<arms.size();++at) {
+        if(at) sql+=operations[at-1];const auto& arm=arms[at];QStringList selected;
+        for(int column=0;column<count;++column) {
+            auto value=identifier(arm.names[column]);const auto kind=common[column];
+            if(kind=="CURRENCY_TICKS") value=checkedSqlStorageValue(kind,value,arm.types[column]);
+            else if(QSet<QString>{"CURRENCY_REAL","INTEGER1","INTEGER2","INTEGER4","BOOL","BOOLEAN","SINGLE_REAL","DATETIME","DATE"}.contains(kind)) value=checkedSqlStorageValue(kind,value,arm.types[column]);
+            selected.append(value+" AS "+identifier(arms.front().names[column]));
+        }
+        sql+="SELECT "+selected.join(',')+" FROM ("+arm.sql+") AS "+identifier("__la_union_arm_"+QString::number(at));
+    }
+    if(order>=0) {
+        if(!word(order+1,"BY")) throw VbaRuntimeError(3251,"Exact UNION ORDER BY shape unsupported");
+        qsizetype at=order+2;QStringList sorted;
+        while(at<tokens.size()) {
+            const auto key=tokens[at++];bool ordinal=false;const auto index=key.value.toInt(&ordinal);
+            QString field;
+            if(key.kind==Token::Other && ordinal && index>=1 && index<=count) field=QString::number(index);
+            else if(key.kind==Token::Word || key.kind==Token::Identifier) {for(const auto& name:arms.front().names) if(name.compare(key.value,Qt::CaseInsensitive)==0) field=identifier(name);}
+            if(field.isEmpty()) throw VbaRuntimeError(3251,"Exact UNION ORDER BY requires an output name or ordinal");
+            if(word(at,"ASC") || word(at,"DESC")) field+=' '+tokens[at++].value.toUpper();sorted.append(field);
+            if(at<tokens.size()) {if(!symbol(tokens[at++],",") || at==tokens.size()) throw VbaRuntimeError(3251,"Exact UNION ORDER BY separator invalid");}
+        }
+        if(sorted.isEmpty()) throw VbaRuntimeError(3251,"Exact UNION ORDER BY is empty");sql+=" ORDER BY "+sorted.join(',');
+    }
+    auto result=input;result.sql=sql;result.compiledSql=sql;result.resultTypes=common;result.currencyContextResolved=true;return result;
 }
 }
 QStringList accessQueryColumns(QSqlDatabase db,const AccessQueryPlan& plan,QVector<QString>* columnTypes,QVector<QPair<QString,QString>>* fieldOrigins) {

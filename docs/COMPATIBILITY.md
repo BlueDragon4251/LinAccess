@@ -8222,3 +8222,20 @@ bestanden,7geschützteHashesgleich. Keine neueCTest-ID/Windows-Referenz;
 Baum0a5d9a4227a4897a163954c9e583e769004b9013 privat/exaktveröffentlicht.
 LetzterPaket-/Originalbeleg dbd87ce/184,50s liegtvorDecimal-Defaults/
 Schlüsselwahl/Ganzzahloperanden/Bedingungen. Direktweiterarbeiten.
+
+
+ExakteTypeninUNION (2026-11-11):
+EXACT_TYPED_UNION.md. ParameterloseUNION/ALL bereitetSELECT-Arme einzelnvor;
+Currency-REAL/Ticks vorVergleich/Deduplizierung/Sortieren einheitlichsigned64,
+physischeDecimalspalten behaltenSchlüssel. ErsteArmnamen/Typ5/read-onlyDAO,
+NULL/ALL-Multiplizität/einfacheglobaleSortierung erhalten.32Arme/256Spalten,
+eindeutigeArmnamen/kompatibleExacttypen; unsupportedExactformen3251.
+BestehendeCDec-Mehrfach-SELECT-Grenze bleibt; Decimalbelegmitwirklichimportierten
+Spalten. App/Parameter/DAO/Modellgebaut; DAO/Modell5,98/0,47s bestanden;
+nurbetroffeneParameterprüfungwiederholt:0.29s bestanden. Keine neueCTest-ID/
+Windows-Referenz,7geschützteHashesgleich;456/386Teilumfänge/70offen.
+Bedingungsetappea00b4ffdc48b547a65224a273ce43d8bcf68fd80,
+Baumdb870b2d11863291148a895e3c9f9a5a8771ea7f privat/exaktveröffentlicht.
+GemeinsamerPaket-/Originalbeleg nachdieserEtappe; letzterdbd87ce/184,50s liegt
+vorDecimal-Defaults/Schlüsselwahl/Ganzzahloperanden/Bedingungen/UNION.
+Direktweiterarbeiten, keinevollständigeParität.
