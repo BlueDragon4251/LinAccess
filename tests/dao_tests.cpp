@@ -2397,6 +2397,13 @@ FROM calendar_inputs WHERE marker=1)SQL");
             int actual=0;try{(void)database->member("OpenRecordset",{linaccess::VbaValue::string(failure.first)});}catch(const linaccess::VbaRuntimeError& error){actual=error.number;}
             if(actual!=failure.second) std::cerr<<"SQL conditional error actual="<<actual<<" expected="<<failure.second<<"\n";assert(actual==failure.second);
         }
+        calendarPhase="native CVDate compatibility alias";
+        const auto cvSource=QStringLiteral("SELECT CVDate(stamp) AS stored_date,CVDate(offset_date) AS offset_date,CVDate(enabled) AS logical_date,CVDate(amount) AS money_date,CVDate(-0.25) AS negative_date,VarType(CVDate(stamp)) AS subtype FROM calendar_inputs WHERE marker=1");
+        const auto cvValues=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery(cvSource),{});
+        assert(cvValues.rows.size()==1 && cvValues.columnTypes==QVector<QString>({"DATETIME","DATETIME","DATETIME","DATETIME","DATETIME","INTEGER2"}));
+        assert(cvValues.rows[0][0].toString()=="2024-02-28 12:34:56" && cvValues.rows[0][1].toString()=="1900-01-01 00:00:00" && cvValues.rows[0][2].toString()=="1899-12-29 00:00:00" && cvValues.rows[0][3].toString()=="1899-12-31 12:00:00" && cvValues.rows[0][4].toString()=="1899-12-30 06:00:00" && cvValues.rows[0][5].toInt()==7);
+        const auto cvFields=database->member("OpenRecordset",{linaccess::VbaValue::string(cvSource.toStdString())}).object;assert(cvFields->member("Fields",{linaccess::VbaValue::string("stored_date")}).object->member("Type",{}).asNumber()==8 && cvFields->item("stored_date").kind==linaccess::VbaValue::Kind::Date);cvFields->member("Close",{});
+        int cvNull=0;try{(void)database->member("OpenRecordset",{linaccess::VbaValue::string("SELECT CVDate(stamp) FROM calendar_inputs WHERE marker=2")});}catch(const linaccess::VbaRuntimeError& failure){cvNull=failure.number;}assert(cvNull==94);
         calendarPhase="native Val Double contract";
         const auto valSource=QStringLiteral("SELECT Val('&HFFFF') AS signed_hex,Val('&HFFFF&') AS long_hex,Val('50%') AS percentage,Val('16777217!') AS single_literal,Val('1.2345@') AS currency_literal,Val(enabled) AS flag_value,Val(elapsed) AS single_value,Val(amount) AS money_value,VarType(Val('&HFFFF')) AS subtype,TypeName(Val('50%')) AS name FROM calendar_inputs WHERE marker=1");
         const auto valValues=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery(valSource),{});

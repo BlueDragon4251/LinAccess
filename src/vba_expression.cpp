@@ -840,7 +840,7 @@ bool vbaIntrinsicName(const std::string& name) {
     static const std::unordered_set<std::string> intrinsics{
                 "error","error$","array","lbound","ubound","isarray","ismissing","isobject","iserror","cverr","vartype","typename",
                 "createobject","rnd","randomize","doevents","msgbox","inputbox","inputbox$","round","asc","ascw","chr","chr$","chrw","chrw$",
-                "cbyte","cint","clng","csng","cdbl","cbool","cvar","ccur","cdec","cdate","cstr","str","str$","format","format$","formatnumber","formatcurrency","formatpercent","formatdatetime",
+                "cbyte","cint","clng","csng","cdbl","cbool","cvar","ccur","cdec","cdate","cvdate","cstr","str","str$","format","format$","formatnumber","formatcurrency","formatpercent","formatdatetime",
                 "left","left$","right","right$","mid","mid$","trim","trim$","ltrim","ltrim$","rtrim","rtrim$","len","lenb",
                 "ucase","ucase$","lcase","lcase$","instr","strcomp","instrrev","strreverse","strconv","replace","split","join","filter",
                 "hex","hex$","oct","oct$","space","space$","string","string$","val","abs","int","fix","sgn",
@@ -1675,7 +1675,7 @@ private:
                     {"ppmt",{{"Rate","Per","NPer","Pv","Fv","Type"},4}},
                     {"partition",{{"Number","Start","Stop","Interval"},4}},
                     {"rgb",{{"Red","Green","Blue"},3}}, {"qbcolor",{{"Color"},1}},
-                    {"cdate",{{"Expression"},1}}, {"cdec",{{"Expression"},1}}, {"cvar",{{"Expression"},1}},
+                    {"cdate",{{"Expression"},1}}, {"cvdate",{{"Expression"},1}}, {"cdec",{{"Expression"},1}}, {"cvar",{{"Expression"},1}},
                     {"formatnumber",{{"Expression","NumDigitsAfterDecimal","IncludeLeadingDigit","UseParensForNegativeNumbers","GroupDigits"},1}},
                     {"formatcurrency",{{"Expression","NumDigitsAfterDecimal","IncludeLeadingDigit","UseParensForNegativeNumbers","GroupDigits"},1}},
                     {"formatpercent",{{"Expression","NumDigitsAfterDecimal","IncludeLeadingDigit","UseParensForNegativeNumbers","GroupDigits"},1}},
@@ -1743,10 +1743,10 @@ private:
                 if(jetEval_) throw error("CVar Access Eval binding is not validated",3251);
                 return bindArithmeticValue(args[0],VbaValue::ArithmeticBinding::Variant);
             }
-            if(word=="cdate") {
+            if(word=="cdate" || word=="cvdate") {
                 if(!host_) return {};
                 if(args.size()!=1 || omitted[0]) throw error("CDate requires one argument",450);
-                return bindArithmeticValue(vbaDateValue(args[0]),jetEval_ ? VbaValue::ArithmeticBinding::Unbound : VbaValue::ArithmeticBinding::Static);
+                return bindArithmeticValue(vbaDateValue(args[0]),jetEval_ ? VbaValue::ArithmeticBinding::Unbound : word=="cvdate" ? VbaValue::ArithmeticBinding::Variant : VbaValue::ArithmeticBinding::Static);
             }
             if(word=="monthname" || word=="weekdayname") {
                 if(!host_) return {};

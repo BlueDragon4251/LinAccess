@@ -485,6 +485,7 @@ void calendarTimeValueTyped(sqlite3_context* context,int count,sqlite3_value** a
 void calendarDateAddTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"DateAdd",3,3,true);}
 void calendarDateSerialTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"DateSerial",3,3,true);}
 void calendarTimeSerialTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"TimeSerial",3,3,true);}
+void calendarCVDateTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"CVDate",1,1,true);}
 void calendarCDateTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"CDate",1,1,true);}
 void calendarDatePartTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"DatePart",2,4,true);}
 void calendarDatediffTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"DateDiff",3,5,true);}
@@ -517,6 +518,7 @@ void unsupportedDateSumStep(sqlite3_context*,int,sqlite3_value**) noexcept {}
 void unsupportedDateSumFinal(sqlite3_context* context) noexcept { functionError(context,VbaRuntimeError(3251,"Date-valued SUM is not implemented")); }
 void calendarDateSerial(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"DateSerial",3,3); }
 void calendarTimeSerial(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"TimeSerial",3,3); }
+void calendarCVDate(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"CVDate",1,1); }
 void calendarCDate(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"CDate",1,1); }
 void calendarDatePart(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"DatePart",2,4); }
 void scalarChoose(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Choose",2,1000); }
@@ -1166,6 +1168,8 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_dateserial_typed",-1,&calendarDateSerialTyped,nullptr,nullptr);
     ensure("linaccess_jet_timeserial",-1,&calendarTimeSerial,nullptr,nullptr);
     ensure("linaccess_jet_timeserial_typed",-1,&calendarTimeSerialTyped,nullptr,nullptr);
+    ensure("linaccess_jet_cvdate",-1,&calendarCVDate,nullptr,nullptr);
+    ensure("linaccess_jet_cvdate_typed",-1,&calendarCVDateTyped,nullptr,nullptr);
     ensure("linaccess_jet_cdate",-1,&calendarCDate,nullptr,nullptr);
     ensure("linaccess_jet_cdate_typed",-1,&calendarCDateTyped,nullptr,nullptr);
     ensure("linaccess_jet_datepart",-1,&calendarDatePart,nullptr,nullptr);

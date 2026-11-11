@@ -7717,3 +7717,22 @@ offen, feste456 IDs/386 bestätigte Teilumfänge/70 offene Vollanforderungen.
 Vorstand918c2c4d6ae36c019721f2cb9cd55a116e8ebcc3 privat/exakt publiziert;
 aktueller positiver Vorstand-DEB/Originalbeleg182,07s/7Hashes gleich siehe oben.
 Direkt weiterentwickeln; kein Zwischen-/Gesamtabschluss.
+
+
+Native Legacykonversion CVDate (2026-11-11): CVDATE_RUNTIME.md. MS-VBAL6.1.2.3.1.4
+definiert dieselbe Konversion wie CDate, aber deklarierten Variant-Rückgabewert mit
+Date-Datenwert. Gemeinsamen Date-Kern nutzen und native VBA-Arithmetikbindung
+alsVariant markieren; CDate bleibt statischDate. VBA.CVDate und benanntes
+Expression-Argument, tatsächliche SQL-Namensbindung/raw-/typisierte Adapter,
+Date-Rückgabemetadaten/DAOdbDate8 und bestehende geschlossene pure Funktionen
+integriert. Kein Erraten aus Ergebnisproben, keine neue regionale/Hijri-/Zeitzonen-/
+Subsekunden-/vollständige Variant-Mischrechnung behauptet. App gebaut, bestehender
+Kern bestanden0,52s. Fehlende SQL-Namenserkennung3085 gezielt ergänzt; nur
+betroffenes DAO erneut1/1 in5,29s bestanden. Named/Qualified/Variant-Bindung,
+konkrete Date-/Boolean-/Currency-/negative Datewerte, DAO-Type/Value und
+Null-/Error-/Aritygrenzen geprüft. Keine neue CTest-ID/Windows-Access-Beobachtung.
+F041/F067/F068/F071 bleiben offen, feste456/386/70 unverändert.
+Vorstand15f231dd880b3678b536983a1246d1a7eb77d9f1/Baum1beb35eee9ae1fba35dbb6233ce48769f038a5f1
+privat/exakt veröffentlicht. Letzter positiver Paket-/Originalstand918c2c4
+182,07s/7Hashes gleich enthält neueVal/CVDate-/Compilerkorrekturen noch nicht.
+Direkt fortsetzen, kein Zwischen-/Gesamtabschluss.

@@ -509,6 +509,12 @@ End Function)BOUND";
     assert(eval("Val(\"16777217!\")").number==16777216 && eval("Val(\"1.2345@\")").number==1.2345);
     assert(eval("Val(CSng(16777217))").number==16777220); // Existing seven-digit native Single text policy.
 
+    const auto variantDate=eval("CVDate(Expression:=-0.25)");assert(variantDate.kind==VbaValue::Kind::Date && variantDate.number==-0.25 && variantDate.arithmeticBinding==VbaValue::ArithmeticBinding::Variant);
+    assert(eval("VBA.CVDate(1.5)").number==1.5 && eval("CDate(1.5)").arithmeticBinding==VbaValue::ArithmeticBinding::Static);
+    assert(eval("VarType(CVDate(0))=vbDate And TypeName(CVDate(0))=\"Date\"").truthy());
+    for(const auto& probe:std::vector<std::pair<std::string,int>>{{"CVDate(Null)",94},{"CVDate(CVErr(13))",13},{"CVDate()",450},{"CVDate(1,2)",450}}) {
+        int actual=0;try{(void)eval(probe.first);}catch(const VbaRuntimeError& failure){actual=failure.number;}assert(actual==probe.second);
+    }
     assert(eval("Sqr(Number:=81)").asNumber()==9 && eval("VarType(Sqr(81))=vbDouble").truthy());
     assert(std::abs(eval("Log(Exp(2))").asNumber()-2)<1e-12);
     assert(std::abs(eval("Sin(4*Atn(1)/2)").asNumber()-1)<1e-12);
