@@ -597,6 +597,7 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
             AccessFormPreview initialized(formName,definition,code,db,&window);
             initialized.show(); QApplication::setActiveWindow(&initialized); QApplication::processEvents();
             const auto activated=initialized.eventResult("OnActivate");
+            if(!activated || activated->status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Original activation failure: status="<<(activated ? static_cast<int>(activated->status) : -1)<<", error="<<(activated ? activated->errorNumber : 0)<<", line="<<(activated ? activated->line : 0)<<'\n';
             assert(activated && activated->status==linaccess::VbaExecutionStatus::Completed);
             const auto opened=initialized.eventResult("OnOpen");
             std::cerr<<"Original OnOpen menu adapter: status="<<(opened ? static_cast<int>(opened->status) : -1)<<", error="<<(opened ? opened->errorNumber : 0)<<", line="<<(opened ? opened->line : 0)<<", menu enabled="<<menuBar->isEnabled()<<'\n';

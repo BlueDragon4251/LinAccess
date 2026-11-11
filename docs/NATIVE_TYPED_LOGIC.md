@@ -103,3 +103,22 @@ zero-length String is not Empty. Supported SQL scalar transport does not add
 Object/array/Error-value encodings. In particular IsError does not intercept an
 SQL evaluation exception raised before its argument can be delivered. Existing
 arity and transport guards remain; no new Access oracle is claimed.
+
+
+RIGHT-JOIN plan and rebinding regression (2026-11-11)
+---------------------------------------------------
+The fresh original run exposed three operations-budget failures (3035): the new
+pure Boolean result encoder was absent from the existing RIGHT-JOIN adaptation's
+closed function list. Its exact trusted name is now included; unknown functions
+and unsupported shapes remain excluded. The operations and time limits are not
+changed. A second pass exposed repeated normalization of already compiled Boolean
+expressions. The internal encoder is now idempotent for0/1/-1/NULL and the binder
+retains its already compiled expression without growing another wrapper.
+
+An existing query-model case exercises2000 technical right-side keys with
+matched/unmatched rows, full result checks and actual SQLite full-scan counters
+below10000. The DAO case covers nested normalization and NULL. One existing
+DAO/query-model bundle passed2/2 in5.26s (4.93/0.33). The affected original targets passed2/2 in177.19s (inventory51.53/original125.65);
+100/78/22 and categories73/5/3/9/10 are restored, all seven hashes unchanged. Inventory reports are now saved before the unchanged
+coverage assertion, and original activation failures expose only status/error/
+line numbers rather than private SQL/VBA. No new CTest or catalog ID.

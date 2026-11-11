@@ -268,10 +268,11 @@ int main(int argc,char** argv) {
     testPreparedOriginalJoinedUpdate(root,definitions,QString::fromLocal8Bit(argv[2]));
     assert(valueDeclarations==6 && positiveConditionalQueries==3);
     assert(executedDerivedQueries==5 && sourceColumnMismatches==3);
-    assert(counts["executed_no_access_reference_oracle"]>=72
-        && counts["executed_with_test_parameters_no_access_reference_oracle"]>=5);
     QFile output(QString::fromLocal8Bit(argv[3])); assert(output.open(QIODevice::WriteOnly));
     assert(output.write(QJsonDocument(report).toJson()) > 0);
     for (auto it = counts.cbegin(); it != counts.cend(); ++it) std::cout << it.key().toStdString() << ": " << it.value() << '\n';
+    std::cout.flush();
+    assert(counts["executed_no_access_reference_oracle"]>=72
+        && counts["executed_with_test_parameters_no_access_reference_oracle"]>=5);
     std::cout << "100 original query artifacts classified on isolated copy; no complete Jet compatibility claim\n";
 }

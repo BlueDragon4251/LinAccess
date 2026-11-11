@@ -350,7 +350,7 @@ void booleanResult(sqlite3_context* context,int count,sqlite3_value** args) noex
     auto& native=api();
     if(count!=1) {functionError(context,VbaRuntimeError(450,"Boolean result requires one argument"));return;}
     if(native.type(args[0])==SQLITE_NULL) {native.nullResult(context);return;}
-    if(native.type(args[0])!=SQLITE_INTEGER || (native.integer(args[0])!=0 && native.integer(args[0])!=1)) {functionError(context,VbaRuntimeError(13,"SQL comparison result must be0/1 or NULL"));return;}
+    if(native.type(args[0])!=SQLITE_INTEGER || (native.integer(args[0])!=0 && native.integer(args[0])!=1 && native.integer(args[0])!=-1)) {functionError(context,VbaRuntimeError(13,"SQL Boolean result must be0/1/-1 or NULL"));return;}
     native.integerResult(context,native.integer(args[0]) ? -1 : 0);
 }
 void boolean_and(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args," And ",2,2,true,false,true);}

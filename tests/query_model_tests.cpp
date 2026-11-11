@@ -491,6 +491,23 @@ int main(int argc, char** argv) {
         for(const auto& failure:std::vector<std::pair<QString,int>>{{"SELECT amount/divisor FROM native_arithmetic WHERE id=2",11},{"SELECT n/d FROM native_arithmetic WHERE id=2",6},{"SELECT id FROM native_arithmetic WHERE amount/divisor>0",11}}) {int error=0;try{model.execute(db,failure.first);}catch(const linaccess::VbaRuntimeError& actual){error=actual.number;}assert(error==failure.second);}
         database->member("TableDefs",{}).object->member("Delete",{VbaValue::string("native_arithmetic")});
     }
+    {
+        assert(query.exec("CREATE TABLE join_budget_probe_l(id INTEGER4 PRIMARY KEY)"));
+        assert(query.exec("CREATE TABLE join_budget_probe_r(id INTEGER4 PRIMARY KEY)"));
+        assert(query.exec("WITH RECURSIVE sequence(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM sequence WHERE n<2000) INSERT INTO join_budget_probe_r SELECT n FROM sequence"));
+        assert(query.exec("INSERT INTO join_budget_probe_l SELECT id FROM join_budget_probe_r WHERE id%2=0"));query.finish();
+        struct JoinScanProbe {int seen{},steps{};} scan;
+        const auto handle=db.driver()->handle();auto* connection=*static_cast<sqlite3* const*>(handle.constData());
+        assert(sqlite3_trace_v2(connection,SQLITE_TRACE_PROFILE,[](unsigned,void* state,void* statement,void*)->int {
+            auto* probe=static_cast<JoinScanProbe*>(state);auto* stmt=static_cast<sqlite3_stmt*>(statement);const auto sql=QString::fromUtf8(sqlite3_sql(stmt));
+            if(sql.contains("join_budget_probe_r",Qt::CaseInsensitive)) {++probe->seen;probe->steps=std::max(probe->steps,sqlite3_stmt_status(stmt,SQLITE_STMTSTATUS_FULLSCAN_STEP,0));}return 0;
+        },&scan)==SQLITE_OK);
+        model.execute(db,"SELECT r.id AS rid,IIf(l.id=r.id,1,0) AS matched FROM join_budget_probe_l AS l RIGHT JOIN join_budget_probe_r AS r ON l.id=r.id ORDER BY r.id");
+        assert(sqlite3_trace_v2(connection,0,nullptr,nullptr)==SQLITE_OK);
+        assert(model.rowCount()==2000 && scan.seen>0 && scan.steps<10000);
+        for(int row=0;row<2000;++row) assert(model.index(row,0).data().toInt()==row+1 && model.index(row,1).data().toInt()==((row+1)%2==0 ? 1 : 0));
+        assert(query.exec("DROP TABLE join_budget_probe_l"));assert(query.exec("DROP TABLE join_budget_probe_r"));query.finish();
+    }
     query.clear(); db.close(); assert(db.open());
     model.execute(db,"SELECT IIf(True,5,6)");
     assert(model.data(model.index(0,0)).toInt()==5);

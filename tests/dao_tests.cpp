@@ -2371,6 +2371,8 @@ FROM calendar_inputs WHERE marker=1)SQL");
             int actual=0;try{(void)database->member("OpenRecordset",{linaccess::VbaValue::string(failure.first)});}catch(const linaccess::VbaRuntimeError& error){actual=error.number;}
             if(actual!=failure.second) std::cerr<<"SQL Nz error actual="<<actual<<" expected="<<failure.second<<"\n";assert(actual==failure.second);
         }
+        const auto normalizedAgain=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT linaccess_jet_boolean_result(linaccess_jet_boolean_result(1)),linaccess_jet_boolean_result(-1),linaccess_jet_boolean_result(Null)"),{});
+        assert(normalizedAgain.rows.size()==1 && normalizedAgain.rows[0][0].toInt()==-1 && normalizedAgain.rows[0][1].toInt()==-1 && normalizedAgain.rows[0][2].isNull());
         calendarPhase="DAO fields";
         const auto calendarFields=database->member("OpenRecordset",{linaccess::VbaValue::string(calendarSource.toStdString())}).object;
         assert(calendarFields->member("Fields",{linaccess::VbaValue::string("shifted")}).object->member("Type",{}).asNumber()==8);

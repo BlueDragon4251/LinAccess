@@ -6811,3 +6811,26 @@ Bündel2/2 in5,10s (4,72/0,37) bestanden. Keine neuen IDs;456/386/70 unveränder
 Vorstandcc9050249ecfb6c6c784b984b9ac5d23c76c7c79/Baumcd340f5b39fbb7d6dabeaa679abb69af252cccb1
 privat/exakt veröffentlicht. Letzter Paketbeleg9f73a8c5 liegt vor späteren SQL-
 Blöcken; gemeinsamer frischer Paket-/Originallauf folgt. Kein Gesamtabschluss.
+
+
+Originale RIGHT-JOIN-Regression behoben (2026-11-11): NATIVE_TYPED_LOGIC.md.
+Drei Originalabfragen und OnActivate liefen nach SQL-Boolean-Erweiterung in3035:
+20M unveränderte Operationsgrenze, ca.4M Vollscans in130ms, kein Zeitlimitproblem.
+Reiner boolean_result-Callback fehlte in geschlossener RIGHT-JOIN-Funktionsliste;
+exakten Namen ergänzt, unbekannte Funktionen/Shapes weiterhin ausgeschlossen.
+Anschließend13 bei erneutem Binden bereits kodierten SQLs: Encoder für0/1/-1/NULL
+idempotent, bereits kompilierten Bool-Ausdruck nicht erneut wachsen lassen.
+Kein Budget/Watchdog/Abdeckungsschwellenwert erhöht. Neues Szenario innerhalb
+bestehendem Query-Modell-Ziel:2000 technische rechte Schlüssel, vollständige
+matched/unmatched-Ergebnisse und tatsächliche Vollscans<10000. DAO/Modell2/2
+in5,26s (4,93/0,33), betroffene Originalziele final2/2 in177,19s (Inventar51,53/
+Original125,65) bestanden;100/78/22, Kategorien73/5/3/9/10 wiederhergestellt.
+Alle7 geschützten Hashes unverändert. Diagnoseberichte vor unveränderter
+Abdeckungsassertion sichern; Aktivierungsfehler nur Status/Error/Zeile, kein
+privater SQL/VBA-Dump. Temporäre Budgetdiagnostik vollständig entfernt.
+F067 um bestehende Detailverweise ergänzt;456/386/70 und IDs unverändert.
+Vorstand57fb0600e7b79800c1f3de412f82de975b9701c5/Baume7ce83499342843ed3c1041dc88175eb4273555f
+privat veröffentlicht/exakt verifiziert. Dessen DEB baute/checkte zwar, bestand
+Originalziele aber vor Fix NICHT: kein gültiger neuer Paketbeleg. Letzter komplett
+geprüfter DEB bleibt9f73a8c5 (167,90s/7Hash gleich), bis gemeinsamer Refresh folgt.
+Kein Gesamtabschluss: vorbereitete IIf/Choose/Switch-Bindung weiter umsetzen.

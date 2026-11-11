@@ -73,7 +73,7 @@ keine Tests oder Teilpunkte allein zur Erhöhung einer Fortschrittszahl anlegen.
 - [x] **F064** — Parameterless compatible query views, dependency refresh and form source exposure.
 - [x] **F065** — All 100 query artifacts hash-checked and classified on an isolated copy; 77 execute (72 ordinary + five parameterized) without an Access result oracle, the rest remain explicitly unresolved.
 - [x] **F066** — SQL operation/time budgets and rejection of interrupted partial results.
-- [ ] **F067** — Jet/ACE SQL parser/translator, parameters and saved query dependency resolution.
+- [ ] **F067** — Jet/ACE SQL parser/translator, parameters and saved query dependency resolution. Native bounded scalar/Boolean result binding: [scope](NATIVE_TYPED_LOGIC.md); SQL Nz transport: [scope](NAMED_BUILTIN_RUNTIME.md). The complete requirement remains open.
 - [x] **F070** — Native SQL concatenation with arithmetic/Boolean boundaries, NULL and dynamic LIKE regression; original query execution 49/100.
 - [x] **F072** — Saved ranked TOP dependency views, NULL/tie-safe bounded TOP 1 plans and qualified column labels; 77/100 original queries execute after subsequent query-origin work.
 - [x] **F073** — Nested SQL budget enforcement and guarded simple RIGHT JOIN adaptation with independent NULL/duplicate results.
