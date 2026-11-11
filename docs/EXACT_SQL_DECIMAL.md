@@ -19,7 +19,8 @@ unsupported aggregates, nested SELECT/UNION, action/make-table queries
 and unproven Decimal predicate contexts refuse instead of executing SQLite blob arithmetic.
 Physical Jet Decimal creation, import, precision/scale properties, writable Decimal
 fields and lossless MDB round trips remain open. Derived DAO Filter/Sort snapshots
-still refuse when Decimal lineage cannot be retained. Native typed Find is now
+now retain proven result types through the trusted wrapper described in
+[Native typed query snapshots](NATIVE_TYPED_QUERY_SNAPSHOTS.md). Native typed Find is now
 covered by [Native typed DAO Find](NATIVE_TYPED_DAO_FIND.md). Field.Size
 is not fabricated from the query transport.
 

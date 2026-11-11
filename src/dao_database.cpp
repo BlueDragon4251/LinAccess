@@ -1063,7 +1063,6 @@ public:
     }
 private:
     void checkDerivedSource() const {
-        if(data_->types.values().contains("DECIMAL_EXACT")) throw VbaRuntimeError(3251,"DAO: Derived Decimal snapshots require preserved encoded source identity");
         if(frozen_ || (table_ && !queryBased_) || queryPlan_.sql.isEmpty() || !recordsetType_ || (*recordsetType_!=2 && *recordsetType_!=4))
             throw VbaRuntimeError(3251,"DAO: Derived snapshots require a query-backed dynaset or snapshot");
     }

@@ -2278,7 +2278,17 @@ AccessQueryPlan filterAccessQueryPlan(QSqlDatabase db,const AccessQueryPlan& unt
     if (source.hiddenRank && !topOne) throw VbaRuntimeError(3251,"Filtering an inline ranked TOP source is unsupported");
     auto sql=resolveQueryOrigins(db,topOne ? source.topOneSql : useLeftJoin(db,source) ? source.rightJoinSql : source.sql).trimmed();
     while (sql.endsWith(';')) sql.chop(1);
-    auto filtered=compileAccessQuery("SELECT * FROM [__la_filter_source] WHERE "+criteria);
+    QMap<QString,QString> outputTypes;QStringList projections;bool unique=true;
+    const auto columns=accessQueryColumns(db,source);QSet<QString> outputNames;
+    for(qsizetype column=0;column<columns.size();++column) {
+        const auto key=columns[column].toCaseFolded();if(outputNames.contains(key)) unique=false;outputNames.insert(key);
+        projections.append('['+QString(columns[column]).replace(']',"]]")+']');
+        if(source.resultTypes.size()==columns.size() && !source.resultTypes[column].isEmpty()) outputTypes.insert(key,source.resultTypes[column]);
+    }
+    if(!unique && source.resultTypes.contains("DECIMAL_EXACT")) throw VbaRuntimeError(3251,"Exact Decimal derived snapshots require unique output names");
+    auto filtered=unique && !outputTypes.isEmpty()
+        ? compileCurrencyQuery("SELECT "+projections.join(',')+" FROM [__la_filter_source] WHERE "+criteria,outputTypes)
+        : compileAccessQuery("SELECT * FROM [__la_filter_source] WHERE "+criteria);
     const auto marker="FROM "+identifier("__la_filter_source");
     filtered.sql.replace(filtered.sql.indexOf(marker),marker.size(),"FROM ("+sql+") AS "+identifier("__la_filter_source"));
     filtered.parameters=source.parameters;

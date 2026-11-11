@@ -8591,3 +8591,22 @@ F014/F041/F055/F067/F068/F373 offen, feste456/386/70 unverändert.
 Vorstand6c7cfa15/Baume48a8986fd6d5549de66dbb21a1f0a6df60b374b privat/exakt
 veröffentlicht; dessenGesamtpaket-/Originalbeleg181,97s/7Hashesgleich enthält
 Find-Erweiterung noch nicht. Direkt weiterentwickeln, keinZwischenabschluss.
+
+
+Native typisierteFilter-/Sort-Snapshots (2026-11-11):
+NATIVE_TYPED_QUERY_SNAPSHOTS.md. Eindeutige belegteAbfrage-Ausgaben explizit
+projizieren undKriterien mitQuelltypen kompilieren; intern validierteSQL-Hülle
+erhält Decimal-Schlüssel bisFilter/Sort abgeschlossen, keinephysischeDecimal-
+Tabelle oderwritableAbleitung. DAOFilter/Sort/OpenRecordset(dbOpenSnapshot)
+unterstützt Decimal jetztinklusiveverketteterKopien/Find/Type20; Originalcursor
+undZeilen unverändert. MehrdeutigeDecimal-Ausgaben3251, CurrencyTicks weiter
+begrenzt; bestehendeTOP-/Quell-/Parameter-/Budgetgrenzen erhalten. ErsterLauf
+fandSQL-Quoting vorJet-Parser (BezeichnerwurdenStrings), fürProjektionen korrekt
+Jet-Klammern verwendet; nurbetroffeneDAO/Querymodell gemeinsam erneut2/2 in
+5,91s bestanden (5,46/0,44), App gebaut. 96-Bit-/Null-/Leer-/Sort-/Typ-/
+ReadOnly-/Kettenfälle gemeinsam. Keine neueCTest-ID/Windows-Referenz oder
+vollständigeDAO-Lifetime-/Filtergrammatik behauptet. F014/F041/F055/F067/F068
+offen, feste456/386/70 unverändert. Vorstand01f7172e/Baum
+695e8b6e64116ab78e26b6098c964fefc9cddadf privat/exakt veröffentlicht.
+Gesamtpaket-/Originalbeleg6c7cfa15 mit181,97s/7Hashesgleich liegt vorFind und
+Snapshot-Erweiterung. Direkt weiterentwickeln, keinZwischen-/Gesamtabschluss.

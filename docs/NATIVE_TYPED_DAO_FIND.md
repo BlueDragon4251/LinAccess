@@ -15,8 +15,9 @@ using the explicit Decimal field metadata. SQL subexpressions without a proven
 Decimal adapter refuse3251 even when Decimal appears only as a field reference;
 CAST-to-REAL no longer bypasses the exactness boundary in that context.
 
-Exact Currency-tick projections retain their prior explicit refusal. Decimal
-Filter/Sort derived snapshots remain outside this change. Full locale/wildcard/
+Exact Currency-tick projections retain their prior explicit refusal. Typed Decimal
+Filter/Sort derived snapshots are separately documented in
+[Native typed query snapshots](NATIVE_TYPED_QUERY_SNAPSHOTS.md). Full locale/wildcard/
 qualified-field/aggregate Find semantics and complete Access error-order/evaluation
 parity are not claimed. Unsupported Decimal LIKE requires an explicit CStr.
 
