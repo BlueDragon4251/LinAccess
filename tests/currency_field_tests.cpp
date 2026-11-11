@@ -432,6 +432,42 @@ End Function
     }
 
     {
+        assert(sql.exec("CREATE TABLE range_history_scope(id INTEGER PRIMARY KEY AUTOINCREMENT,note TEXT UNIQUE,n INTEGER4 DEFAULT 0,payload BLOB,extra TEXT DEFAULT 'kept')"));
+        assert(sql.exec("INSERT INTO range_history_scope(note,payload) VALUES('alpha',x'0102'),('beta',x'03')"));sql.finish();
+        linaccess::AccessTableModel cells(nullptr,db);cells.setTable("range_history_scope");cells.setEditStrategy(QSqlTableModel::OnManualSubmit);assert(cells.select());
+        linaccess::AccessTableView sheet;sheet.setModel(&cells);sheet.show();
+        assert(cells.setDataBlock(0,1,{{"first"},{"second"}}));
+        assert(cells.setDataBlock(2,1,{{"third"}}) && cells.rowCount()==3);
+        sheet.setCurrentIndex(cells.index(0,1));sheet.selectionModel()->select(cells.index(0,1),QItemSelectionModel::ClearAndSelect);assert(sheet.cutSelection() && cells.QSqlTableModel::data(cells.index(0,1),Qt::EditRole).isNull());
+        assert(cells.undoBlock() && cells.rowCount()==3 && cells.clipboardText(cells.index(0,1))=="first");
+        assert(cells.undoBlock() && cells.rowCount()==2 && cells.clipboardText(cells.index(1,1))=="second");
+        assert(cells.undoBlock() && !cells.isDirty() && !cells.canUndoBlock() && cells.canRedoBlock() && cells.clipboardText(cells.index(0,1))=="alpha");
+        assert(cells.redoBlock() && cells.clipboardText(cells.index(0,1))=="first");
+        assert(cells.redoBlock() && cells.rowCount()==3 && cells.clipboardText(cells.index(2,1))=="third");
+        assert(cells.redoBlock() && cells.QSqlTableModel::data(cells.index(0,1),Qt::EditRole).isNull() && !cells.canRedoBlock());
+        assert(cells.undoBlock() && cells.setDataBlock(0,1,{{"branch"}}) && !cells.canRedoBlock());
+        assert(cells.undoBlock() && cells.canRedoBlock());
+        assert(!cells.setDataBlock(0,2,{{"not-a-number"}}) && cells.canRedoBlock());
+        assert(cells.redoBlock() && cells.clipboardText(cells.index(0,1))=="branch");
+        assert(cells.setData(cells.index(0,2),7) && !cells.canUndoBlock() && !cells.canRedoBlock());
+        assert(cells.setDataBlock(0,1,{{"duplicate"}}) && cells.setDataBlock(1,1,{{"duplicate"}}));
+        assert(!cells.submitTransactionally() && cells.canUndoBlock());
+        assert(sql.exec("SELECT COUNT(*),SUM(id) FROM range_history_scope") && sql.next() && sql.value(0).toInt()==2 && sql.value(1).toInt()==3);sql.finish();
+        assert(cells.undoBlock() && cells.clipboardText(cells.index(1,1))=="second" && cells.submitTransactionally());
+        assert(!cells.canUndoBlock() && !cells.canRedoBlock());
+        assert(sql.exec("SELECT id,note,n,extra FROM range_history_scope ORDER BY id") && sql.next() && sql.value(1).toString()=="duplicate" && sql.value(2).toInt()==7);
+        assert(sql.next() && sql.value(1).toString()=="second" && sql.next() && sql.value(1).toString()=="third" && sql.value(3).toString()=="kept" && !sql.next());sql.finish();
+        assert(cells.stageRecordDeletions({1}));
+        sheet.setCurrentIndex(cells.index(0,1));sheet.selectionModel()->select(cells.index(0,1),QItemSelectionModel::ClearAndSelect);assert(sheet.cutSelection());
+        assert(cells.undoBlock() && cells.isPendingRecordDeleted(1));
+        assert(cells.undoBlock() && !cells.isDirty() && !cells.isPendingRecordDeleted(1));
+        assert(cells.redoBlock() && cells.isPendingRecordDeleted(1));
+        assert(cells.redoBlock() && cells.QSqlTableModel::data(cells.index(0,1),Qt::EditRole).isNull());
+        assert(cells.undoBlock() && cells.undoBlock() && !cells.isDirty());
+        assert(cells.select() && !cells.canUndoBlock() && !cells.canRedoBlock());
+    }
+
+    {
         assert(sql.exec("CREATE TABLE current_save(id INTEGER PRIMARY KEY AUTOINCREMENT,n INTEGER CHECK(n>=0),note TEXT,payload BLOB)"));
         assert(sql.exec("INSERT INTO current_save VALUES(1,10,NULL,x''),(2,20,'original',x'01'),(3,30,NULL,NULL)"));
         linaccess::AccessTableModel current(nullptr,db);current.setTable("current_save");current.setEditStrategy(QSqlTableModel::OnManualSubmit);assert(current.select());

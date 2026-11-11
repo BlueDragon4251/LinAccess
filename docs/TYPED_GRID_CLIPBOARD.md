@@ -31,14 +31,15 @@ in generic SQLite BIGINT/BLOB tables without pretending those types are native
 DAO field declarations. Tables requiring actual default evaluation retain the
 existing supported-schema checks.
 
-An unchanged pending pasted block has one native Undo/Redo step. Ctrl+Z/Ctrl+Y,
-the existing Edit menu and RunCommand Undo(292)/Redo(199) share that step outside
+Successful native paste, Cut and staged deletion actions share bounded multi-action
+Undo/Redo. Ctrl+Z/Ctrl+Y, the existing Edit menu and RunCommand Undo(292)/Redo(199)
+use this history outside
 a cell editor. Undo changes the cache only, including removal of added rows;
 Redo restores checked values and the captured native Date defaults. Focused text
 editors retain their own existing text undo. Any unrelated cell/row modification,
 select/requery or successful Save invalidates block history. Readonly models and
 missing/invalidated history refuse the operation. A failed SQL Save retains the
-pending block; this is not a general SQL undo or a multi-operation Access stack.
+pending history; committed SQL and arbitrary Access operations are outside this scope.
 
 Native grid payloads also record selected physical field names. Explicit append
 maps supplied known names to target columns, independently of their order and
@@ -101,8 +102,8 @@ state and unrelated deletion markers remain pending. The target rectangle must
 still contain writable, non-deleted records and no generated/readonly columns.
 Typed MIME, visible field mapping and binary/NULL distinctions are unchanged.
 Undo restores the exact pre-cut drafts; Redo reapplies the clear on that state.
-Normal transactional Save remains the only persistence step. This is one range
-history step, not a general Access multi-operation stack.
+Normal transactional Save remains the only persistence step. Cut participates in
+the bounded native range history described above.
 
 Clipboard publication can synchronously call application code. Cut checks the
 same model, selection, visible mapping, row positions, field identities and raw
@@ -110,3 +111,20 @@ value types/values after publication before clearing. A changed source is refuse
 without clearing its new values. The clipboard may contain the successful copy;
 no SQL write or forced draft save occurs. Existing range/source/memory/error
 bounds remain; no Windows/Access event-equivalence claim is added.
+
+Bounded multi-action history (2026-11-11)
+---------------------------------------
+Up to 64 native range actions are retained within a conservative combined payload
+estimate of 256 MiB. Oldest actions are evicted first; a single larger snapshot
+is refused before mutation. Stack transfers are prepared before cache changes.
+A successful new action discards the redo branch; a refused conversion preserves
+it. Save failure preserves both stacks; successful Save and explicit source reload
+retire them. Fetch/topology boundaries cannot replay an older incompatible cache.
+Ordinary cell/row edits still invalidate history. This does not add general cell
+edit undo, committed SQL reversal or full Access event/history equivalence.
+
+Existing mainwindow_documents passed in 15.28 s; the affected field target passed
+in 0.58 s after correcting a regression expectation to the preceding pending
+value. Coverage includes three actions backwards/forwards, append removal/default
+preservation, branch replacement, failed conversion/Save, successful Save and
+delete/Cut interleaving. No new CTest ID or Windows oracle. F340/F168 remain open.

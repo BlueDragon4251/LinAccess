@@ -13,7 +13,11 @@ A transactional Save failure retains the deletion action, so Undo/Redo remains
 available after a later foreign-key rejection. A successful Save retires history
 through the existing refresh. Ordinary subsequent edits, row changes, explicit
 record cancellation and source reload invalidate history as for range paste.
-This is the existing single-action history, not an unlimited undo stack.
+Deletion participates in the bounded multi-action native history (at most 64
+actions and a conservative 256 MiB combined payload estimate); see
+[TYPED_GRID_CLIPBOARD.md](TYPED_GRID_CLIPBOARD.md). A later native range action
+can be undone first, followed by the deletion. Ordinary edits still invalidate
+the stacks. This does not provide an unlimited Access undo stack.
 
 This scope does not undo committed SQL deletion, add dirty-cache single-record
 history, restore the original selection/focus/event sequence, or implement all

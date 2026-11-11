@@ -4606,3 +4606,20 @@ Access-Undo-Stack. F340 bleibt breit offen;456/386/70 unverändert.
 Vorstandcf9d6933a700e3957b7cb4a2c886b897760cb4b4/Baum2e2121ad3aee243e32f0bd67c864b7287c4b9d00
 privat/exakt veröffentlicht. Gültiger DEB/Originalbeleg dieses Vorstands184,68s/
 7Hash gleich siehe oben; neue Cut-Erweiterung liegt nach diesem Paket.
+
+
+Mehrstufige native Bereichshistorie (2026-11-11): TYPED_GRID_CLIPBOARD.md und
+TABLE_DELETE_HISTORY.md. Paste/Cut/gestufte Löschung teilen bis zu64 Aktionen
+innerhalb konservativ geschätzter256MiB Payload; älteste Aktionen werden
+verworfen, zu große Einzelaktionen vor Mutation verweigert. Stackänderungen
+vor Cachemutation vorbereiten; neuer erfolgreicher Zweig verwirft Redo,
+fehlgeschlagene Konversion/SQL-Save erhält Historie. Save-Erfolg/Quellwechsel/
+gewöhnliche Einzeländerung beendet Historie; inkompatible Fetchgrenzen geschützt.
+App gebaut, bestehendes Hauptfensterziel15,28s bestanden; betroffenes Feldziel
+nach korrigierter Erwartung des vorherigen Entwurfswerts1/1 in0,58s bestanden.
+Drei Aktionen rückwärts/vorwärts, Append/Defaults, neuer Zweig, Fehlererhalt,
+Save und Delete/Cut-Verkettung geprüft. Keine neue CTest-ID/Windows-Parität.
+F340/F168 bleiben offen; feste456 IDs,386 bestätigte Teilumfänge/70 offene
+Vollanforderungen unverändert. Vorstand15f842fc88d595e1c05dafc0bd0f65e15391458c
+privat/exakt nachgelesen. Gültiger Gesamtpaketbeleg weiterhincf9d6933,184,68s/
+7Hashes unverändert; aktuelle Bereichserweiterungen liegen danach.

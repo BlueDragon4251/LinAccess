@@ -91,7 +91,11 @@ private:
         QVector<int> deletions;
         QVector<QVector<QVariant>> values;QVector<int> columns;QMap<QString,QVariant> dateDefaults;QVector<CachedUpdate> before;QSet<int> suppliedColumns;
     };
-    std::optional<BlockHistory> blockHistory_;
+    void clearBlockHistory();
+    QVector<BlockHistory> prepareBlockHistory(const BlockHistory& history) const;
+    QVector<BlockHistory> undoHistory_,redoHistory_;
+    quint64 historyGeneration_{};
+    bool replayingHistory_{};
     bool blockMutation_{};
     bool changing_{},saving_{},readOnly_{},binaryWriting_{};
 };

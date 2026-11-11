@@ -40,11 +40,11 @@ QString editMessage(int number) {
 }
 AccessTableModel::AccessTableModel(QObject* parent,QSqlDatabase database):QSqlTableModel(parent,database) {
     connect(this,&QAbstractItemModel::dataChanged,this,[this](const QModelIndex& first,const QModelIndex& last) {
-        if(!blockMutation_) blockHistory_.reset();
+        if(!blockMutation_) clearBlockHistory();
         if(editStrategy()==OnManualSubmit) for(int row=first.row();row<=last.row();++row) dirtyRows_.insert(row);
     });
-    connect(this,&QAbstractItemModel::rowsInserted,this,[this] {if(!blockMutation_) blockHistory_.reset();});
-    connect(this,&QAbstractItemModel::rowsRemoved,this,[this] {if(!blockMutation_) blockHistory_.reset();});
+    connect(this,&QAbstractItemModel::rowsInserted,this,[this] {if(!blockMutation_) clearBlockHistory();});
+    connect(this,&QAbstractItemModel::rowsRemoved,this,[this] {if(!blockMutation_) clearBlockHistory();});
 }
 bool AccessTableModel::rejectEdit(int number,const QString& message) {
     setLastError(QSqlError("LinAccess",message,QSqlError::StatementError,QString::number(number)));
@@ -58,17 +58,17 @@ bool AccessTableModel::refreshTypes() {
 }
 void AccessTableModel::setTable(const QString& table) {
     if(saving_) { (void)reject(2501); return; }
-    queryAliases_.clear();sourceSort_.clear();blockHistory_.reset();dirtyRows_.clear(); deletedRows_.clear(); submittedKeys_.clear(); insertedKey_.clear(); QSqlTableModel::setTable(table); (void)refreshTypes();
+    queryAliases_.clear();sourceSort_.clear();clearBlockHistory();dirtyRows_.clear(); deletedRows_.clear(); submittedKeys_.clear(); insertedKey_.clear(); QSqlTableModel::setTable(table); (void)refreshTypes();
 }
 bool AccessTableModel::select() {
     if(saving_) return reject(2501);
-    blockHistory_.reset();const bool result=refreshTypes() && QSqlTableModel::select();
+    clearBlockHistory();const bool result=refreshTypes() && QSqlTableModel::select();
     if(result) { dirtyRows_.clear(); deletedRows_.clear(); }
     return result;
 }
 void AccessTableModel::clear() {
     if(saving_) { (void)reject(2501); return; }
-    queryAliases_.clear();sourceSort_.clear();blockHistory_.reset();QSqlTableModel::clear();captions_.clear();descriptions_.clear(); dirtyRows_.clear(); deletedRows_.clear(); submittedKeys_.clear(); insertedKey_.clear();
+    queryAliases_.clear();sourceSort_.clear();clearBlockHistory();QSqlTableModel::clear();captions_.clear();descriptions_.clear(); dirtyRows_.clear(); deletedRows_.clear(); submittedKeys_.clear(); insertedKey_.clear();
 }
 QVector<QPersistentModelIndex> AccessTableModel::rowAnchors(const QSet<int>& rows) const {
     QVector<QPersistentModelIndex> result; result.reserve(rows.size());
@@ -79,7 +79,7 @@ QSet<int> AccessTableModel::anchoredRows(const QVector<QPersistentModelIndex>& a
     QSet<int> result; for(const auto& anchor:anchors) if(anchor.isValid()) result.insert(anchor.row()); return result;
 }
 void AccessTableModel::revertRow(int row) {
-    if(!blockMutation_) blockHistory_.reset();
+    if(!blockMutation_) clearBlockHistory();
     if(saving_) { (void)reject(2501); return; }
     const QScopedValueRollback<bool> changing(changing_,true);
     auto dirty=dirtyRows_,deleted=deletedRows_; dirty.remove(row); deleted.remove(row);
@@ -140,18 +140,22 @@ bool AccessTableModel::stageRecordDeletions(const QVector<int>& rows) {
         for(int field=0;field<key.count();++field) if(values.value(key.fieldName(field)).isNull()) return reject(3251);
     }
     BlockHistory history;history.originalRows=rowCount();history.applied=true;history.deletions=ordered;
-    const auto previous=blockHistory_;
+    QVector<BlockHistory> nextHistory;
+    try {if(!replayingHistory_) nextHistory=prepareBlockHistory(history);}
+    catch(const VbaRuntimeError& error) {return rejectEdit(error.number,QString::fromUtf8(error.what()));}
+    catch(const std::bad_alloc&) {return reject(7);}
     const QScopedValueRollback<bool> mutation(blockMutation_,true);
     QVector<int> staged;
     for(const int row:ordered) {
         if(!removeRows(row,1)) {
             const auto problem=lastError();
             for(const int undone:staged) revertRow(undone);
-            blockHistory_=previous;setLastError(problem);return false;
+            setLastError(problem);return false;
         }
         staged.push_back(row);
     }
-    blockHistory_=std::move(history);setLastError({});return true;
+    if(!replayingHistory_) {undoHistory_.swap(nextHistory);redoHistory_.clear();}
+    setLastError({});return true;
 }
 bool AccessTableModel::setReadOnly(bool value) {
     if(saving_ || changing_) return reject(2501);
@@ -212,7 +216,7 @@ bool AccessTableModel::submitExistingRecord(int row) {
         if(!db.commit()) {const auto problem=db.lastError();db.rollback();setLastError(problem);return false;}
         try {counters.complete(true);} catch(const VbaRuntimeError& error) {counterError=error.number;}
     }
-    blockHistory_.reset();submittedKeys_.clear();
+    clearBlockHistory();submittedKeys_.clear();
     // Qt selectRow replaces only this cache record. No reselect/reordering or
     // restoration of unrelated update/insert/delete drafts is necessary.
     const bool refreshed=QSqlTableModel::selectRow(row);
@@ -577,7 +581,7 @@ bool AccessTableModel::applyDataBlock(int firstRow,int firstColumn,const QVector
     struct Cell { int row,column; QVariant value; };
     QVector<Cell> checked;QMap<QString,QVariant> dateDefaults;BlockHistory history;
     history.firstRow=firstRow;history.firstColumn=firstColumn;history.originalRows=originalRows;history.applied=true;history.skipGenerated=skipGenerated;if(mappedColumns) history.columns=*mappedColumns;if(suppliedColumns) history.suppliedColumns=*suppliedColumns;
-    const auto previousHistory=blockHistory_;
+    QVector<BlockHistory> nextHistory;
     try {
         history.before=captureUpdates();
         if(appended) dateDefaults=restoredDefaults ? *restoredDefaults : nativeTableDateDefaults(database(),tableName());
@@ -613,6 +617,7 @@ bool AccessTableModel::applyDataBlock(int firstRow,int firstColumn,const QVector
             }
             history.values.push_back(std::move(historyRow));
         }
+        if(!replayingHistory_) nextHistory=prepareBlockHistory(history);
     } catch(const VbaRuntimeError& error) { return rejectEdit(error.number,QString::fromUtf8(error.what())); }
       catch(const std::bad_alloc&) { return reject(7); }
     int failure=0;
@@ -632,9 +637,9 @@ bool AccessTableModel::applyDataBlock(int firstRow,int firstColumn,const QVector
           catch(const std::exception&) { failure=3251; }
         // The cache was clean on entry; revert inserted rows and changed cells together.
     }
-    if(failure) {const bool restored=restoreUpdates(history.before,originalRows);blockHistory_=previousHistory;return reject(restored ? failure : 3251);}
+    if(failure) {const bool restored=restoreUpdates(history.before,originalRows);if(!restored) clearBlockHistory();return reject(restored ? failure : 3251);}
     for(int row=originalRows;row<endRow;++row) dirtyRows_.insert(row);
-    blockHistory_=std::move(history);
+    if(!replayingHistory_) {undoHistory_.swap(nextHistory);redoHistory_.clear();}
     const int firstChanged=mappedColumns ? *std::min_element(mappedColumns->cbegin(),mappedColumns->cend()) : firstColumn;
     const int lastChanged=mappedColumns ? *std::max_element(mappedColumns->cbegin(),mappedColumns->cend()) : firstColumn+columns-1;
     const auto last=index(firstRow+values.size()-1,lastChanged);
@@ -690,30 +695,71 @@ bool AccessTableModel::restoreUpdates(const QVector<CachedUpdate>& updates,int o
     if(!updates.isEmpty()) emit dataChanged(index(updates.front().row,0),index(updates.back().row,columnCount()-1),{Qt::DisplayRole,Qt::EditRole,Qt::CheckStateRole});
     return true;
 }
+void AccessTableModel::clearBlockHistory() {
+    undoHistory_.clear();redoHistory_.clear();++historyGeneration_;
+}
+QVector<AccessTableModel::BlockHistory> AccessTableModel::prepareBlockHistory(const BlockHistory& history) const {
+    constexpr qint64 budget=256LL*1024*1024;
+    const auto cost=[&](const BlockHistory& action) {
+        qint64 bytes=256+4LL*(action.deletions.size()+action.columns.size()+action.suppliedColumns.size());
+        const auto valueCost=[](const QVariant& value)->qint64 {
+            return 64+(value.metaType().id()==QMetaType::QString ? 2LL*value.toString().size() : value.metaType().id()==QMetaType::QByteArray ? value.toByteArray().size() : 0);
+        };
+        for(const auto& row:action.values) {bytes+=32;for(const auto& value:row) bytes+=valueCost(value);if(bytes>budget) return bytes;}
+        for(const auto& row:action.before) {bytes+=64+4LL*row.columns.size();for(const auto& value:row.values) bytes+=valueCost(value);if(bytes>budget) return bytes;}
+        for(auto it=action.dateDefaults.cbegin();it!=action.dateDefaults.cend();++it) bytes+=32+2LL*it.key().size()+valueCost(it.value());
+        return bytes;
+    };
+    const auto newest=cost(history);
+    if(newest>budget) throw VbaRuntimeError(3251,"Native range undo snapshot exceeds its memory budget");
+    auto next=undoHistory_;
+    if(!next.isEmpty()) {
+        const auto& previous=next.back();
+        const auto rows=qMax<qint64>(previous.originalRows,static_cast<qint64>(previous.firstRow)+previous.values.size());
+        if(history.originalRows!=rows) next.clear(); // New physical fetch boundary.
+    }
+    next.append(history);
+    while(next.size()>64) next.removeFirst();
+    qint64 total=newest;int first=next.size()-1;
+    while(first>0) {const auto previous=cost(next[first-1]);if(previous>budget-total) break;total+=previous;--first;}
+    if(first) next.erase(next.begin(),next.begin()+first);
+    return next;
+}
 bool AccessTableModel::canUndoBlock() const {
-    return !readOnly_ && !saving_ && !changing_ && blockHistory_ && blockHistory_->applied && isDirty()
-        && rowCount()==qMax<qint64>(blockHistory_->originalRows,static_cast<qint64>(blockHistory_->firstRow)+blockHistory_->values.size());
+    if(readOnly_ || saving_ || changing_ || undoHistory_.isEmpty() || !isDirty()) return false;
+    const auto& history=undoHistory_.back();
+    return rowCount()==qMax<qint64>(history.originalRows,static_cast<qint64>(history.firstRow)+history.values.size());
 }
 bool AccessTableModel::canRedoBlock() const {
-    return !readOnly_ && !saving_ && !changing_ && blockHistory_ && !blockHistory_->applied && isDirty()==!blockHistory_->before.isEmpty() && rowCount()==blockHistory_->originalRows;
+    if(readOnly_ || saving_ || changing_ || redoHistory_.isEmpty()) return false;
+    const auto& history=redoHistory_.back();
+    return isDirty()==!history.before.isEmpty() && rowCount()==history.originalRows;
 }
 bool AccessTableModel::undoBlock() {
     if(!canUndoBlock()) return rejectEdit(2046,"Keine unveränderte Bereichsaktion zum Rückgängigmachen vorhanden.");
     try {
-        auto history=*blockHistory_;
+        const auto history=undoHistory_.back();auto nextUndo=undoHistory_,nextRedo=redoHistory_;
+        nextUndo.removeLast();nextRedo.append(history);const auto generation=historyGeneration_;
         const QScopedValueRollback<bool> changing(changing_,true),blockMutation(blockMutation_,true);
         if(!history.deletions.isEmpty()) {
-            for(const int row:history.deletions) {
-                QSqlTableModel::revertRow(row);dirtyRows_.remove(row);deletedRows_.remove(row);
-            }
-        } else if(!restoreUpdates(history.before,history.originalRows)) {blockHistory_.reset();return reject(3251);}
-        history.applied=false;blockHistory_=std::move(history);setLastError({});return true;
+            for(const int row:history.deletions) {QSqlTableModel::revertRow(row);dirtyRows_.remove(row);deletedRows_.remove(row);}
+        } else if(!restoreUpdates(history.before,history.originalRows)) {clearBlockHistory();return reject(3251);}
+        if(generation!=historyGeneration_) return reject(2501);
+        undoHistory_.swap(nextUndo);redoHistory_.swap(nextRedo);setLastError({});return true;
     } catch(const std::bad_alloc&) {return reject(7);}
 }
 bool AccessTableModel::redoBlock() {
     if(!canRedoBlock()) return rejectEdit(2046,"Keine Bereichsaktion zum Wiederherstellen vorhanden.");
-    try {const auto history=*blockHistory_;if(!history.deletions.isEmpty()) return stageRecordDeletions(history.deletions);return applyDataBlock(history.firstRow,history.firstColumn,history.values,true,&history.dateDefaults,history.skipGenerated,history.skipGenerated ? &history.suppliedColumns : nullptr,history.columns.isEmpty() ? nullptr : &history.columns);}
-    catch(const std::bad_alloc&) {return reject(7);}
+    try {
+        const auto history=redoHistory_.back();auto nextUndo=undoHistory_,nextRedo=redoHistory_;
+        nextUndo.append(history);nextRedo.removeLast();const auto generation=historyGeneration_;
+        const QScopedValueRollback<bool> replay(replayingHistory_,true);
+        const bool accepted=!history.deletions.isEmpty() ? stageRecordDeletions(history.deletions)
+            : applyDataBlock(history.firstRow,history.firstColumn,history.values,true,&history.dateDefaults,history.skipGenerated,history.skipGenerated ? &history.suppliedColumns : nullptr,history.columns.isEmpty() ? nullptr : &history.columns);
+        if(!accepted) return false;
+        if(generation!=historyGeneration_) return reject(2501);
+        undoHistory_.swap(nextUndo);redoHistory_.swap(nextRedo);setLastError({});return true;
+    } catch(const std::bad_alloc&) {return reject(7);}
 }
 bool AccessTableModel::insertRowIntoTable(const QSqlRecord& row) {
     insertedKey_.clear();
