@@ -32,3 +32,6 @@ F014/F041/F067/F068/F071 remain open; fixed456/386/70 unchanged.
 App built; existing query model0.41s and final affected DAO1/1 in5.32s passed.
 Initial source-less compilation now defers binding until schema resolution.
 No new CTest target/catalog item.
+
+Subsequent unique explicit AS aliases can now retain their proven native types;
+see [Native typed query aliases](NATIVE_TYPED_QUERY_ALIASES.md) for the bounds.

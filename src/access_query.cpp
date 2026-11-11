@@ -457,6 +457,13 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
         return 0;
     };
     auto resolvedFields=fields;
+    static const QSet<QString> nativeAliasTypes{"DECIMAL_EXACT","DATETIME","BOOL","BOOLEAN","SINGLE_REAL","CURRENCY_REAL","CURRENCY_TICKS","INTEGER1","INTEGER2","INTEGER4","DOUBLE"};
+    QMap<QString,int> aliasCounts;int aliasDepth=0;
+    for(qsizetype at=start+1;at<tokens.size();++at) {
+        if(symbol(tokens[at],"(")) ++aliasDepth;else if(symbol(tokens[at],")")) --aliasDepth;
+        else if(!aliasDepth && (word(at,"FROM") || word(at,"INTO") || word(at,"WHERE") || word(at,"GROUP") || word(at,"HAVING") || word(at,"ORDER"))) break;
+        else if(!aliasDepth && word(at,"AS") && at+1<tokens.size() && name(tokens[at+1])) ++aliasCounts[tokens[at+1].value.toCaseFolded()];
+    }
     struct Expression { QString type; QVector<Token> code; };
     const auto call=[](const QString& function,const QVector<Token>& first,const QVector<Token>& second=QVector<Token>{}) {
         QVector<Token> code{{Token::Word,function},{Token::Other,"("}}; code+=first;
@@ -914,6 +921,10 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
             auto parsed=parse(expression,0);
             if(parsed.type=="DECIMAL_EXACT" && alias.size()==2) {
                 const auto key=alias.back().value.toCaseFolded();if(resolvedFields.contains(key)) throw VbaRuntimeError(3251,"Decimal result alias collides with a source field or earlier alias");resolvedFields.insert(key,parsed.type);
+            }
+            else if(alias.size()==2 && nativeAliasTypes.contains(parsed.type)) {
+                const auto key=alias.back().value.toCaseFolded();
+                if(aliasCounts.value(key)==1 && !fields.contains(key)) resolvedFields.insert(key,parsed.type);
             }
             auto direct=expression;
             while(direct.size()>=3 && symbol(direct.front(),"(") && symbol(direct.back(),")")) {
@@ -1714,15 +1725,20 @@ static AccessQueryPlan compileCurrencyQuery(const QString& source,const QMap<QSt
     preserveComputedProjectionNames(tokens,pos);
     plan.resultTypes=typedProjectionExpressions(tokens,pos,plan.parameters,fields,functions);
     auto clauseFields=fields;
-    if(plan.resultTypes.contains("DECIMAL_EXACT")) {
-        int depth=0,output=0;
+    {
+        static const QSet<QString> nativeAliasTypes{"DECIMAL_EXACT","DATETIME","BOOL","BOOLEAN","SINGLE_REAL","CURRENCY_REAL","CURRENCY_TICKS","INTEGER1","INTEGER2","INTEGER4","DOUBLE"};
+        QMap<QString,int> counts;QMap<QString,QString> aliasTypes;int depth=0,output=0;
         for(qsizetype at=pos+1;at<tokens.size();++at) {
             if(symbol(tokens[at],"(")) ++depth;else if(symbol(tokens[at],")")) --depth;
             else if(!depth && symbol(tokens[at],",")) ++output;
-            else if(!depth && tokens[at].kind==Token::Word && tokens[at].value.compare("FROM",Qt::CaseInsensitive)==0) break;
-            else if(!depth && tokens[at].kind==Token::Word && tokens[at].value.compare("AS",Qt::CaseInsensitive)==0 && at+1<tokens.size() && plan.resultTypes.value(output)=="DECIMAL_EXACT") {
-                const auto name=tokens[at+1].value.toCaseFolded();if(fields.contains(name)) throw VbaRuntimeError(3251,"Decimal result alias collides with a source field");clauseFields.insert(name,"DECIMAL_EXACT");
+            else if(!depth && tokens[at].kind==Token::Word && QSet<QString>{"from","into","where","group","having","order"}.contains(tokens[at].value.toCaseFolded())) break;
+            else if(!depth && tokens[at].kind==Token::Word && tokens[at].value.compare("AS",Qt::CaseInsensitive)==0 && at+1<tokens.size()) {
+                const auto name=tokens[at+1].value.toCaseFolded();++counts[name];aliasTypes.insert(name,plan.resultTypes.value(output));
             }
+        }
+        for(auto alias=aliasTypes.cbegin();alias!=aliasTypes.cend();++alias) if(nativeAliasTypes.contains(alias.value())) {
+            if(alias.value()=="DECIMAL_EXACT" && fields.contains(alias.key())) throw VbaRuntimeError(3251,"Decimal result alias collides with a source field");
+            if(counts.value(alias.key())==1 && !fields.contains(alias.key())) clauseFields.insert(alias.key(),alias.value());
         }
     }
     if(decimalQuery && plan.resultTypes.isEmpty()) throw VbaRuntimeError(3251,"Decimal queries require explicit typed output projections");

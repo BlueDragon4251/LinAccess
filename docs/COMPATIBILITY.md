@@ -7841,3 +7841,29 @@ feste456/386/70 unverändert. Vorstand7c4e8431/Baum
 123e61d355099c3452c1d76b3ddca3a448dde59c privat/exakt veröffentlicht.
 LetzterGesamtpaket-/Originalbelegf1f145cd mit182,16s/7Hashes gleich liegt vor
 Decimal- und allgemeinenPrädikaten. Direkt weiterprogrammieren, kein Abschluss.
+
+
+Beleg nach allgemeinen typisiertenPrädikaten (2026-11-11): c0747ac78f0ebe81f2747b7e8e847344b25039ed
+/Baumc214749e678889113a7e4b9370e634e625179d28 privat/exakt veröffentlicht.
+Bestehendes Abfrageinventar1/1 in55,54s bestanden; alle7 geschütztenHashwerte
+unverändert. Weiter100klassifiziert/78ausgeführt/22begrenzt; kein neuer
+Access-Ergebnisoracle. Gesamtpaket-/Originalbeleg weiterf1f145cd/182,16s.
+Feste456/386/70 unverändert; unmittelbar weiterentwickeln.
+
+
+Belegte native berechneteAS-Aliase (2026-11-11): NATIVE_TYPED_QUERY_ALIASES.md.
+Eindeutige expliziteAS-Projektionen ohneQuellfeldkollision behalten Date/Bool/
+Single/Currency/Decimal und vorhandeneIntegralarte/Double fürnachfolgende
+SELECT-Ausdrücke, WHERE/HAVING undGruppierung/Sortierung. Vollständige
+Projektionszählung verhindert neueBindungmehrdeutigerNamen; NichtDecimal-
+Quellschatten behaltenbisherigenPfad, Decimal-Kollisionsschutz bleibt.
+GeschlossenerPure-Aliasexpander bleibt zuständig, keineProbezeilentypen oder
+allgemeineForward-/Volatile-/Nested-/Writable-Aliasparität erfunden. App gebaut;
+bestehendes DAO/Querymodell2/2 in5,83s bestanden (5,42/0,40). Tatsächliche
+CVar-Date/Bool/Single/Currency-Aliase, Year/VarType-Ketten, IN/BETWEEN/ORDER BY,
+DAO-Arten undQuellschatten geprüft. Keine neueCTest-ID/Windows-Referenz.
+F014/F041/F067/F068/F107 offen, feste456/386/70 unverändert.
+Vorstandc0747ac7/Baumc214749e678889113a7e4b9370e634e625179d28 privat/exakt
+veröffentlicht, dessenInventar55,54s/7Hashesgleich/78von100 unverändert.
+Gesamtpaket-/Originalbelegf1f145cd182,16s liegt vorPrädikaten/Alias-Erweiterung.
+Direkt weiterentwickeln, kein Zwischen-/Gesamtabschluss.
