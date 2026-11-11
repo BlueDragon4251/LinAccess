@@ -8519,3 +8519,20 @@ F014/F041/F067/F068/F071 offen; feste456/386/70 unverändert.
 Vorstandf1f145cd/Baum503e49c2ae585d00b255067cf0a81499db2b0255 privat/exakt
 veröffentlicht; dessen Gesamtpaket-/Originalbeleg182,16s/7Hashes gleich liegt vor
 dieser Prädikaterweiterung. Direkt weiterentwickeln, kein Zwischenabschluss.
+
+
+Native typisierte SQL-IN/BETWEEN-Familie (2026-11-11):
+NATIVE_TYPED_SQL_PREDICATES.md. Decimal-Prädikatschicht für belegte Date-/Bool-/
+Single-/Currency-Operanden wiederverwendet. Native -1/0, Single-Rundung, Currency
+und negativeDate-Serienordnung stattSQLite-Rohtransport, einmaligeArgumente,
+NULL-/NOT-/inklusiveBereichssemantik und tatsächlicheDAO-Booleanwerte. Date
+mit anderen belegtenArten sowie umgekehrteGrenzen3251; sonstige unbelegte
+NichtDecimal-Kontexte behalten bisherigenPfad. ErsterLauf zeigte zu frühe
+Schemaforderung, vorSchemaauflösung jetzt verzögert. App gebaut, Querymodell
+0,41s bestanden; nur betroffenesDAO erneut1/1 in5,32s bestanden. Einziger
+anschließender Quelltextwechsel korrigiert einen Kommentarnamen. Keine neue
+CTest-ID/Windows-Referenz/kompletteJet-Promotion. F014/F041/F067/F068/F071 offen;
+feste456/386/70 unverändert. Vorstand7c4e8431/Baum
+123e61d355099c3452c1d76b3ddca3a448dde59c privat/exakt veröffentlicht.
+LetzterGesamtpaket-/Originalbelegf1f145cd mit182,16s/7Hashes gleich liegt vor
+Decimal- und allgemeinenPrädikaten. Direkt weiterprogrammieren, kein Abschluss.

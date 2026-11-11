@@ -675,12 +675,13 @@ void currencyTicksAdd(sqlite3_context* c,int,sqlite3_value** a) noexcept {curren
 void currencyTicksSubtract(sqlite3_context* c,int,sqlite3_value** a) noexcept {currencyTicksArithmetic(c,a,"-");}
 void currencyTicksMultiply(sqlite3_context* c,int,sqlite3_value** a) noexcept {currencyTicksArithmetic(c,a,"*");}
 
-template<bool Between> void decimalPredicate(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
+template<bool Between,bool RequireDecimal=true> void typedNumericPredicate(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
     auto& native=api();try {
         if(count<3 || count>129 || native.type(args[0])!=SQLITE_TEXT) throw VbaRuntimeError(450,"Decimal predicate operand count invalid");
         const auto types=scalarText(args[0]).split(',');
-        if(types.size()!=count-1 || !types.contains("DECIMAL_EXACT") || (Between && count!=4)) throw VbaRuntimeError(450,"Decimal predicate type descriptor invalid");
-        static const QSet<QString> numeric{"DECIMAL_EXACT","INTEGER1","INTEGER2","INTEGER4","SINGLE_REAL","DOUBLE","BOOL","BOOLEAN","CURRENCY_REAL","CURRENCY_TICKS"};
+        if(types.size()!=count-1 || (RequireDecimal && !types.contains("DECIMAL_EXACT")) || (Between && count!=4)) throw VbaRuntimeError(450,"Decimal predicate type descriptor invalid");
+        static const QSet<QString> numeric{"DATETIME","DECIMAL_EXACT","INTEGER1","INTEGER2","INTEGER4","SINGLE_REAL","DOUBLE","BOOL","BOOLEAN","CURRENCY_REAL","CURRENCY_TICKS"};
+        if(types.contains("DATETIME")) for(const auto& type:types) if(!type.isEmpty() && type!="DATETIME") throw VbaRuntimeError(3251,"Date predicates require Date or Null operands");
         std::vector<VbaValue> values;values.reserve(count-1);bool null=false;
         for(int at=1;at<count;++at) {
             if(native.type(args[at])==SQLITE_NULL) {values.emplace_back();null=true;continue;}
@@ -690,7 +691,7 @@ template<bool Between> void decimalPredicate(sqlite3_context* context,int count,
         if(values[0].kind==VbaValue::Kind::Empty || (Between && null)) {native.nullResult(context);return;}
         ScalarStringHost host;bool result=false;
         if constexpr(Between) {
-            if(compareVbaValues(">",values[1],values[2],host,VbaCompareMode::Binary).truthy()) throw VbaRuntimeError(3251,"Reversed Decimal BETWEEN bounds require an Access reference");
+            if(compareVbaValues(">",values[1],values[2],host,VbaCompareMode::Binary).truthy()) throw VbaRuntimeError(3251,"Reversed typed BETWEEN bounds require an Access reference");
             result=compareVbaValues(">=",values[0],values[1],host,VbaCompareMode::Binary).truthy() && compareVbaValues("<=",values[0],values[2],host,VbaCompareMode::Binary).truthy();
         } else {
             for(std::size_t at=1;at<values.size();++at) if(values[at].kind!=VbaValue::Kind::Empty && compareVbaValues("=",values[0],values[at],host,VbaCompareMode::Binary).truthy()) {result=true;break;}
@@ -1304,8 +1305,10 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_ccur",-1,&currencyNumber,nullptr,nullptr);
     ensure("linaccess_jet_currency_store",1,&currencyStore,nullptr,nullptr);
     ensure("linaccess_jet_field_store",2,&fieldStore,nullptr,nullptr);
-    ensure("linaccess_jet_decimal_in",-1,&decimalPredicate<false>,nullptr,nullptr);
-    ensure("linaccess_jet_decimal_between",-1,&decimalPredicate<true>,nullptr,nullptr);
+    ensure("linaccess_jet_bound_in",-1,&typedNumericPredicate<false,false>,nullptr,nullptr);
+    ensure("linaccess_jet_bound_between",-1,&typedNumericPredicate<true,false>,nullptr,nullptr);
+    ensure("linaccess_jet_decimal_in",-1,&typedNumericPredicate<false>,nullptr,nullptr);
+    ensure("linaccess_jet_decimal_between",-1,&typedNumericPredicate<true>,nullptr,nullptr);
     ensure("linaccess_jet_decimal_sum",1,nullptr,&decimalSumStep,&decimalSumFinal);
     ensure("linaccess_jet_currency_sum",1,nullptr,&currencySumStep,&currencySumFinal);
     ensure("linaccess_jet_currency_add",2,&currencyAdd,nullptr,nullptr);
