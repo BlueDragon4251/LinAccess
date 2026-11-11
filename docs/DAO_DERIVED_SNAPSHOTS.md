@@ -19,7 +19,9 @@ moving or changing the original cursor. Unknown sort fields refuse3251.
 CopyQueryDef on transformed results remains unavailable: an original definition
 is not silently misreported as the transformed SQL. Exact Windows property
 values, default/mode/error/clone identity and complete DAO parity remain open.
-Existing Currency filtering limitations are inherited explicitly.
+Bounded full-range Currency wrappers are documented in
+[EXACT_CURRENCY_QUERY_SNAPSHOTS.md](EXACT_CURRENCY_QUERY_SNAPSHOTS.md); unsupported
+numeric mixing and physical target conversion remain explicit.
 
 Public API contracts, not Access2003 runtime-oracle evidence:
 - https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/recordset-filter-property-dao

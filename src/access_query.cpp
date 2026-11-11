@@ -481,8 +481,8 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
                     continue;
                 }
                 if(token.kind==Token::Word && (key=="null" || key=="true" || key=="false")) continue;
-                if(resolvedFields.value(key)=="DECIMAL_EXACT") return true;
-                if(at+2<code.size() && symbol(code[at+1],".") && resolvedFields.value(key+'.'+code[at+2].value.toCaseFolded())=="DECIMAL_EXACT") return true;
+                if(resolvedFields.value(key)=="DECIMAL_EXACT" || resolvedFields.value(key)=="CURRENCY_TICKS") return true;
+                if(at+2<code.size() && symbol(code[at+1],".") && QSet<QString>{"DECIMAL_EXACT","CURRENCY_TICKS"}.contains(resolvedFields.value(key+'.'+code[at+2].value.toCaseFolded()))) return true;
             }
             return false;
         };
@@ -548,6 +548,8 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
                     bool decimal=false,native=false;
                     static const QSet<QString> special{"DECIMAL_EXACT","DATETIME","BOOL","BOOLEAN","SINGLE_REAL","CURRENCY_REAL","CURRENCY_TICKS"};
                     for(const auto& argument:arguments) {decimal=decimal || argument.type=="DECIMAL_EXACT";native=native || special.contains(argument.type);}
+                    if(std::any_of(arguments.cbegin(),arguments.cend(),[](const auto& value) {return value.type=="CURRENCY_TICKS";}))
+                        for(const auto& value:arguments) if(value.type!="CURRENCY_TICKS" && value.type!="CURRENCY_REAL" && value.type!="DECIMAL_EXACT" && !nullLiteral(value)) throw VbaRuntimeError(3251,"Exact Currency predicates require proven numeric conversion");
                     static const QSet<QString> numeric{"DATETIME","DECIMAL_EXACT","INTEGER1","INTEGER2","INTEGER4","SINGLE_REAL","DOUBLE","BOOL","BOOLEAN","CURRENCY_REAL","CURRENCY_TICKS"};
                     bool proven=true;for(const auto& argument:arguments) proven=proven && (numeric.contains(argument.type) || nullLiteral(argument));
                     // Initial compilation has no source schema. Defer native binding
@@ -602,6 +604,13 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
                 QVector<Token> code=left.code;code.append({Token::Other,","});code+=right.code;
                 const auto descriptor=left.type+","+right.type;
                 return {QSet<QString>{"+","-","*","/"}.contains(op) ? QString("DECIMAL_EXACT") : QString("BOOLEAN"),call("linaccess_jet_decimal_"+operations.value(op),{{Token::String,descriptor}},code)};
+            }
+            if(left.type=="CURRENCY_TICKS" || right.type=="CURRENCY_TICKS") {
+                static const QMap<QString,QString> comparisons{{"=","equal"},{"<>","not_equal"},{"!=","not_equal"},{"<","less"},{"<=","less_equal"},{">","greater"},{">=","greater_equal"}};
+                const auto money=[](const Expression& value) {return value.type=="CURRENCY_TICKS" || value.type=="CURRENCY_REAL";};
+                if(!comparisons.contains(op) || (!money(left) && !nullLiteral(left)) || (!money(right) && !nullLiteral(right))) throw VbaRuntimeError(3251,"Exact Currency operators require proven Currency operands or explicit conversion");
+                auto code=left.code;code.append({Token::Other,","});code+=right.code;
+                return {"BOOLEAN",call("linaccess_jet_currency_bound_"+comparisons.value(op),{{Token::String,left.type+","+right.type}},code)};
             }
             const auto logic=op.toCaseFolded();
             if(QSet<QString>{"and","or","xor","eqv","imp"}.contains(logic) && (boolean(left) || nullLiteral(left)) && (boolean(right) || nullLiteral(right))) {
@@ -666,6 +675,7 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
         if(expression.size()>1 && (symbol(expression.front(),"+") || symbol(expression.front(),"-"))) {
             auto inner=parse(expression.mid(1),recursion+1); if(inner.type.isEmpty()) return unknown();
             if(inner.type=="DECIMAL_EXACT") return symbol(expression.front(),"+") ? inner : Expression{"DECIMAL_EXACT",call("linaccess_jet_decimal_negate",{{Token::String,"DECIMAL_EXACT"}},inner.code)};
+            if(inner.type=="CURRENCY_TICKS") {if(symbol(expression.front(),"+")) return inner;throw VbaRuntimeError(3251,"Exact Currency unary arithmetic requires explicit conversion");}
             if(numericOnly && (inner.type=="DATETIME" || inner.type=="CURRENCY_REAL")) return unknown();
             if(inner.type=="DATETIME" && symbol(expression.front(),"-")) throw VbaRuntimeError(3251,"Date SQL negation is not validated");
             QVector<Token> code{expression.front(),{Token::Other,"("}}; code+=inner.code; code.append({Token::Other,")"});
@@ -682,13 +692,13 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
                 return {declared.value(parameter.type),expression};
             }
             const auto type=resolvedFields.value(expression.front().value.toCaseFolded());
-            if(type=="CURRENCY_REAL") return {type,expression};
+            if(type=="CURRENCY_REAL" || type=="CURRENCY_TICKS") return {type,expression};
             if(type=="DATE" || type=="DATETIME") return {"DATETIME",expression};
             if(QSet<QString>{"DECIMAL_EXACT","DOUBLE","SINGLE_REAL","INTEGER1","INTEGER2","INTEGER4","BOOL","BOOLEAN"}.contains(type)) return {type,expression};
         }
         if(expression.size()==3 && name(expression.front()) && symbol(expression[1],".") && name(expression.back())) {
             const auto type=resolvedFields.value((expression.front().value+'.'+expression.back().value).toCaseFolded());
-            if(type=="CURRENCY_REAL") return {type,expression};
+            if(type=="CURRENCY_REAL" || type=="CURRENCY_TICKS") return {type,expression};
             if(type=="DATE" || type=="DATETIME") return {"DATETIME",expression};
             if(QSet<QString>{"DECIMAL_EXACT","DOUBLE","SINGLE_REAL","INTEGER1","INTEGER2","INTEGER4","BOOL","BOOLEAN"}.contains(type)) return {type,expression};
         }
@@ -704,9 +714,15 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
             if(depth==0) return {"BOOLEAN",expression};return unknown();
         }
 
+        if(function=="linaccess_jet_ccur_typed" && expression.size()>=6 && expression[2].kind==Token::String && expression[2].value=="CURRENCY_TICKS") return {"CURRENCY_TICKS",expression};
+        if(function.startsWith("linaccess_jet_currency_bound_") && expression.size()>=6 && expression[2].kind==Token::String && expression[2].value.split(',').contains("CURRENCY_TICKS")) {
+            const auto operation=function.mid(QString("linaccess_jet_currency_bound_").size());
+            if(QSet<QString>{"equal","not_equal","less","less_equal","greater","greater_equal"}.contains(operation)) return {"BOOLEAN",expression};
+            return unknown();
+        }
         if(function=="linaccess_jet_cvar_typed" && expression.size()>=6 && expression[2].kind==Token::String && symbol(expression[3],",")) {
             const auto type=expression[2].value;
-            static const QSet<QString> supported{"DECIMAL_EXACT","DATETIME","CURRENCY_REAL","SINGLE_REAL","DOUBLE","INTEGER1","INTEGER2","INTEGER4","BOOL","BOOLEAN"};
+            static const QSet<QString> supported{"DECIMAL_EXACT","DATETIME","CURRENCY_TICKS","CURRENCY_REAL","SINGLE_REAL","DOUBLE","INTEGER1","INTEGER2","INTEGER4","BOOL","BOOLEAN"};
             if(supported.contains(type)) return {type=="BOOL" ? QString("BOOLEAN") : type,expression};
         }
         if(function=="linaccess_jet_bound_in" || function=="linaccess_jet_bound_between") {
@@ -773,7 +789,7 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
             }
             const auto arity=scalarArities.value(scalarFunction);
             if(level || arguments.size()<arity.first || arguments.size()>arity.second) {if(scalarFunction=="linaccess_jet_cdec") throw VbaRuntimeError(450,"CDec requires one argument");return unknown();}
-            static const QSet<QString> typed{"DECIMAL_EXACT","CURRENCY_REAL","DATETIME","SINGLE_REAL","INTEGER1","INTEGER2","INTEGER4","BOOL","BOOLEAN","DOUBLE"};
+            static const QSet<QString> typed{"DECIMAL_EXACT","CURRENCY_TICKS","CURRENCY_REAL","DATETIME","SINGLE_REAL","INTEGER1","INTEGER2","INTEGER4","BOOL","BOOLEAN","DOUBLE"};
             QVector<Token> code;QStringList types;bool proven=false;
             for(auto& argument:arguments) {
                 if(argument.code.size()==1 && argument.code.front().kind==Token::Word &&
@@ -807,14 +823,14 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
                 const auto first=kind(arguments[0]);const auto fallback=arguments.size()==1 ? QString("TEXT") : kind(arguments[1]);
                 resultType=!first.isEmpty() && first==fallback ? first : nullLiteral(arguments[0]) ? fallback : arguments.size()==2 && nullLiteral(arguments[1]) ? first : QString{};
             }
-            else if(scalarFunction=="linaccess_jet_ccur") resultType="CURRENCY_REAL";
+            else if(scalarFunction=="linaccess_jet_ccur") resultType=types.value(0)=="CURRENCY_TICKS" ? "CURRENCY_TICKS" : "CURRENCY_REAL";
             else if(scalarFunction=="linaccess_jet_sgn") resultType="INTEGER2";
             else if(QSet<QString>{"linaccess_jet_abs","linaccess_jet_int","linaccess_jet_fix","linaccess_jet_round"}.contains(scalarFunction)) {
                 const auto input=types.value(0);
                 resultType=input=="BOOL" || input=="BOOLEAN" ? "INTEGER2" : input.isEmpty() || input=="DATETIME" ? "DOUBLE" : input;
                 if(scalarFunction=="linaccess_jet_abs" && !proven) resultType.clear();
             }
-            if(resultType.isEmpty()) for(const auto& argument:arguments) if(argument.type=="DECIMAL_EXACT") throw VbaRuntimeError(3251,"Mixed Decimal SQL result has no uniform proven type");
+            if(resultType.isEmpty()) for(const auto& argument:arguments) if(argument.type=="DECIMAL_EXACT" || argument.type=="CURRENCY_TICKS") throw VbaRuntimeError(3251,"Mixed Decimal SQL result has no uniform proven type");
             // Keep SQLite's exact untyped int64 ABS behavior; proven VBA inputs
             // instead retain checked Integer/Long overflow and native subtypes.
             const auto rawFunction=function=="abs" && !proven ? QString("abs") : scalarFunction;
@@ -866,7 +882,7 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
                         code.append(argument.takeFirst());
                     }
                     const auto parsed=parse(argument,recursion+1);
-                    if(parsed.type=="DECIMAL_EXACT" && function!="count" && !(function.endsWith("_typed") && scalarArities.contains(function.left(function.size()-6)))) throw VbaRuntimeError(3251,"Decimal SQL aggregate/function requires an exact native adapter");
+                    if((parsed.type=="DECIMAL_EXACT" || parsed.type=="CURRENCY_TICKS") && function!="count" && !(function.endsWith("_typed") && scalarArities.contains(function.left(function.size()-6)))) throw VbaRuntimeError(3251,"Decimal SQL aggregate/function requires an exact native adapter");
                     code+=parsed.code; code.append(expression[index]); first=index+1;
                 } else if(symbol(expression[index],"(")) ++level;
                 else if(symbol(expression[index],")")) --level;
@@ -888,7 +904,7 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
         static const QMap<QString,QString> conversionTypes{{"linaccess_jet_cdec","DECIMAL_EXACT"},{"linaccess_jet_cdec_typed","DECIMAL_EXACT"},{"val","DOUBLE"},{"linaccess_jet_val","DOUBLE"},{"linaccess_jet_val_typed","DOUBLE"},{"cbool","BOOLEAN"},{"linaccess_jet_cbool","BOOLEAN"},{"cbyte","INTEGER1"},{"linaccess_jet_cbyte","INTEGER1"},{"cint","INTEGER2"},{"linaccess_jet_cint","INTEGER2"},{"clng","INTEGER4"},{"linaccess_jet_clng","INTEGER4"},{"csng","SINGLE_REAL"},{"linaccess_jet_csng","SINGLE_REAL"},{"cdbl","DOUBLE"},{"linaccess_jet_cdbl","DOUBLE"},{"linaccess_jet_datepart_typed","INTEGER2"},{"linaccess_jet_datediff_typed","INTEGER4"},{"linaccess_jet_year_typed","INTEGER2"},{"linaccess_jet_month_typed","INTEGER2"},{"linaccess_jet_day_typed","INTEGER2"},{"linaccess_jet_hour_typed","INTEGER2"},{"linaccess_jet_minute_typed","INTEGER2"},{"linaccess_jet_second_typed","INTEGER2"},{"linaccess_jet_weekday_typed","INTEGER2"},{"linaccess_jet_date_equal","BOOLEAN"},{"linaccess_jet_date_not_equal","BOOLEAN"},{"linaccess_jet_date_less","BOOLEAN"},{"linaccess_jet_date_less_equal","BOOLEAN"},{"linaccess_jet_date_greater","BOOLEAN"},{"linaccess_jet_date_greater_equal","BOOLEAN"},{"linaccess_jet_sqr_typed","DOUBLE"},{"linaccess_jet_exp_typed","DOUBLE"},{"linaccess_jet_log_typed","DOUBLE"},{"linaccess_jet_sin_typed","DOUBLE"},{"linaccess_jet_cos_typed","DOUBLE"},{"linaccess_jet_tan_typed","DOUBLE"},{"linaccess_jet_atn_typed","DOUBLE"},{"linaccess_jet_cbool_typed","BOOLEAN"},{"linaccess_jet_cbyte_typed","INTEGER1"},{"linaccess_jet_cint_typed","INTEGER2"},{"linaccess_jet_clng_typed","INTEGER4"},{"linaccess_jet_csng_typed","SINGLE_REAL"},{"linaccess_jet_cdbl_typed","DOUBLE"},{"linaccess_jet_hex_typed","TEXT"},{"linaccess_jet_oct_typed","TEXT"},{"linaccess_jet_space_typed","TEXT"},{"linaccess_jet_string_typed","TEXT"},{"linaccess_jet_asc_typed","INTEGER2"},{"linaccess_jet_ascw_typed","INTEGER2"},{"linaccess_jet_chr_typed","TEXT"},{"linaccess_jet_chrw_typed","TEXT"},{"linaccess_jet_hex_string_typed","TEXT"},{"linaccess_jet_oct_string_typed","TEXT"},{"linaccess_jet_space_string_typed","TEXT"},{"linaccess_jet_string_string_typed","TEXT"},{"linaccess_jet_chr_string_typed","TEXT"},{"linaccess_jet_chrw_string_typed","TEXT"},{"linaccess_jet_len_typed","INTEGER4"},{"linaccess_jet_lenb_typed","INTEGER4"},{"linaccess_jet_fv_typed","DOUBLE"},{"linaccess_jet_pv_typed","DOUBLE"},{"linaccess_jet_pmt_typed","DOUBLE"},{"linaccess_jet_nper_typed","DOUBLE"},{"linaccess_jet_rate_typed","DOUBLE"},{"linaccess_jet_sln_typed","DOUBLE"},{"linaccess_jet_syd_typed","DOUBLE"},{"linaccess_jet_ddb_typed","DOUBLE"},{"linaccess_jet_ipmt_typed","DOUBLE"},{"linaccess_jet_ppmt_typed","DOUBLE"},{"linaccess_jet_rgb_typed","INTEGER4"},{"linaccess_jet_qbcolor_typed","INTEGER4"},{"linaccess_jet_partition_typed","TEXT"},{"linaccess_jet_ccur_typed","CURRENCY_REAL"},{"linaccess_jet_sgn_typed","INTEGER2"},{"linaccess_jet_isnumeric_typed","BOOLEAN"},{"linaccess_jet_vartype_typed","INTEGER2"},{"linaccess_jet_typename_typed","TEXT"},{"linaccess_jet_bool_and","BOOLEAN"},{"linaccess_jet_bool_or","BOOLEAN"},{"linaccess_jet_bool_xor","BOOLEAN"},{"linaccess_jet_bool_eqv","BOOLEAN"},{"linaccess_jet_bool_imp","BOOLEAN"},{"linaccess_jet_bool_not","BOOLEAN"},{"linaccess_jet_bool_equal","BOOLEAN"},{"linaccess_jet_bool_not_equal","BOOLEAN"},{"linaccess_jet_bool_less","BOOLEAN"},{"linaccess_jet_bool_less_equal","BOOLEAN"},{"linaccess_jet_bool_greater","BOOLEAN"},{"linaccess_jet_bool_greater_equal","BOOLEAN"},{"linaccess_jet_boolean_result","BOOLEAN"},{"linaccess_jet_isnull_typed","BOOLEAN"},{"linaccess_jet_isempty_typed","BOOLEAN"},{"linaccess_jet_iserror_typed","BOOLEAN"}};
         if(QSet<QString>{"linaccess_jet_abs_typed","linaccess_jet_int_typed","linaccess_jet_fix_typed","linaccess_jet_round_typed"}.contains(function) && expression.size()>=6 && expression[2].kind==Token::String) {
             const auto input=expression[2].value.section(',',0,0);
-            static const QSet<QString> numeric{"DECIMAL_EXACT","INTEGER1","INTEGER2","INTEGER4","SINGLE_REAL","DOUBLE","CURRENCY_REAL"};
+            static const QSet<QString> numeric{"DECIMAL_EXACT","CURRENCY_TICKS","INTEGER1","INTEGER2","INTEGER4","SINGLE_REAL","DOUBLE","CURRENCY_REAL"};
             const auto result=input=="BOOL" || input=="BOOLEAN" ? QString("INTEGER2") : numeric.contains(input) ? input : QString("DOUBLE");
             return {result,expression};
         }
@@ -916,6 +932,7 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
         }
         if(nesting) return unknown();
         auto argument=parse(expression.mid(2,expression.size()-3),recursion+1);
+        if(sum && argument.type=="CURRENCY_TICKS") throw VbaRuntimeError(3251,"Exact Currency aggregate requires explicit Decimal conversion");
         if(sum && argument.type=="DECIMAL_EXACT") return {"DECIMAL_EXACT",call("linaccess_jet_decimal_sum",argument.code)};
         if(sum && argument.type!="CURRENCY_REAL") {
             if(argument.type=="DATETIME") return {{},call("linaccess_jet_date_sum",argument.code)};
@@ -1990,6 +2007,10 @@ AccessQueryPlan compileAccessFindCriteria(const QString& criteria,const QMap<QSt
 }
 
 static AccessQueryPlan resolveCurrencyQuery(QSqlDatabase db,const AccessQueryPlan& input) {
+    if(input.currencyParameterDerived) {
+        if(input.source.isEmpty() || input.currencyParameterRootHash.size()!=32 || input.sql!=input.compiledSql || !std::any_of(input.parameters.cbegin(),input.parameters.cend(),[](const auto& p) {return p.currencyTicks;})) throw VbaRuntimeError(3251,"Exact Currency wrapper was modified; recompile it");
+        return input;
+    }
     if(input.source.isEmpty()) return input;
     if(input.sql!=input.compiledSql) { auto changed=input; changed.resultTypes.clear(); changed.source.clear(); return changed; }
     const auto functions=nativeVbaSqlFunctionResultTypes(db);
@@ -2042,7 +2063,7 @@ static AccessQueryPlan resolveCurrencyQuery(QSqlDatabase db,const AccessQueryPla
     const auto types=sqliteColumnTypes(db,table);
     auto declared=numericSourceFields(db,table,types);
     for(auto it=types.cbegin();it!=types.cend();++it) if(QSet<QString>{"INTEGER1","INTEGER2","INTEGER4","SINGLE_REAL","BOOL","BOOLEAN","DOUBLE"}.contains(it.value()) && !declared.contains(it.key())) declared.insert(it.key(),it.value());
-    for(auto it=types.cbegin();it!=types.cend();++it) if(it.value()=="CURRENCY_REAL" || it.value()=="DATE" || it.value()=="DATETIME") declared.insert(it.key(),it.value());
+    for(auto it=types.cbegin();it!=types.cend();++it) if(it.value()=="CURRENCY_REAL" || it.value()=="CURRENCY_TICKS" || it.value()=="DATE" || it.value()=="DATETIME") declared.insert(it.key(),it.value());
     for(auto it=declared.cbegin();it!=declared.cend();++it) {
         fields.insert(it.key(),it.value()); fields.insert(table.toCaseFolded()+'.'+it.key(),it.value());
         if(!alias.isEmpty()) fields.insert(alias.toCaseFolded()+'.'+it.key(),it.value());
@@ -2051,7 +2072,7 @@ static AccessQueryPlan resolveCurrencyQuery(QSqlDatabase db,const AccessQueryPla
     auto resolved=compileCurrencyQuery(source.source,fields,functions); resolved.currencyContextResolved=true; return resolved;
 }
 static bool checkedSqlStorageType(const QString& type) {
-    static const QSet<QString> types{"DECIMAL_EXACT","CURRENCY_REAL","SINGLE_REAL","INTEGER1","INTEGER2","INTEGER4","BOOL","BOOLEAN","DATE","DATETIME"};
+    static const QSet<QString> types{"DECIMAL_EXACT","CURRENCY_TICKS","CURRENCY_REAL","SINGLE_REAL","INTEGER1","INTEGER2","INTEGER4","BOOL","BOOLEAN","DATE","DATETIME"};
     return types.contains(type);
 }
 static QMap<QString,QPair<int,int>> decimalActionShapes(QSqlDatabase db,const QString& table,const QMap<QString,QString>& types) {
@@ -2061,6 +2082,7 @@ static QMap<QString,QPair<int,int>> decimalActionShapes(QSqlDatabase db,const QS
     return nativeTableDecimalTypes(db,table);
 }
 static QString checkedSqlStorageValue(const QString& type,const QString& value,const QString& inputKind={},QPair<int,int> decimalShape={0,0}) {
+    if(type=="CURRENCY_TICKS") throw VbaRuntimeError(3251,"Physical exact Currency SQL target conversion is not implemented");
     if(type=="DECIMAL_EXACT") {
         if(decimalShape.first<1 || decimalShape.first>28 || decimalShape.second<0 || decimalShape.second>decimalShape.first) throw VbaRuntimeError(3251,"Decimal action target precision/scale is not proven");
         return "linaccess_jet_decimal_store("+literal(inputKind)+','+value+','+QString::number(decimalShape.first)+','+QString::number(decimalShape.second)+')';
@@ -2188,7 +2210,7 @@ static QString checkedInsertSql(QSqlDatabase db,const AccessQueryPlan& plan) {
 
 // Proven native input kinds are shared by UPDATE expressions and DELETE criteria.
 static QMap<QString,QString> nativeActionFieldTypes(QSqlDatabase db,const QString& table,const QString& alias,const QMap<QString,QString>& types) {
-    static const QSet<QString> supported{"DECIMAL_EXACT","DATETIME","DATE","BOOL","BOOLEAN","SINGLE_REAL","CURRENCY_REAL","INTEGER1","INTEGER2","INTEGER4","DOUBLE"};
+    static const QSet<QString> supported{"DECIMAL_EXACT","CURRENCY_TICKS","DATETIME","DATE","BOOL","BOOLEAN","SINGLE_REAL","CURRENCY_REAL","INTEGER1","INTEGER2","INTEGER4","DOUBLE"};
     QMap<QString,QString> fields;
     for(auto it=types.cbegin();it!=types.cend();++it) if(supported.contains(it.value())) {
         fields.insert(it.key(),it.value());fields.insert(table.toCaseFolded()+'.'+it.key(),it.value());
@@ -2342,7 +2364,6 @@ QString accessActionSql(QSqlDatabase db,const AccessQueryPlan& plan) {
 AccessQueryPlan filterAccessQueryPlan(QSqlDatabase db,const AccessQueryPlan& untyped,const QString& criteria) {
     const auto source=resolveCurrencyQuery(db,untyped);
     if (criteria.trimmed().isEmpty()) return source;
-    if(source.resultTypes.contains("CURRENCY_TICKS")) throw VbaRuntimeError(3251,"Textual filtering of exact Currency parameter projections is not implemented");
     if (!source.sql.trimmed().startsWith("SELECT",Qt::CaseInsensitive)) throw VbaRuntimeError(3065,"Filter source requires SELECT");
     installJetSqlFunctions(db);
     const bool topOne=useTopOneBoundary(db,source);
@@ -2364,7 +2385,10 @@ AccessQueryPlan filterAccessQueryPlan(QSqlDatabase db,const AccessQueryPlan& unt
     filtered.sql.replace(filtered.sql.indexOf(marker),marker.size(),"FROM ("+sql+") AS "+identifier("__la_filter_source"));
     filtered.parameters=source.parameters;
     filtered.resultTypes=source.resultTypes;
-    filtered.source.clear(); filtered.compiledSql.clear();
+    if(std::any_of(source.parameters.cbegin(),source.parameters.cend(),[](const auto& p) {return p.currencyTicks;})) {
+        filtered.currencyParameterDerived=true;filtered.source=source.source;filtered.compiledSql=filtered.sql;
+        filtered.currencyParameterRootHash=source.currencyParameterDerived ? source.currencyParameterRootHash : QCryptographicHash::hash(source.sql.toUtf8(),QCryptographicHash::Sha256);
+    } else {filtered.source.clear();filtered.compiledSql.clear();}
     return filtered;
 }
 QString accessOrderByClause(const QString& orderBy,const QStringList& columns,const QString& tableQualifier) {
@@ -2393,7 +2417,7 @@ QString accessOrderByClause(const QString& orderBy,const QStringList& columns,co
 AccessQueryPlan sortAccessQueryPlan(QSqlDatabase db,const AccessQueryPlan& source,const QString& orderBy) {
     if(orderBy.trimmed().isEmpty()) return source;
     const auto clause=accessOrderByClause(orderBy,accessQueryColumns(db,source));
-    auto sorted=filterAccessQueryPlan(db,source,"True"); sorted.sql+=clause;
+    auto sorted=filterAccessQueryPlan(db,source,"True"); sorted.sql+=clause;if(sorted.currencyParameterDerived) sorted.compiledSql=sorted.sql;
     return sorted;
 }
 int installAccessQueryViews(QSqlDatabase db, bool freshConnection) {
@@ -2567,7 +2591,7 @@ QMap<QString,QVariant> bindAccessQueryParameters(const AccessQueryPlan& plan, co
     QMap<QString,QVariant> result;
     const bool ticks=std::any_of(plan.parameters.cbegin(),plan.parameters.cend(),[](const auto& parameter) {return parameter.currencyTicks;});
     QString exactSql;const auto exactCount=ticks ? pureCurrencyParameterProjections(plan.source,plan.parameters,&exactSql) : 0;
-    if(ticks && (plan.source.isEmpty() || plan.resultTypes.isEmpty() || plan.sql!=plan.compiledSql || exactCount!=plan.resultTypes.size() || exactSql!=plan.sql || std::any_of(plan.resultTypes.cbegin(),plan.resultTypes.cend(),[](const auto& type) {return type!="CURRENCY_TICKS";}))) throw VbaRuntimeError(3251,"Exact Currency parameter projection was modified; recompile it");
+    if(ticks && (plan.source.isEmpty() || plan.resultTypes.isEmpty() || plan.sql!=plan.compiledSql || exactCount!=plan.resultTypes.size() || (!plan.currencyParameterDerived && exactSql!=plan.sql) || (plan.currencyParameterDerived && plan.currencyParameterRootHash!=QCryptographicHash::hash(exactSql.toUtf8(),QCryptographicHash::Sha256)) || std::any_of(plan.resultTypes.cbegin(),plan.resultTypes.cend(),[](const auto& type) {return type!="CURRENCY_TICKS";}))) throw VbaRuntimeError(3251,"Exact Currency parameter projection was modified; recompile it");
     for (const auto& parameter : plan.parameters) {
         const auto found = values.constFind(parameter.name.toCaseFolded());
         if (found == values.cend()) throw VbaRuntimeError(3061,"DAO: required query parameter is unset");

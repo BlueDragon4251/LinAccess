@@ -5135,3 +5135,23 @@ Integrationsbau/DEB/Paketprüfung bestanden, Inventar/Original2/2 in185,44s
 Bekannte Original-Makrogrenze unverändert; kein initialisierterGeschäftsablauf.
 Paket /workspace/work/decimal-actions-package/package/linaccess-0.7.0-Linux.deb
 enthält ACE/Decimal-SQL/DELETE-Stern, liegt vor SetWarnings. Direkt weiterarbeiten.
+
+
+Exakte Full-Range-Currency-Abfragesnapshots (2026-11-11):
+EXACT_CURRENCY_QUERY_SNAPSHOTS.md. Pure signed64-Parameterbindung bleibt durch
+geprüfte Filter-/Sort-Wrapper erhalten, Original-Bindungs-SQL gehasht; Änderungen
+an SQL oder gleichlangem Originalausdruck3251. DAO-Snapshots/verketteteKopien/
+Find, exakte Currency-/expliziteDecimal-Vergleiche, CVar/CCur/CStr/VarType und
+bekannte Tick-Quelltypen erhalten letzte1e-4-Stelle/Typ5/Size8 ohneDouble.
+Unbelegte Zahlenmischung/Feldarithmetik/Negation/CAST/SUM und physische SQL-
+Tickziele verweigert; bestehende Parameterarithmetik bleibt. Bestehender
+Parametertest erwartete nochSQLiteTrue1; tatsächlicher schonimplementierter
+AccessBool-Wert-1 bestätigt und Erwartung korrigiert, kein Produkt-Boolcode geändert.
+Prüfung fand ungebundenenTick-SUM-Pfad, nun3251; anschließend Quellbindungs-Hash
+gegenausgetauschteOriginalausdrücke gesichert. App/Helper/DAO/Modell/Parameter
+gebaut, DAO/Modell5,58/0,61s bestanden; ausschließlich betroffeneParameterprüfung
+wiederholt, abschließend0,27s bestanden. Keine neueCTest-ID/Windows-Ausführung.
+F014/F054/F055/F067/F068 offen; feste456/386 Teilumfänge/70 Vollanforderungen.
+Vorstand83c6e0c8/Baumb3953096aaef66ae517f93425c6ff19168a3f6b9 privat/exakt
+veröffentlicht. Letzter Gesamtpaket-/Originalbeleg a4/185,44s vor SetWarnings/
+Currency-Erweiterungen. Unmittelbar weiterentwickeln; keine Gesamtparität.

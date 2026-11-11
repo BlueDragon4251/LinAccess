@@ -1144,7 +1144,6 @@ private:
         navigate(data_->rows.size());noMatch_=true;
     }
     void find(const std::string& kind,const QString& criteria) {
-        if(data_->types.values().contains("CURRENCY_TICKS")) throw VbaRuntimeError(3251,"DAO: Textual Find criteria on exact Currency projections are not implemented");
         const auto pendingMode=mode_;
         if (criteria.trimmed().isEmpty()) throw VbaRuntimeError(3075,"DAO: Empty find criterion");
         auto plan=compileAccessFindCriteria(criteria,data_->types);

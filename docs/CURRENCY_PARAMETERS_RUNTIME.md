@@ -56,8 +56,8 @@ Each output receives a checked, unique alias and the private CURRENCY_TICKS
 result descriptor. DAO retains Currency Value, Type=5 and Size=8; query display
 and clipboard emit exact logical amounts, including both Currency extrema.
 NULL stays NULL. An alias equal to a parameter name remains an SQL identifier.
-Modified plans and textual filter/DAO Find wrappers refuse with 3251 rather than
-comparing raw ticks with logical currency amounts. Arithmetic, FROM/WHERE,
+Modified plans still refuse3251. Bounded typed Filter/Sort/DAO Find wrappers are
+now supported in EXACT_CURRENCY_QUERY_SNAPSHOTS.md. Arithmetic, FROM/WHERE,
 ambiguous duplicate labels and all other SQL shapes retain the existing REAL
 conversion boundary. The private result descriptor does not enable creation of
 Currency database fields, arbitrary SQL money operators or MDB write support.
@@ -83,9 +83,9 @@ query display and clipboard format logical amounts from the result descriptor.
 
 Binding now regenerates the proven exact SQL and checks it against the immutable
 compiled statement as well as descriptors. A different source expression with the
-same result count cannot reuse another expression's proof. Textual filtering and
-DAO Find on these private tick projections remain refused; raw ticks never become
-logical amount predicates. Physical Currency storage remains the existing verified
+same result count cannot reuse another expression's proof. Checked derived wrappers
+retain the original binding hash; their exact logical predicates are documented
+in EXACT_CURRENCY_QUERY_SNAPSHOTS.md. Physical Currency storage remains the existing verified
 REAL-backed interval, and action/table/MDB storage semantics are not widened here.
 
 Validation: existing parameter/arithmetic/results/DAO bundle4/4 passed (2.84s),

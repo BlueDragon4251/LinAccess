@@ -2,6 +2,7 @@
 #include "access_table_import.hpp"
 #include "dao_database.hpp"
 #include "vba_currency.hpp"
+#include "vba_qt_value.hpp"
 #include <QCoreApplication>
 #include <QSqlQuery>
 #ifdef NDEBUG
@@ -33,7 +34,7 @@ int main(int argc,char** argv) {
     linaccess::importAccessTable(db,"synthetic-parameters","cash",schema,linaccess::parseCsvDetailed("amount\n"));
     const auto definition=linaccess::makeDaoDatabase(db)->member("CreateQueryDef",{VbaValue::string(""),VbaValue::string("PARAMETERS p Currency; INSERT INTO cash VALUES(p)")}).object;
     auto parameter=definition->member("Parameters",{VbaValue::string("p")}).object;
-    const auto expect=[](auto action,int wanted) { int actual=0; try { action(); } catch(const linaccess::VbaRuntimeError& error) { actual=error.number; } assert(actual==wanted); };
+    int errorCheck=0;const auto expect=[&](auto action,int wanted) { ++errorCheck;int actual=0; try { action(); } catch(const linaccess::VbaRuntimeError& error) { actual=error.number; } if(actual!=wanted) qFatal("Currency parameter error check %d: actual=%d expected=%d",errorCheck,actual,wanted); };
     assert(parameter->member("Type",{}).number==5 && parameter->member("Type",{}).numericType==VbaValue::NumericType::Integer);
     assert(parameter->member("Value",{}).kind==VbaValue::Kind::Null);
     expect([&] { definition->member("Execute",{}); },3061);
@@ -61,7 +62,7 @@ int main(int argc,char** argv) {
         assert(plan.parameters.size()==1 && plan.parameters[0].type=="currency");
         const auto bindings=linaccess::bindAccessQueryParameters(plan,{{"p",QString("0.5")}});
         assert(bindings.value(plan.parameters[0].binding).metaType().id()==QMetaType::Double && bindings.value(plan.parameters[0].binding).toDouble()==0.5);
-        const auto result=linaccess::executeAccessQueryPlan(db,plan,bindings); assert(result.rows.size()==1 && result.rows[0][0].toInt()==1);
+        const auto result=linaccess::executeAccessQueryPlan(db,plan,bindings); assert(result.rows.size()==1 && result.rows[0][0].toInt()==-1); // Access Boolean True.
         expect([&] { (void)linaccess::bindAccessQueryParameters(plan,{{"p",QString("549755813888")}}); },3251);
         expect([&] { (void)linaccess::bindAccessQueryParameters(plan,{{"p",QString("invalid")}}); },13);
         expect([&] { (void)linaccess::bindAccessQueryParameters(plan,{}); },3061);
@@ -79,7 +80,10 @@ int main(int argc,char** argv) {
     assert(exactField->member("Type",{}).number==5 && exactField->member("Size",{}).number==8);
     assert(exactRows->member("Fields",{VbaValue::string("other")}).object->scalarValue().currencyUnits==minimum);
     expect([&] {exactRows->member("FindFirst",{VbaValue::string("amount > 0")});},3251);
-    assert(exactField->scalarValue().currencyUnits==maximum);exactRows->member("Close",{});
+    assert(exactField->scalarValue().currencyUnits==maximum);
+    exactRows->member("FindFirst",{VbaValue::string("amount > CDec('922337203685477.5806') AND other < CCur(0)")});assert(!exactRows->member("NoMatch",{}).truthy() && exactField->scalarValue().currencyUnits==maximum);
+    exactRows->assign("Filter",VbaValue::string("amount > CDec('922337203685477.5806') AND other < CCur(0)"));exactRows->assign("Sort",VbaValue::string("amount DESC,other ASC"));auto exactSnapshot=exactRows->member("OpenRecordset",{VbaValue::integer(4)}).object;assert(exactSnapshot->member("RecordCount",{}).asNumber()==1 && exactSnapshot->item("amount").currencyUnits==maximum && exactSnapshot->item("other").currencyUnits==minimum && !exactSnapshot->member("Updatable",{}).truthy());exactSnapshot->member("FindLast",{VbaValue::string("CStr(amount)='922337203685477.5807'")});assert(!exactSnapshot->member("NoMatch",{}).truthy());exactSnapshot->member("Close",{});
+    exactRows->member("Close",{});
     exactP->assign("Value",{});exactRows=exact->member("OpenRecordset",{}).object;
     assert(exactRows->member("Fields",{VbaValue::string("amount")}).object->scalarValue().kind==VbaValue::Kind::Null);exactRows->member("Close",{});
     const QMap<QString,QVariant> exactValues{{"p",QString("922337203685477.5807")},{"q",QString("-922337203685477.5808")}};
@@ -95,6 +99,8 @@ int main(int argc,char** argv) {
     expect([&] {(void)linaccess::filterAccessQueryPlan(db,exactPlan,"amount > 1");},3251);
     linaccess::AccessQueryModel sameName; sameName.execute(db,"PARAMETERS p Currency; SELECT p AS p",{{"p",exactValues.value("p")}});
     assert(sameName.clipboardText(sameName.index(0,0))=="922337203685477.5807");
+    auto derived=linaccess::filterAccessQueryPlan(db,exactPlan,"amount>other AND amount>=CDec('922337203685477.5807') AND CStr(CVar(amount))='922337203685477.5807'");derived=linaccess::sortAccessQueryPlan(db,derived,"other ASC,amount DESC");const auto derivedResult=linaccess::executeAccessQueryPlan(db,derived,linaccess::bindAccessQueryParameters(derived,exactValues));assert(derivedResult.rows.size()==1 && derivedResult.rows[0][0].toLongLong()==maximum && derivedResult.rows[0][1].toLongLong()==minimum);
+    auto nested=linaccess::filterAccessQueryPlan(db,derived,"amount IN(CDec('922337203685477.5807'))");assert(linaccess::executeAccessQueryPlan(db,nested,linaccess::bindAccessQueryParameters(nested,exactValues)).rows.size()==1);auto tampered=derived;tampered.sql+=" LIMIT 1";expect([&]{(void)linaccess::bindAccessQueryParameters(tampered,exactValues);},3251);auto changedRoot=derived;changedRoot.source="PARAMETERS p Currency,q Money; SELECT q AS amount,p AS other";expect([&]{(void)linaccess::bindAccessQueryParameters(changedRoot,exactValues);},3251);
     auto changedPlan=exactPlan;changedPlan.sql+=" WHERE 1";
     expect([&] {(void)linaccess::bindAccessQueryParameters(changedPlan,exactValues);},3251);
     for(const auto* unsafe:{"SELECT p+0 AS amount","SELECT p AS amount WHERE 1","SELECT p AS amount FROM cash","SELECT p AS same,p AS same"}) {
@@ -102,6 +108,9 @@ int main(int argc,char** argv) {
         assert(!bounded.parameters[0].currencyTicks);
         expect([&] {(void)linaccess::bindAccessQueryParameters(bounded,{{"p",exactValues.value("p")}});},3251);
     }
+    assert(sql.exec("CREATE TABLE currency_tick_order(amount CURRENCY_TICKS)"));for(const auto units:{minimum,maximum,maximum-1}) {assert(sql.prepare("INSERT INTO currency_tick_order VALUES(?)"));sql.addBindValue(QVariant::fromValue(static_cast<qlonglong>(units)));assert(sql.exec());sql.finish();}
+    const auto typed=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT amount,CVar(amount) AS retained,CCur(amount) AS converted,CStr(amount) AS rendered,VarType(amount) AS subtype FROM currency_tick_order WHERE amount>=CCur(0) ORDER BY amount"),{});assert(typed.rows.size()==2 && typed.columnTypes==QVector<QString>({"CURRENCY_TICKS","CURRENCY_TICKS","CURRENCY_TICKS","TEXT","INTEGER2"}) && typed.rows[0][0].toLongLong()==maximum-1 && typed.rows[1][1].toLongLong()==maximum && typed.rows[1][2].toLongLong()==maximum && typed.rows[0][3].toString()=="922337203685477.5806" && typed.rows[1][4].toInt()==6);
+    for(const auto* unsupported:{"SELECT amount+amount FROM currency_tick_order","SELECT -amount FROM currency_tick_order","SELECT CAST(amount AS REAL) FROM currency_tick_order","SELECT Sum(amount) FROM currency_tick_order"}) expect([&]{(void)linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery(unsupported),{});},3251);
     // Exact parameter-only arithmetic never passes through the REAL money adapter.
     const QString arithmetic="PARAMETERS p Currency,q Money; SELECT ([p]+[q]) AS amount,[p]-[q] AS difference,[p]*[q] AS product";
     const auto arithmeticPlan=linaccess::compileAccessQuery(arithmetic);assert(arithmeticPlan.resultTypes==QVector<QString>({"CURRENCY_TICKS","CURRENCY_TICKS","CURRENCY_TICKS"}));

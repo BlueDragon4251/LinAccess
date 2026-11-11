@@ -280,7 +280,7 @@ QVariant boundSqlStorage(sqlite3_value* argument,bool decimalBlob=false) {
     }
     return storage;
 }
-void returnBoundSqlValue(sqlite3_context* context,const VbaValue& result) {
+void returnBoundSqlValue(sqlite3_context* context,const VbaValue& result,bool currencyTicks=false) {
     auto& native=api();
     if(result.kind==VbaValue::Kind::Null) native.nullResult(context);
     else if(result.kind==VbaValue::Kind::Boolean) native.integerResult(context,result.boolean ? -1 : 0);
@@ -288,14 +288,14 @@ void returnBoundSqlValue(sqlite3_context* context,const VbaValue& result) {
         if(!std::isfinite(result.number)) throw VbaRuntimeError(6,"Nonfinite bound scalar SQL result");
         native.numberResult(context,result.number);
     }
-    else if(result.kind==VbaValue::Kind::Currency) native.numberResult(context,currencyToRealStorage(result));
+    else if(result.kind==VbaValue::Kind::Currency) {if(currencyTicks) native.integerResult(context,result.currencyUnits);else native.numberResult(context,currencyToRealStorage(result));}
     else if(result.kind==VbaValue::Kind::Decimal) {const auto bytes=decimalSqlKey(result);sqlite3_result_blob(context,bytes.data(),static_cast<int>(bytes.size()),SQLITE_TRANSIENT);}
     else if(result.kind==VbaValue::Kind::Date) returnText(context,sqlFieldValue(result,"DATETIME").toString());
     else if(result.kind==VbaValue::Kind::Text) returnText(context,QString::fromUtf8(result.text.data(),static_cast<qsizetype>(result.text.size())));
     else if(result.kind==VbaValue::Kind::Number && (result.numericType==VbaValue::NumericType::Integer || result.numericType==VbaValue::NumericType::Long || result.numericType==VbaValue::NumericType::Byte)) native.integerResult(context,static_cast<qlonglong>(result.number));
     else throw VbaRuntimeError(13,"Scalar SQL result type mismatch");
 }
-void boundScalarSqlFunction(sqlite3_context* context,int count,sqlite3_value** args,std::string_view builtin,int minimum,int maximum,bool typed,bool dateComparison=false,bool booleanOperator=false,bool decimalOperator=false) noexcept {
+void boundScalarSqlFunction(sqlite3_context* context,int count,sqlite3_value** args,std::string_view builtin,int minimum,int maximum,bool typed,bool dateComparison=false,bool booleanOperator=false,bool decimalOperator=false,bool currencyOperator=false) noexcept {
     auto& native=api();
     try {
         const int offset=typed ? 1 : 0,arguments=count-offset;
@@ -305,7 +305,7 @@ void boundScalarSqlFunction(sqlite3_context* context,int count,sqlite3_value** a
             if(native.type(args[0])!=SQLITE_TEXT) throw VbaRuntimeError(450,"Typed scalar SQL requires argument types");
             declared=scalarText(args[0]).split(',');
             if(declared.size()!=arguments) throw VbaRuntimeError(450,"Typed scalar SQL argument types mismatch");
-            static const QSet<QString> supported{"","DECIMAL_EXACT","CURRENCY_REAL","DATETIME","SINGLE_REAL","INTEGER1","INTEGER2","INTEGER4","BOOL","BOOLEAN","DOUBLE"};
+            static const QSet<QString> supported{"","DECIMAL_EXACT","CURRENCY_TICKS","CURRENCY_REAL","DATETIME","SINGLE_REAL","INTEGER1","INTEGER2","INTEGER4","BOOL","BOOLEAN","DOUBLE"};
             for(const auto& type:declared) if(!supported.contains(type)) throw VbaRuntimeError(3251,"Scalar SQL source type is unsupported");
         }
         if(dateComparison && declared!=QStringList{"DATETIME","DATETIME"}) throw VbaRuntimeError(450,"Date comparison requires two proven Date operands");
@@ -317,7 +317,11 @@ void boundScalarSqlFunction(sqlite3_context* context,int count,sqlite3_value** a
             if(declared[index]!="BOOL" && declared[index]!="BOOLEAN" && !(declared[index].isEmpty() && native.type(args[index+offset])==SQLITE_NULL)) throw VbaRuntimeError(13,"Boolean SQL operator requires proven Boolean or NULL operands");
         }
         if(decimalOperator && !declared.contains("DECIMAL_EXACT")) throw VbaRuntimeError(450,"Decimal operator requires a proven Decimal operand");
-        const bool infix=dateComparison || booleanOperator || decimalOperator;
+        if(currencyOperator) {
+            if(!declared.contains("CURRENCY_TICKS")) throw VbaRuntimeError(450,"Exact Currency comparison requires a proven exact operand");
+            for(int at=0;at<arguments;++at) if(declared[at]!="CURRENCY_TICKS" && declared[at]!="CURRENCY_REAL" && !(declared[at].isEmpty() && native.type(args[at+offset])==SQLITE_NULL)) throw VbaRuntimeError(3251,"Exact Currency comparison input is not proven");
+        }
+        const bool infix=dateComparison || booleanOperator || decimalOperator || currencyOperator;
         VbaVariables values;std::string expression=infix ? std::string{} : std::string(builtin)+"(";
         for(int index=0;index<arguments;++index) {
             auto* argument=args[index+offset];const auto storage=boundSqlStorage(argument,declared.value(index)=="DECIMAL_EXACT");
@@ -334,9 +338,13 @@ void boundScalarSqlFunction(sqlite3_context* context,int count,sqlite3_value** a
         if((booleanOperator || decimalOperator) && arguments==1) expression=std::string(builtin)+" "+expression;
         if(!infix) expression+=')';ScalarStringHost host;
         const auto result=evaluateVbaExpression(expression,host,values);
-        returnBoundSqlValue(context,result);
+        returnBoundSqlValue(context,result,declared.contains("CURRENCY_TICKS"));
     } catch(const VbaRuntimeError& failure) { functionError(context,failure); }
       catch(...) { native.error(context,"SQL bound scalar evaluation failed",-1); }
+}
+template<int Operation> void exactCurrencyComparison(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
+    static constexpr const char* operations[]{"=","<>","<","<=",">",">="};
+    boundScalarSqlFunction(context,count,args,operations[Operation],2,2,true,false,false,false,true);
 }
 void decimalConversion(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"CDec",1,1,false);}
 void decimalConversionTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"CDec",1,1,true);}
@@ -1268,6 +1276,12 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_decimal_multiply",-1,&decimalOperation<2>,nullptr,nullptr);
     ensure("linaccess_jet_decimal_divide",-1,&decimalOperation<3>,nullptr,nullptr);
     ensure("linaccess_jet_decimal_equal",-1,&decimalOperation<4>,nullptr,nullptr);
+    ensure("linaccess_jet_currency_bound_equal",3,&exactCurrencyComparison<0>,nullptr,nullptr);
+    ensure("linaccess_jet_currency_bound_not_equal",3,&exactCurrencyComparison<1>,nullptr,nullptr);
+    ensure("linaccess_jet_currency_bound_less",3,&exactCurrencyComparison<2>,nullptr,nullptr);
+    ensure("linaccess_jet_currency_bound_less_equal",3,&exactCurrencyComparison<3>,nullptr,nullptr);
+    ensure("linaccess_jet_currency_bound_greater",3,&exactCurrencyComparison<4>,nullptr,nullptr);
+    ensure("linaccess_jet_currency_bound_greater_equal",3,&exactCurrencyComparison<5>,nullptr,nullptr);
     ensure("linaccess_jet_decimal_not_equal",-1,&decimalOperation<5>,nullptr,nullptr);
     ensure("linaccess_jet_decimal_less",-1,&decimalOperation<6>,nullptr,nullptr);
     ensure("linaccess_jet_decimal_less_equal",-1,&decimalOperation<7>,nullptr,nullptr);

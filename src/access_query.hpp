@@ -45,6 +45,8 @@ struct AccessQueryPlan {
     QString compiledSql;
     bool currencyContextResolved{};
     QVector<AccessCounterDeclaration> counters;
+    QByteArray currencyParameterRootHash; // Original pure binding SQL, retained across wrappers.
+    bool currencyParameterDerived{}; // Checked wrapper retaining a pure full-range Currency binding source.
     bool deferredDecimalAction{}; // Must pass a proven physical action adapter before execution.
     int daoQueryType{-1}; // Native DAO source kind, unknown until classified by the compiler.
 };
