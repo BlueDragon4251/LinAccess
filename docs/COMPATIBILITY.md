@@ -8181,3 +8181,17 @@ Bau/DEB/Paketprüfung bestanden, Inventar/Original2/2 in184,50s (54,79/129,70),
 Selektoretappen, liegtvorDecimal-Defaults. Inventar weiterhin78/100 ausführbar,
 22offen; bekannteOriginalmakrogrenze bleibt, keinevollständigeParität.
 Direkt weiterarbeiten.
+
+
+WählbarerTabellenprimärschlüssel (2026-11-11):
+TABLE_AUTOMATIC_KEY_CHOICE.md. NeuerTabellendesigner kann automatischesid-PK-Feld
+abwählen; manuellesid bleibt dannnormalesFeld ohneGenerator/erfundenenPK.
+AusgewähltesAutoid reserviertNamennurfürdiesenModus; Konflikt erhältEingaben.
+Autoid-alleinigeTabelleerlaubt, ohneAutoid mindestens einFelderforderlich.
+VorhandenenDAO-Katalog/Savepoints/Indexpfad wiederverwendet. App/GUIgebaut,
+gebündelterbestehenderGUI-Bereich1/1 in19.29s bestanden. Keine neueCTest-ID/
+Windows-Beobachtung; F080offen, feste456/386Teilumfänge/70offen.
+Decimal-Defaults53ff703d64e17d2e08fb072bbd2ca5ea44b9f334,
+Baumdf3b4972f7cea8bf675be7626fd0065a494839af privat/exaktveröffentlicht.
+LetzterPaket-/Originalbeleg dbd87ce/184,50s liegtvorDecimal-Defaults/Schlüsselwahl.
+Direktweiterarbeiten; keinevollständigeAccess-Parität.

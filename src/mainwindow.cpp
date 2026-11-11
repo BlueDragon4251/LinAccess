@@ -2026,7 +2026,8 @@ void MainWindow::newTable() {
     dialog.setWindowTitle("Neue Tabelle"); dialog.resize(760,440);
     auto* outer=new QVBoxLayout(&dialog);
     auto* name=new QLineEdit(&dialog); name->setObjectName("native-table-name"); name->setPlaceholderText("Tabellenname"); outer->addWidget(name);
-    outer->addWidget(new QLabel("Felder (id wird automatisch als Primärschlüssel angelegt)",&dialog));
+    outer->addWidget(new QLabel("Felder",&dialog));
+    auto* automaticKey=new QCheckBox("AutoWert-Primärschlüssel id anlegen",&dialog);automaticKey->setObjectName("native-table-automatic-key");automaticKey->setChecked(true);outer->addWidget(automaticKey);
     auto* grid=new QTableWidget(0,6,&dialog); grid->setObjectName("native-table-fields");
     grid->setHorizontalHeaderLabels({"Feldname","Datentyp","Pflichtfeld (ja/nein)","Standardwert (optional)","Textgröße (1–255)","Leere Zeichenfolge zulassen"});
     grid->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch); outer->addWidget(grid);
@@ -2049,7 +2050,7 @@ void MainWindow::newTable() {
         if(tableName.isEmpty() || tableName.startsWith("_la_",Qt::CaseInsensitive) || tableName.startsWith("sqlite_",Qt::CaseInsensitive)) {
             messageError(&dialog,"Ungültiger/reservierter Tabellenname"); return;
         }
-        struct FieldSpec {QString name,type,defaultValue;bool required;int size;bool allowZero;};QVector<FieldSpec> fields;std::set<QString> seen={"id"};
+        struct FieldSpec {QString name,type,defaultValue;bool required;int size;bool allowZero;};QVector<FieldSpec> fields;std::set<QString> seen;if(automaticKey->isChecked()) seen.insert("id");
         for(int row=0;row<grid->rowCount();++row) {
             const auto field=grid->item(row,0)->text().trimmed(); if(field.isEmpty()) continue;
             if(field.startsWith("_la_",Qt::CaseInsensitive) || seen.contains(field.toCaseFolded())) {
@@ -2097,14 +2098,16 @@ void MainWindow::newTable() {
             }
             fields.append({field,type,defaultSql.isEmpty() ? QString{} : defaultSql.mid(9),required=="ja",size,qobject_cast<QCheckBox*>(grid->cellWidget(row,5))->isChecked()});
         }
-        if(fields.isEmpty()) { messageError(&dialog,"Mindestens ein Feld anlegen"); return; }
+        if(fields.isEmpty() && !automaticKey->isChecked()) { messageError(&dialog,"Mindestens ein Feld anlegen"); return; }
         try {
             using linaccess::VbaValue;
             auto database=linaccess::makeDaoDatabase(db_);
             auto table=database->member("CreateTableDef",{VbaValue::string(tableName.toStdString())}).object;
             auto catalog=table->member("Fields",{}).object;
-            auto id=table->member("CreateField",{VbaValue::string("id"),VbaValue::integer(4)}).object;
-            id->assign("Attributes",VbaValue::longInteger(16));catalog->member("Append",{VbaValue::reference(id)});
+            if(automaticKey->isChecked()) {
+                auto id=table->member("CreateField",{VbaValue::string("id"),VbaValue::integer(4)}).object;
+                id->assign("Attributes",VbaValue::longInteger(16));catalog->member("Append",{VbaValue::reference(id)});
+            }
             for(const auto& spec:fields) {
                 const int type=spec.type=="TEXT" ? 10 : spec.type=="MEMO" ? 12 : spec.type=="BYTE" ? 2 : spec.type=="SMALLINT" ? 3 : spec.type=="INTEGER" ? 4 : spec.type=="CURRENCY" ? 5 : spec.type=="SINGLE" ? 6 : spec.type=="REAL" ? 7 : spec.type=="DATE" ? 8 : spec.type=="BOOLEAN" ? 1 : 11;
                 auto field=table->member("CreateField",{VbaValue::string(spec.name.toStdString()),VbaValue::integer(static_cast<std::int16_t>(type)),VbaValue::longInteger(spec.size)}).object;
@@ -2112,9 +2115,11 @@ void MainWindow::newTable() {
                 if(!spec.defaultValue.isEmpty()) field->assign("DefaultValue",VbaValue::string(spec.defaultValue.toStdString()));
                 catalog->member("Append",{VbaValue::reference(field)});
             }
-            auto primary=table->member("CreateIndex",{VbaValue::string("PrimaryKey")}).object;primary->assign("Primary",VbaValue::logical(true));
-            primary->member("Fields",{}).object->member("Append",{primary->member("CreateField",{VbaValue::string("id")})});
-            table->member("Indexes",{}).object->member("Append",{VbaValue::reference(primary)});
+            if(automaticKey->isChecked()) {
+                auto primary=table->member("CreateIndex",{VbaValue::string("PrimaryKey")}).object;primary->assign("Primary",VbaValue::logical(true));
+                primary->member("Fields",{}).object->member("Append",{primary->member("CreateField",{VbaValue::string("id")})});
+                table->member("Indexes",{}).object->member("Append",{VbaValue::reference(primary)});
+            }
             database->member("TableDefs",{}).object->member("Append",{VbaValue::reference(table)});
         } catch(const std::exception& error) {
             messageError(&dialog,QString::fromUtf8(error.what()));return;
