@@ -59,5 +59,5 @@ private:
 };
 bool vbaDebuggerBusy() noexcept;
 bool vbaDebuggerActive() noexcept;
-std::vector<int> vbaDebugExecutableLines(std::string_view source,std::string_view procedure);
+std::vector<int> vbaDebugExecutableLines(std::string_view source,std::string_view procedure,const VbaEnumAliases* aliases=nullptr);
 }

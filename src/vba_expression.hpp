@@ -70,13 +70,14 @@ struct VbaArgumentSignature {
     bool objectArgument(std::size_t position,std::string_view name={}) const;
 };
 
-// Source-only declaration metadata; never executes a procedure or retains a host.
-std::optional<VbaArgumentSignature> nativeVbaProcedureSignature(std::string_view module,std::string_view procedure);
-std::vector<std::string> nativeVbaProcedureClassTypes(std::string_view module,std::string_view procedure);
+// Declaration metadata with optional explicit Enum aliases; never executes a
+// procedure or retains a host. Without aliases the API remains source-only.
+std::optional<VbaArgumentSignature> nativeVbaProcedureSignature(std::string_view module,std::string_view procedure,const VbaEnumAliases* aliases=nullptr);
+std::vector<std::string> nativeVbaProcedureClassTypes(std::string_view module,std::string_view procedure,const VbaEnumAliases* aliases=nullptr);
 
 enum class VbaPropertyAccess { Get, Let, Set };
 std::optional<VbaArgumentSignature> nativeVbaPropertySignature(std::string_view module,
-    std::string_view name,VbaPropertyAccess access,bool publicOnly=true);
+    std::string_view name,VbaPropertyAccess access,bool publicOnly=true,const VbaEnumAliases* aliases=nullptr);
 VbaExecutionResult executeVbaProperty(std::string_view module,std::string_view name,
     VbaPropertyAccess access,VbaHost& host,std::vector<VbaValue>& arguments,bool publicOnly=true);
 

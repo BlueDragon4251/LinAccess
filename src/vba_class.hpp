@@ -8,7 +8,7 @@ struct VbaClassContext {
     std::function<void()> check;
 };
 // Compile actual class source without running initialization or user code.
-std::shared_ptr<const NativeVbaClassDefinition> compileNativeVbaClass(std::string name,std::string source);
+std::shared_ptr<const NativeVbaClassDefinition> compileNativeVbaClass(std::string name,std::string source,const VbaEnumAliases* aliases=nullptr);
 std::vector<std::string> nativeVbaClassDeclaredTypes(const NativeVbaClassDefinition& definition);
 std::shared_ptr<VbaObject> constructNativeVbaClass(std::shared_ptr<const NativeVbaClassDefinition> definition,VbaClassContext context);
 }

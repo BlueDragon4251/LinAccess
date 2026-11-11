@@ -74,6 +74,7 @@ std::shared_ptr<VbaObject> NativeStandardModuleHost::currentDatabase(){check();r
 std::shared_ptr<VbaObject> NativeStandardModuleHost::databaseEngine(){check();return makeDaoEngine(db_);}
 VbaValue NativeStandardModuleHost::domainAggregate(std::string_view function,const std::vector<VbaValue>& args){check();return nativeDomainValue(db_,args,function);}
 void NativeStandardModuleHost::executeSql(std::string_view sql){currentDatabase()->member("Execute",{VbaValue::string(std::string(sql))});}
+VbaEnumAliases NativeStandardModuleHost::projectEnumAliases() {check();return projectVbaEnumAliases(db_);}
 std::shared_ptr<VbaModuleState> NativeStandardModuleHost::moduleState(std::string_view source) {check();return isVbaClassModule(source) ? VbaHost::moduleState(source) : standardVbaModuleState(db_,source);}
 std::vector<std::shared_ptr<VbaModuleState>> NativeStandardModuleHost::globalModuleStates(){check();return publicVbaModuleStates(db_);}
 std::optional<std::string> NativeStandardModuleHost::moduleForProcedure(std::string_view procedure){
@@ -129,7 +130,7 @@ public:
                     const auto expression=action.arguments.front().asText();const auto target=nativeMacroFunctionName(QString::fromUtf8(expression));
                     QMap<QString,QString> names;(void)standardVbaModuleSources(db_,&names);if(names.contains(target.toCaseFolded())) throw VbaRuntimeError(3251,"RunCode Function/module name conflict");
                     const auto source=host.moduleForProcedure(target.toStdString());if(!source) throw VbaRuntimeError(2517,"RunCode public Function was not found");
-                    const auto signature=nativeVbaProcedureSignature(*source,target.toStdString());if(!signature || !signature->function) throw VbaRuntimeError(3251,"RunCode requires a Function");
+                    const auto aliases=host.projectEnumAliases();const auto signature=nativeVbaProcedureSignature(*source,target.toStdString(),&aliases);if(!signature || !signature->function) throw VbaRuntimeError(3251,"RunCode requires a Function");
                     const auto result=executeVbaEventExpression({},"="+expression,host);if(result.status!=VbaExecutionStatus::Completed) throw VbaRuntimeError(result.errorNumber ? result.errorNumber : 3251,result.explanation,result.errorSource,result.errorHelpFile,result.errorHelpContext);
                 }else (void)member(action.name.toStdString(),action.arguments);
             },[] {restoreNativeEcho();});return VbaValue::empty();

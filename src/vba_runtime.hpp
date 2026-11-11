@@ -10,6 +10,7 @@
 #include <string_view>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace linaccess {
 
@@ -55,7 +56,10 @@ std::shared_ptr<VbaObject> makeVbaErrorObject(std::function<void()> guard={});
 struct VbaValue;
 struct VbaModuleState;
 struct VbaRandomState;
-std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module);
+using VbaEnumAliases=std::unordered_set<std::string>;
+VbaEnumAliases nativeVbaEnumTypeNames(std::string_view module,bool publicOnly=false);
+std::string vbaModuleBindingKey(std::string_view module,const VbaEnumAliases& aliases);
+std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module,const VbaEnumAliases* aliases=nullptr);
 struct VbaOpenFormArguments { std::string name,where; std::optional<std::string> openArgs; int windowMode{}; int dataMode{-1}; };
 struct VbaInputBoxArguments {
     std::string prompt;
@@ -86,6 +90,7 @@ public:
     virtual VbaValue formatValue(const VbaValue& value,std::string_view mask,bool stringResult);
     virtual VbaValue formatNumericValue(const VbaValue& value,bool currency,const VbaNumericFormatOptions& options);
     virtual bool isNumericText(std::string_view text);
+    virtual VbaEnumAliases projectEnumAliases() { return {}; }
     virtual void enterModule(std::string_view) {}
     virtual void leaveModule() noexcept {}
     virtual bool hasInstanceIdentifier(std::string_view) { return false; }
@@ -173,7 +178,7 @@ struct VbaExecutionResult {
 };
 
 // Syntax inspection only; Completed here does not mean a procedure was executed.
-VbaExecutionResult validateVbaProcedure(std::string_view module, std::string_view procedure);
+VbaExecutionResult validateVbaProcedure(std::string_view module, std::string_view procedure,const VbaEnumAliases* aliases=nullptr);
 
 VbaExecutionResult executeVbaProcedureWithArguments(std::string_view module,
     std::string_view procedure, VbaHost& host, std::vector<VbaValue>& arguments);

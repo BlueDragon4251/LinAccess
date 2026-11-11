@@ -40,6 +40,7 @@ public:
     std::shared_ptr<Lifetime> lifetime;
     QMap<QString,Procedure> procedures;
     QMap<QString,QByteArray> sources;
+    VbaEnumAliases enums;
     QSet<QString> registered;
     sqlite3_int64 changes{-1}; int dataVersion{-1},schemaVersion{-1},tempSchemaVersion{-1};
     quint64 statementEpoch{},observedEpoch{std::numeric_limits<quint64>::max()}; int metadataDepth{};
@@ -73,6 +74,7 @@ inline void refresh(QSqlDatabase db,sqlite3* native,Registry& registry) {
     if(registry.changes==changes && registry.dataVersion==data && registry.schemaVersion==schema && registry.tempSchemaVersion==temporary && registry.observedEpoch==epoch) return;
     auto sources=standardVbaModuleSources(db);
     if(sources!=registry.sources) {
+        const auto aliases=projectVbaEnumAliases(db);
         QMap<QString,Procedure> procedures;
         static const QRegularExpression privateDeclaration("^\\s*(?:(?:Public|Static)\\s+)*(?:Private|Friend)\\b",QRegularExpression::CaseInsensitiveOption);
         static const QRegularExpression sqlName("^[A-Za-z_][A-Za-z0-9_]*$");
@@ -90,13 +92,13 @@ inline void refresh(QSqlDatabase db,sqlite3* native,Registry& registry) {
                 const bool function=QString::fromStdString(item.kind).compare("function",Qt::CaseInsensitive)==0;
                 if(auto found=procedures.find(key);found!=procedures.end()) { found->ambiguous=true; found->function|=function; }
                 else {
-                    const auto signature=function ? nativeVbaProcedureSignature(*module,item.name) : std::optional<VbaArgumentSignature>{};
+                    const auto signature=function ? nativeVbaProcedureSignature(*module,item.name,&aliases) : std::optional<VbaArgumentSignature>{};
                     procedures.insert(key,{module,function,false,signature && signature->function ? signature->resultType : std::string{}});
                 }
                 if(procedures.size()>4096) throw VbaRuntimeError(3251,"VBA SQL procedure inventory limit exceeded");
             }
         }
-        registry.procedures=std::move(procedures); registry.sources=std::move(sources);
+        registry.procedures=std::move(procedures); registry.sources=std::move(sources);registry.enums=aliases;
     }
     registry.changes=changes; registry.dataVersion=data; registry.schemaVersion=schema; registry.tempSchemaVersion=temporary; registry.observedEpoch=epoch;
 }
@@ -122,9 +124,10 @@ public:
     std::shared_ptr<VbaObject> applicationObject() override { unavailable(); }
     std::shared_ptr<VbaObject> currentForm() override { unavailable(); }
     std::shared_ptr<VbaObject> reportsCollection() override { unavailable(); }
+    VbaEnumAliases projectEnumAliases() override {return registry_.enums;}
     std::shared_ptr<VbaModuleState> moduleState(std::string_view source) override {
         MetadataScope metadata(registry_);
-        auto state=standardVbaModuleState(db_,source);
+        auto state=standardVbaModuleState(db_,source,&registry_.enums);
         for(const auto& [name,value]:state->values) requireScalar(value);
         for(const auto& [procedure,values]:state->procedureStatics)
             for(const auto& [name,value]:values) requireScalar(value);
@@ -132,7 +135,7 @@ public:
     }
     std::vector<std::shared_ptr<VbaModuleState>> globalModuleStates() override {
         MetadataScope metadata(registry_);
-        auto states=publicVbaModuleStates(db_);
+        auto states=publicVbaModuleStates(db_,&registry_.enums);
         for(const auto& state:states) for(const auto& name:state->publicVariables)
             requireScalar(state->values.at(name));
         return states;

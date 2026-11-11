@@ -7,6 +7,7 @@
 #include "vba_redim_declaration_fixture.hpp"
 #include "vba_native_object_array_fixture.hpp"
 #include "vba_enum_type_fixture.hpp"
+#include "vba_project_enum_fixture.hpp"
 #include "vba_automatic_class_fixture.hpp"
 #include "vba_default_class_fixture.hpp"
 #include "vba_typed_class_fixture.hpp"
@@ -22,24 +23,25 @@
 #include <cassert>
 namespace {
 using namespace linaccess;
-struct ClassState {std::shared_ptr<VbaObject> error=makeVbaErrorObject();std::shared_ptr<VbaModuleState> automaticState;bool alive{true};int messages{};std::function<void()> callback;std::unordered_map<std::string,std::shared_ptr<VbaModuleState>> modules;std::unordered_map<std::string,std::string> classes{{"nativecounter",nativeClassFixture}};};
+struct ClassState {VbaEnumAliases enums;std::shared_ptr<VbaObject> error=makeVbaErrorObject();std::shared_ptr<VbaModuleState> automaticState;bool alive{true};int messages{};std::function<void()> callback;std::unordered_map<std::string,std::shared_ptr<VbaModuleState>> modules;std::unordered_map<std::string,std::string> classes{{"nativecounter",nativeClassFixture}};};
 class ClassServices final:public VbaHost {
 public:
     explicit ClassServices(std::shared_ptr<ClassState> state):state(std::move(state)){}
     std::shared_ptr<ClassState> state;
+    VbaEnumAliases projectEnumAliases() override {return state->enums;}
     std::shared_ptr<VbaObject> errorObject() override {return state->error;}
     std::optional<std::string> field(std::string_view) override {throw VbaRuntimeError(438,"No form in class services");}
     void setField(std::string_view,std::optional<std::string>) override {assert(false);}
     void saveRecord() override {assert(false);}
     std::shared_ptr<VbaObject> currentForm() override {throw VbaRuntimeError(438,"No hidden Me in standard service modules");}
     void message(std::string_view) override {++state->messages;if(state->callback) state->callback();}
-    std::shared_ptr<VbaModuleState> moduleState(std::string_view source) override {auto& value=state->modules[std::string(source)];if(!value) value=createVbaModuleState(source);return value;}
+    std::shared_ptr<VbaModuleState> moduleState(std::string_view source) override {auto& value=state->modules[vbaModuleBindingKey(source,state->enums)];if(!value) value=createVbaModuleState(source,&state->enums);return value;}
     std::vector<std::shared_ptr<VbaModuleState>> globalModuleStates() override {return state->automaticState ? std::vector<std::shared_ptr<VbaModuleState>>{state->automaticState} : std::vector<std::shared_ptr<VbaModuleState>>{};}
     std::optional<std::string> moduleForProcedure(std::string_view name) override {auto key=std::string(name);for(auto& ch:key) ch=static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));if(key=="projectvalue") return "Public Function ProjectValue As Long\nProjectValue=19\nEnd Function";if(key=="projectme") return "Public Function ProjectMe As Long\nProjectMe=VarType(Me)\nEnd Function";return {};}
     std::string projectClassName(std::string_view name) override {if(!knowsClassType(name)) throw VbaRuntimeError(3251,"Unknown technical class type");return name=="nativecounter" ? "NativeCounter" : std::string(name);}
     bool knowsClassType(std::string_view name) override {auto key=std::string(name);for(auto& ch:key) ch=static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));return state->classes.contains(key);}
-    bool canConstructClass(std::string_view name) override {const auto found=state->classes.find(std::string(name));if(found==state->classes.end()) return false;(void)compileNativeVbaClass(name=="nativecounter" ? "NativeCounter" : std::string(name),found->second);return true;}
-    std::shared_ptr<VbaObject> constructClass(std::string_view name) override {auto key=std::string(name);for(auto& ch:key) ch=static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));const auto found=state->classes.find(key);if(found==state->classes.end()) throw VbaRuntimeError(3251,"Unknown technical class");VbaClassContext context;context.check=[state=state]{if(!state->alive) throw VbaRuntimeError(3420,"Class technical context closed");};context.host=[state=state]{return std::make_unique<ClassServices>(state);};return constructNativeVbaClass(compileNativeVbaClass(key=="nativecounter" ? "NativeCounter" : key,found->second),std::move(context));}
+    bool canConstructClass(std::string_view name) override {const auto found=state->classes.find(std::string(name));if(found==state->classes.end()) return false;(void)compileNativeVbaClass(name=="nativecounter" ? "NativeCounter" : std::string(name),found->second,&state->enums);return true;}
+    std::shared_ptr<VbaObject> constructClass(std::string_view name) override {auto key=std::string(name);for(auto& ch:key) ch=static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));const auto found=state->classes.find(key);if(found==state->classes.end()) throw VbaRuntimeError(3251,"Unknown technical class");VbaClassContext context;context.check=[state=state]{if(!state->alive) throw VbaRuntimeError(3420,"Class technical context closed");};context.host=[state=state]{return std::make_unique<ClassServices>(state);};return constructNativeVbaClass(compileNativeVbaClass(key=="nativecounter" ? "NativeCounter" : key,found->second,&state->enums),std::move(context));}
 };
 }
 void testVbaClasses() {using namespace linaccess;auto state=std::make_shared<ClassState>();ClassServices host(state);state->classes["nativedefault"]=nativeDefaultClassFixture;
@@ -95,6 +97,21 @@ void testVbaClasses() {using namespace linaccess;auto state=std::make_shared<Cla
     result=executeVbaProcedure("Attribute VB_Name = \"Here\"\nPrivate Enum State\nFirst=1\nEnd Enum\nSub RejectForeignType\nDim value As Other.State\nEnd Sub","RejectForeignType",host);
     assert(result.status!=VbaExecutionStatus::Completed);
     const auto beforeEnumGuard=state->messages;result=executeVbaProcedure(enumTypeFixture+"Sub RejectEnumClass\nMsgBox \"unreached\"\nDim item As Object\nIf TypeOf item Is NativeState_2 Then Exit Sub\nEnd Sub\n","RejectEnumClass",host);assert(result.status==VbaExecutionStatus::Error && result.errorNumber==3251 && state->messages==beforeEnumGuard);
+    {
+        int reservedEnum=0;try{(void)nativeVbaEnumTypeNames("Public Enum Double\nFirst=1\nEnd Enum",true);}catch(const VbaRuntimeError& failure){reservedEnum=failure.number;}assert(reservedEnum==5);
+        const auto visible=nativeVbaEnumTypeNames(projectEnumProvider,true);assert(visible.contains("nativeshared_2") && visible.contains("enumprovider.nativeshared_2") && visible.contains("legacyshared_2") && !visible.contains("nativehidden_2") && !visible.contains("enumprovider.nativehidden_2"));
+        auto projectState=std::make_shared<ClassState>();projectState->enums=visible;projectState->classes["projectenumholder"]=projectEnumClassFixture;ClassServices projectHost(projectState);
+        for(const auto* source:{&projectEnumConsumer,&projectEnumQualifiedConsumer}) for(const auto& probe:std::vector<std::pair<const char*,int>>{{"EnumTypeProbe",64},{"EnumTypeOverflow",6}}) {
+            const auto outcome=executeVbaProcedure(*source,probe.first,projectHost);if(outcome.status!=VbaExecutionStatus::Completed) std::cerr<<"Project Enum core error="<<outcome.errorNumber<<" line="<<outcome.line<<"\n";
+            assert(outcome.status==VbaExecutionStatus::Completed && outcome.typedReturnValue->number==probe.second);
+        }
+        const auto signature=nativeVbaProcedureSignature(projectEnumSqlConsumer,"ProjectEnumSql",&visible);assert(signature && signature->resultType=="long" && signature->declaredTypes==std::vector<std::string>{"long"});
+        const auto objectProbe=executeVbaProcedure(projectEnumClassConsumer,"ProjectEnumClassProbe",projectHost);if(objectProbe.status!=VbaExecutionStatus::Completed) std::cerr<<"Project Enum class core error="<<objectProbe.errorNumber<<" line="<<objectProbe.line<<"\n";assert(objectProbe.status==VbaExecutionStatus::Completed && objectProbe.typedReturnValue->number==13);
+        projectState->enums.clear();const auto refused=executeVbaProcedure(projectEnumConsumer,"EnumTypeProbe",projectHost);assert(refused.status!=VbaExecutionStatus::Completed);
+        projectState->enums=visible;assert(executeVbaProcedure(projectEnumConsumer,"EnumTypeProbe",projectHost).status==VbaExecutionStatus::Completed);
+        auto isolated=std::make_shared<ClassState>();ClassServices isolatedHost(isolated);assert(executeVbaProcedure(projectEnumConsumer,"EnumTypeProbe",isolatedHost).status!=VbaExecutionStatus::Completed);
+        const auto hidden=executeVbaProcedure("Sub HiddenType\nMsgBox \"unreached\"\nDim value As EnumProvider.NativeHidden_2\nEnd Sub","HiddenType",projectHost);assert(hidden.status!=VbaExecutionStatus::Completed && projectState->messages==0);
+    }
     result=executeVbaProcedure(nativeObjectArrayFixture,"NativeObjectArrayProbe",host);if(result.status!=VbaExecutionStatus::Completed) std::cerr<<"Native object array: "<<result.explanation<<" line "<<result.line<<" error "<<result.errorNumber<<"\n";assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==25);
     for(const auto& probe:std::vector<std::pair<const char*,int>>{{"ReDimDeclarationProbe",30},{"ReDimExistingProbe",17},{"ReDimStaticProbe",7},{"ReDimStaticProbe",14}}) {const auto outcome=executeVbaProcedure(nativeReDimDeclarationFixture,probe.first,host);if(outcome.status!=VbaExecutionStatus::Completed) std::cerr<<"ReDim declaration "<<probe.first<<": "<<outcome.explanation<<" line "<<outcome.line<<" error "<<outcome.errorNumber<<"\n";assert(outcome.status==VbaExecutionStatus::Completed && outcome.typedReturnValue->number==probe.second);}
     for(const auto& probe:std::vector<std::pair<const char*,int>>{{"ErrorClearProbe",704},{"ErrorExitProbe",17}}) {const auto outcome=executeVbaProcedure(nativeErrorClearFixture,probe.first,host);if(outcome.status!=VbaExecutionStatus::Completed) std::cerr<<"Err reset "<<probe.first<<": "<<outcome.explanation<<" line "<<outcome.line<<" error "<<outcome.errorNumber<<"\n";assert(outcome.status==VbaExecutionStatus::Completed && outcome.typedReturnValue->number==probe.second);}

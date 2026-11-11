@@ -3001,7 +3001,11 @@ End Sub)VBA",db,&window);context.show();QApplication::processEvents();
         moduleCommands->member("OpenModule",{VbaValue::string("ImportedModuleViewer"),VbaValue::string("ViewerOnly")});auto* viewer=editorFor("ImportedModuleViewer");assert(viewer && viewer->findChild<QPlainTextEdit*>("native-module-source")->isReadOnly() && !viewer->findChild<QPushButton*>("native-module-save")->isEnabled() && !viewer->findChild<QPushButton*>("native-module-run")->isEnabled());
         assert(archive()==importedArchive);moduleCommands->member("Close",{VbaValue::integer(5),VbaValue::string("ImportedModuleViewer"),VbaValue::integer(2)});QSqlQuery remove(db);remove.prepare("DELETE FROM main._la_access_artifacts WHERE id=?");remove.addBindValue(id);assert(remove.exec());remove.finish();assert(archive()==originalArchive);QApplication::processEvents();
     }
-    std::vector<VbaValue> arguments;assert(context.executeProcedure("UseOwnedModule",arguments).status==linaccess::VbaExecutionStatus::Completed && makePreviewFormObject(context)->member("Tag",{}).asText()=="7");
+    std::vector<VbaValue> arguments;const auto initialOwned=context.executeProcedure("UseOwnedModule",arguments);
+    if(initialOwned.status!=linaccess::VbaExecutionStatus::Completed) {
+        std::cerr<<"Owned module status="<<static_cast<int>(initialOwned.status)<<" error="<<initialOwned.errorNumber<<" line="<<initialOwned.line<<"\n";
+    }
+    assert(initialOwned.status==linaccess::VbaExecutionStatus::Completed && makePreviewFormObject(context)->member("Tag",{}).asText()=="7");
     const auto first=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT NativeAdd(5) AS computed,NativeCounter() AS total"),{});assert(first.rows.size()==1 && first.rows[0][0].toInt()==8 && first.rows[0][1].toInt()==2);
     QSqlQuery sql(db);assert(!sql.exec("SELECT NativeAdjust(1)"));
     QSqlQuery prepared(db);assert(prepared.prepare("SELECT NativeAdd(5)"));

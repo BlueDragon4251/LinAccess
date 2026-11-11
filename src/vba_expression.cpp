@@ -2801,7 +2801,7 @@ VbaValue VbaHost::eval(std::string_view source) {
             visible=!header.starts_with("private ") && !header.starts_with("private\t");
         }
         if(!visible) return {};
-        auto signature=nativeVbaProcedureSignature(*module,canonical);
+        const auto aliases=projectEnumAliases();auto signature=nativeVbaProcedureSignature(*module,canonical,&aliases);
         if(!signature || !signature->function) throw VbaRuntimeError(3251,"Eval public function signature is unsupported");
         if(const auto suffix=vbaIdentifierType(name); !suffix.empty() && signature->resultType!=suffix) throw VbaRuntimeError(13,"Eval function type character does not match its declaration");
         return std::pair{*module,std::move(*signature)};

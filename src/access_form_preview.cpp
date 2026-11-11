@@ -520,6 +520,7 @@ public:
     std::shared_ptr<linaccess::VbaRandomState> randomState() override {if(preview_.closed_ || preview_.openCancelled_ || preview_.db_.databaseName()!=observationDatabase_) throw linaccess::VbaRuntimeError(3420,"VBA document environment is closed");return linaccess::projectVbaRandomState(preview_.db_);}
     static void openProjectDocument(QSqlDatabase,QWidget*,linaccess::AccessDocumentKind,const QString&,const QString&,std::optional<QString>,int,int,QPointer<AccessFormPreview> caller={});
     explicit PreviewVbaHost(AccessFormPreview& preview) : preview_(preview),observationDatabase_(preview.db_.databaseName()) {}
+    linaccess::VbaEnumAliases projectEnumAliases() override {if(preview_.closed_ || preview_.openCancelled_ || preview_.db_.databaseName()!=observationDatabase_) throw linaccess::VbaRuntimeError(3420,"VBA type environment is closed");return linaccess::projectVbaEnumAliases(preview_.db_);}
     std::string projectClassName(std::string_view name) override {requireInstance();return linaccess::nativeProjectClassName(preview_.db_,name);}
     bool knowsClassType(std::string_view name) override {requireInstance();return linaccess::nativeProjectClassTypeKnown(preview_.db_,name);}
     bool canConstructClass(std::string_view name) override {requireInstance();return linaccess::nativeProjectClassAvailable(preview_.db_,name);}
@@ -548,9 +549,9 @@ public:
     std::shared_ptr<linaccess::VbaModuleState> moduleState(std::string_view source) override {
         if (source!=preview_.vba_.toUtf8().toStdString() && !linaccess::isVbaClassModule(source))
             return linaccess::standardVbaModuleState(preview_.db_,source);
-        const auto key=std::string(source);
+        const auto aliases=projectEnumAliases();const auto key=linaccess::vbaModuleBindingKey(source,aliases);
         if (const auto found=preview_.moduleStates_.find(key);found!=preview_.moduleStates_.end()) return found->second;
-        auto state=linaccess::createVbaModuleState(source); preview_.moduleStates_.emplace(key,state); return state;
+        auto state=linaccess::createVbaModuleState(source,&aliases); preview_.moduleStates_.emplace(key,state); return state;
     }
     std::vector<std::shared_ptr<linaccess::VbaModuleState>> globalModuleStates() override {
         return linaccess::publicVbaModuleStates(preview_.db_);
@@ -982,14 +983,14 @@ public:
         const auto name=linaccess::nativeMacroFunctionName(QString::fromUtf8(expression));
         const auto target=name.toUtf8().toStdString();
         const auto local=preview_.property("la_bound_event_active").toBool() ? preview_.vba_.toUtf8().toStdString() : std::string{};
-        auto signature=linaccess::nativeVbaProcedureSignature(local,target);
+        const auto aliases=projectEnumAliases();auto signature=linaccess::nativeVbaProcedureSignature(local,target,&aliases);
         if(!signature) {
             QMap<QString,QString> canonical;
             (void)linaccess::standardVbaModuleSources(preview_.db_,&canonical);
             if(canonical.contains(name.toCaseFolded())) throw linaccess::VbaRuntimeError(3251,"RunCode Function name must differ from its module name");
             const auto source=moduleForProcedure(target);
             if(!source) throw linaccess::VbaRuntimeError(2517,"RunCode public Function was not found");
-            signature=linaccess::nativeVbaProcedureSignature(*source,target);
+            signature=linaccess::nativeVbaProcedureSignature(*source,target,&aliases);
         }
         if(!signature || !signature->function) throw linaccess::VbaRuntimeError(3251,"RunCode requires a Function, not a Sub");
         const auto result=linaccess::executeVbaEventExpression(local,"="+expression,*this);
@@ -1681,7 +1682,8 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
             auto clickBinding=control.onClick;
             // MSCAL's source-interface Click event is stored in CodeBehind,
             // without a SaveAsText OnClick property in the original export.
-            if (clickBinding.isEmpty() && linaccess::validateVbaProcedure(vba_.toUtf8().toStdString(),(controlEventPrefix(control.name)+"_Click").toStdString()).status!=linaccess::VbaExecutionStatus::ProcedureMissing)
+            const auto enumAliases=linaccess::projectVbaEnumAliases(db_);
+            if (clickBinding.isEmpty() && linaccess::validateVbaProcedure(vba_.toUtf8().toStdString(),(controlEventPrefix(control.name)+"_Click").toStdString(),&enumAliases).status!=linaccess::VbaExecutionStatus::ProcedureMissing)
                 clickBinding="[Event Procedure]";
             if (!clickBinding.isEmpty()) connect(calendar,&QCalendarWidget::clicked,this,[this,name=control.name,binding=clickBinding,calendar](const QDate&) {
                 calendar->setProperty("la_null",false); markDirty(name,true);
@@ -3112,8 +3114,9 @@ void AccessFormPreview::requeryControl(std::string_view name) {
 std::optional<linaccess::VbaValue> AccessFormPreview::getModuleMember(std::string_view name,bool publicOnly,std::vector<linaccess::VbaValue> arguments) {
     if (closed_ || openCancelled_) throw linaccess::VbaRuntimeError(2450,"CodeBehind instance is unavailable");
     const auto source=vba_.toUtf8().toStdString();
-    auto found=moduleStates_.find(source);
-    if (found==moduleStates_.end()) found=moduleStates_.emplace(source,linaccess::createVbaModuleState(source)).first;
+    const auto aliases=linaccess::projectVbaEnumAliases(db_);const auto binding=linaccess::vbaModuleBindingKey(source,aliases);
+    auto found=moduleStates_.find(binding);
+    if (found==moduleStates_.end()) found=moduleStates_.emplace(binding,linaccess::createVbaModuleState(source,&aliases)).first;
     const auto key=QString::fromUtf8(name.data(),name.size()).toCaseFolded().toStdString();
     const auto frame=found->second;
     linaccess::validateNativeProjectClassFields(db_,*frame);
@@ -3122,7 +3125,7 @@ std::optional<linaccess::VbaValue> AccessFormPreview::getModuleMember(std::strin
         if(frame->automaticObjects.contains(key)) {QPointer<AccessFormPreview> guard(this);PreviewVbaHost host(*this);(void)linaccess::materializeAutomaticVbaObject(frame->values.at(key),frame->types.at(key),host);if(!guard || guard->closed_ || guard->openCancelled_) throw linaccess::VbaRuntimeError(2450,"Field owner closed during automatic construction");}
         return frame->values.at(key);
     }
-    const auto signature=linaccess::nativeVbaPropertySignature(source,name,linaccess::VbaPropertyAccess::Get,publicOnly);
+    const auto signature=linaccess::nativeVbaPropertySignature(source,name,linaccess::VbaPropertyAccess::Get,publicOnly,&aliases);
     if(!signature) return {};
     if(signature->names.empty() && !arguments.empty()
         && (signature->resultType.empty() || signature->resultType=="variant" || signature->resultType.ends_with("()") || linaccess::isDeclaredObjectType(signature->resultType))) {
@@ -3139,11 +3142,12 @@ std::optional<linaccess::VbaValue> AccessFormPreview::getModuleMember(std::strin
 std::optional<linaccess::VbaValue> AccessFormPreview::invokeModuleProperty(std::string_view name,linaccess::VbaPropertyAccess access,std::vector<linaccess::VbaValue> arguments,bool publicOnly) {
     if(closed_ || openCancelled_) throw linaccess::VbaRuntimeError(2450,"CodeBehind instance is unavailable");
     const auto source=vba_.toUtf8().toStdString();
-    const bool setter=linaccess::nativeVbaPropertySignature(source,name,access,publicOnly).has_value();
+    const auto aliases=linaccess::projectVbaEnumAliases(db_);
+    const bool setter=linaccess::nativeVbaPropertySignature(source,name,access,publicOnly,&aliases).has_value();
     const bool write=access!=linaccess::VbaPropertyAccess::Get;std::vector<linaccess::VbaValue> defaultIndices;linaccess::VbaValue value;
     if(!setter) {
         if(!write || arguments.empty()) return {};
-        const auto getter=linaccess::nativeVbaPropertySignature(source,name,linaccess::VbaPropertyAccess::Get,publicOnly);
+        const auto getter=linaccess::nativeVbaPropertySignature(source,name,linaccess::VbaPropertyAccess::Get,publicOnly,&aliases);
         if(!getter) return {};
         const bool forwarded=getter->names.empty() && arguments.size()>1
             && (getter->resultType.empty() || getter->resultType=="variant" || linaccess::isDeclaredObjectType(getter->resultType));
@@ -3170,8 +3174,9 @@ std::optional<linaccess::VbaValue> AccessFormPreview::invokeModuleProperty(std::
 bool AccessFormPreview::setModuleMember(std::string_view name,const linaccess::VbaValue& value,bool publicOnly,bool reference) {
     if(closed_ || openCancelled_) throw linaccess::VbaRuntimeError(2450,"CodeBehind instance is unavailable");
     const auto source=vba_.toUtf8().toStdString();
-    auto found=moduleStates_.find(source);
-    if(found==moduleStates_.end()) found=moduleStates_.emplace(source,linaccess::createVbaModuleState(source)).first;
+    const auto aliases=linaccess::projectVbaEnumAliases(db_);const auto binding=linaccess::vbaModuleBindingKey(source,aliases);
+    auto found=moduleStates_.find(binding);
+    if(found==moduleStates_.end()) found=moduleStates_.emplace(binding,linaccess::createVbaModuleState(source,&aliases)).first;
     const auto key=QString::fromUtf8(name.data(),name.size()).toCaseFolded().toStdString();
     const auto frame=found->second;
     linaccess::validateNativeProjectClassFields(db_,*frame);
@@ -3189,7 +3194,7 @@ bool AccessFormPreview::setModuleMember(std::string_view name,const linaccess::V
         frame->values.at(key)=linaccess::coerceVbaModuleValue(value,type);return true;
     }
     if(invokeModuleProperty(name,reference ? linaccess::VbaPropertyAccess::Set : linaccess::VbaPropertyAccess::Let,{value},publicOnly)) return true;
-    if(linaccess::nativeVbaPropertySignature(source,name,linaccess::VbaPropertyAccess::Get,publicOnly))
+    if(linaccess::nativeVbaPropertySignature(source,name,linaccess::VbaPropertyAccess::Get,publicOnly,&aliases))
         throw linaccess::VbaRuntimeError(383,"Property is read-only");
     return false;
 }

@@ -1060,10 +1060,10 @@ public:
     explicit PreviewFormObject(AccessFormPreview& preview) : PreviewObjectBase(preview),report_(preview.layout_.kind==linaccess::AccessDocumentKind::Report) {}
     std::optional<linaccess::VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         if(report_ && text(name).compare("GroupLevel",Qt::CaseInsensitive)==0) return linaccess::VbaArgumentSignature{{"Index"},1};
-        return linaccess::nativeVbaPropertySignature(checked().vba_.toUtf8().toStdString(),name,linaccess::VbaPropertyAccess::Get,true);
+        auto& preview=checked();const auto aliases=linaccess::projectVbaEnumAliases(preview.db_);return linaccess::nativeVbaPropertySignature(preview.vba_.toUtf8().toStdString(),name,linaccess::VbaPropertyAccess::Get,true,&aliases);
     }
     std::optional<linaccess::VbaArgumentSignature> assignmentSignature(std::string_view name,bool reference) const override {
-        return linaccess::nativeVbaPropertySignature(checked().vba_.toUtf8().toStdString(),name,reference ? linaccess::VbaPropertyAccess::Set : linaccess::VbaPropertyAccess::Let,true);
+        auto& preview=checked();const auto aliases=linaccess::projectVbaEnumAliases(preview.db_);return linaccess::nativeVbaPropertySignature(preview.vba_.toUtf8().toStdString(),name,reference ? linaccess::VbaPropertyAccess::Set : linaccess::VbaPropertyAccess::Let,true,&aliases);
     }
     bool isNativeType(std::string_view type) const override { return type==(report_ ? "access.report" : "access.form"); }
     void applyNativeFilter(const QString& criteria,bool clear) {
@@ -1122,7 +1122,8 @@ public:
             if (args.empty()) return linaccess::VbaValue::reference(controls);
             return controls->member("Item",args);
         }
-        if(!args.empty() && linaccess::nativeVbaPropertySignature(preview.vba_.toUtf8().toStdString(),name,linaccess::VbaPropertyAccess::Get,true)) {
+        const auto aliases=linaccess::projectVbaEnumAliases(preview.db_);
+        if(!args.empty() && linaccess::nativeVbaPropertySignature(preview.vba_.toUtf8().toStdString(),name,linaccess::VbaPropertyAccess::Get,true,&aliases)) {
             const auto value=preview.getModuleMember(name,true,args);(void)checked();return *value;
         }
         if (!args.empty()) throw linaccess::VbaRuntimeError(450,"Unexpected form arguments");

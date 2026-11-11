@@ -56,3 +56,12 @@ Enum fixture is also executed with real same-source qualified As clauses; the
 actual owned SQL module registers its qualified Enum return as Long and executes
 EnumSqlIdentity(1234). Foreign qualified type is rejected. No new CTest/catalog
 IDs;456/386/70 unchanged. No Windows Access execution-oracle claim.
+
+## Explicit project context
+
+Checked native project hosts now supply public Enum aliases across modules and
+classes; see [VBA_PROJECT_ENUM_BINDINGS.md](VBA_PROJECT_ENUM_BINDINGS.md). That
+explicit environment can qualify a headerless owned module by its checked project
+identity. The default source-only API retains the VB_Name-only rule above and
+does not obtain a project identity implicitly. Complete reference libraries,
+project-prefix names and cross-module constant-expression folding remain open.

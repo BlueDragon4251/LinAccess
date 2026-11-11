@@ -55,7 +55,7 @@ void proveNamespace(QSqlDatabase db,const ClassRevision& row) {
     QSet<QString> classes;const auto sources=standardVbaModuleSources(db,nullptr,&classes);if(!classes.contains(row.name.toCaseFolded()) || !sources.contains(row.name.toCaseFolded()) || sources.value(row.name.toCaseFolded())!=(row.imported ? row.encoded : row.source)) throw VbaRuntimeError(5,"Native class namespace is ambiguous");
 }
 std::shared_ptr<const NativeVbaClassDefinition> compiled(QSqlDatabase db,const ClassRevision& row) {
-    proveNamespace(db,row);auto result=compileNativeVbaClass(row.name.toStdString(),row.source.toStdString());
+    proveNamespace(db,row);const auto aliases=projectVbaEnumAliases(db);auto result=compileNativeVbaClass(row.name.toStdString(),row.source.toStdString(),&aliases);
     for(const auto& type:nativeVbaClassDeclaredTypes(*result)) if(!nativeProjectClassTypeKnown(db,type)) throw VbaRuntimeError(3251,"Class declaration type is unavailable");
     return result;
 }

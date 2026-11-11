@@ -585,7 +585,7 @@ std::string declaredScalarType(const std::string& base,const std::string& length
     return "string*"+std::to_string(static_cast<int>(width));
 }
 struct ConstantDeclaration { std::string name,type; VbaValue value; };
-std::unordered_set<std::string> moduleEnumNames(std::string_view module);
+std::unordered_set<std::string> moduleEnumNames(std::string_view module,const VbaEnumAliases* aliases=nullptr);
 std::vector<ConstantDeclaration> constantDeclarations(const std::string& text,VbaVariables& known,VbaCompareMode mode,const std::unordered_set<std::string>& enums,ConstantTypes& knownTypes) {
     static const std::regex declaration(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?)(?:\s+As\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*(?:\.[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)*))?\s*=\s*(.+)$)",std::regex::icase);
     std::vector<ConstantDeclaration> result; std::unordered_set<std::string> names;
@@ -611,14 +611,14 @@ std::vector<ConstantDeclaration> constantDeclarations(const std::string& text,Vb
     return result;
 }
 struct ModuleConstantDeclaration { ConstantDeclaration value; bool publicValue{}; int line{}; std::string qualifiedName; };
-std::vector<ModuleConstantDeclaration> moduleConstantDeclarations(std::string_view module) {
+std::vector<ModuleConstantDeclaration> moduleConstantDeclarations(std::string_view module,const VbaEnumAliases* aliases=nullptr) {
     const auto activeSource=preprocessVbaConditional(module);module=activeSource;
     static const std::regex procedure(R"(^\s*(?:(?:Public|Private|Friend)\s+)?(?:Static\s+)?(?:Sub|Function|Property)\s+)",std::regex::icase);
     static const std::regex declaration(R"(^\s*(?:(Public|Private)\s+)?Const\s+(.+)$)",std::regex::icase);
-    static const std::regex enumStart(R"(^\s*(?:(Public|Private)\s+)?Enum\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*$)",std::regex::icase);
+    static const std::regex enumStart(R"(^\s*(?:(Public|Private|Global)\s+)?Enum\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*$)",std::regex::icase);
     static const std::regex enumEnd(R"(^\s*End\s+Enum\s*$)",std::regex::icase);
     static const std::regex enumMember(R"(^\s*([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s*=\s*(.+))?\s*$)");
-    VbaVariables values; ConstantTypes types; std::unordered_set<std::string> names,enumTypes;const auto declaredEnumTypes=moduleEnumNames(module);
+    VbaVariables values; ConstantTypes types; std::unordered_set<std::string> names,enumTypes;const auto declaredEnumTypes=moduleEnumNames(module,aliases);
     std::vector<ModuleConstantDeclaration> result; const auto mode=moduleCompareMode(module);
     bool inEnum=false,enumPublic=false,hasMembers=false; std::int64_t nextValue=0; std::string enumName;
     const auto append=[&](ConstantDeclaration value,bool visible,int line,std::string qualified={}) {
@@ -668,9 +668,9 @@ std::vector<ModuleConstantDeclaration> moduleConstantDeclarations(std::string_vi
     if(inEnum) throw VbaRuntimeError(3251,"Enum declaration is not closed");
     return result;
 }
-VbaVariables moduleConstantValues(std::string_view module,ConstantTypes* types=nullptr) {
+VbaVariables moduleConstantValues(std::string_view module,ConstantTypes* types=nullptr,const VbaEnumAliases* aliases=nullptr) {
     VbaVariables values;
-    for(const auto& item:moduleConstantDeclarations(module)) {
+    for(const auto& item:moduleConstantDeclarations(module,aliases)) {
         values.emplace(item.value.name,item.value.value);
         if(types) types->emplace(item.value.name,item.value.type);
         if(!item.qualifiedName.empty()) {
@@ -750,31 +750,21 @@ ImplicitTypes moduleImplicitTypes(std::string_view module) {
     }
     return result;
 }
-std::unordered_set<std::string> moduleEnumNames(std::string_view module) {
-    static const std::regex declaration(R"(^\s*(?:(?:Public|Private)\s+)?Enum\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*$)",std::regex::icase);
-    static const std::regex identity(R"enum(^\s*Attribute\s+VB_Name\s*=\s*"([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)"\s*$)enum",std::regex::icase);
-    std::istringstream source(preprocessVbaConditional(module));std::string line,moduleName;std::unordered_set<std::string> names;std::smatch match;
-    static const std::regex procedure(R"(^\s*(?:(?:Public|Private|Friend)\s+)?(?:Static\s+)?(?:Sub|Function|Property)\s+)",std::regex::icase);
-    while(std::getline(source,line)) {
-        const auto stripped=withoutComment(line);if(std::regex_search(stripped,procedure)) break;
-        if(std::regex_match(stripped,match,identity)) {
-            const auto name=lower(match[1].str());
-            if(!moduleName.empty()) throw VbaRuntimeError(5,"Duplicate module identity attribute");
-            moduleName=name;
-        } else if(std::regex_match(stripped,match,declaration)) names.insert(lower(match[1].str()));
-    }
-    if(!moduleName.empty()) {const auto localNames=names;for(const auto& name:localNames) names.insert(moduleName+"."+name);}
+std::unordered_set<std::string> moduleEnumNames(std::string_view module,const VbaEnumAliases* aliases) {
+    auto names=nativeVbaEnumTypeNames(module);
+    if(aliases) names.insert(aliases->begin(),aliases->end());
     return names;
 }
+
 struct ProcedureDeclarationContext {
     const std::unordered_set<std::string>& enums;const VbaVariables& constants;const ConstantTypes& constantTypes;const ImplicitTypes& implicit;int arrayBase;VbaCompareMode compare;
 };
 VbaExecutionResult parseProcedure(std::string_view module, std::string_view name,
                                   std::vector<Statement>& statements, bool& isFunction, bool& hasCancel,
-                                  std::vector<Parameter>* parameters = nullptr,bool resolveLabels=true,std::string* resultType=nullptr,bool inheritedWith=false);
+                                  std::vector<Parameter>* parameters = nullptr,bool resolveLabels=true,std::string* resultType=nullptr,bool inheritedWith=false,const VbaEnumAliases* aliases=nullptr);
 VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_view name,
                                   std::vector<Statement>& statements, bool& isFunction, bool& hasCancel,
-                                  std::vector<Parameter>* parameters = nullptr,bool resolveLabels=true,std::string* resultType=nullptr,bool inheritedWith=false,const ProcedureDeclarationContext* inherited=nullptr) {
+                                  std::vector<Parameter>* parameters = nullptr,bool resolveLabels=true,std::string* resultType=nullptr,bool inheritedWith=false,const ProcedureDeclarationContext* inherited=nullptr,const VbaEnumAliases* aliases=nullptr) {
     const auto selector=lower(std::string(name));
     std::string accessor,requestedName=std::string(name);
     bool staticProcedure=false;
@@ -786,7 +776,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
     std::string activeSource;
     try {activeSource=preprocessVbaConditional(module);module=activeSource;}
     catch(const VbaConditionalError& error) {VbaExecutionResult result{VbaExecutionStatus::Unsupported,error.what(),error.line};result.errorNumber=error.number;return result;}
-    const auto enumTypes=inherited ? inherited->enums : moduleEnumNames(module);
+    const auto enumTypes=inherited ? inherited->enums : moduleEnumNames(module,aliases);
     ImplicitTypes implicitTypes;int declarationArrayBase=0;
     try {implicitTypes=inherited ? inherited->implicit : moduleImplicitTypes(module);declarationArrayBase=inherited ? inherited->arrayBase : moduleArrayBase(module);}
     catch(const VbaRuntimeError& error) {VbaExecutionResult failure{VbaExecutionStatus::Unsupported,error.what(),0};failure.errorNumber=error.number;return failure;}
@@ -794,7 +784,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
     ConstantTypes declarationTypes;
     try {
         if(inherited) {declarationConstants=inherited->constants;declarationTypes=inherited->constantTypes;}
-        else declarationConstants=moduleConstantValues(module,&declarationTypes);
+        else declarationConstants=moduleConstantValues(module,&declarationTypes,aliases);
     }
     catch(const VbaRuntimeError& error) { VbaExecutionResult result{VbaExecutionStatus::Unsupported,"Module constant declaration unsupported",0}; result.errorNumber=error.number; return result; }
     std::unordered_set<std::string> localConstants;
@@ -1659,9 +1649,11 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
     return within ? VbaExecutionResult{VbaExecutionStatus::Error, "End Sub fehlt", line}
                   : VbaExecutionResult{VbaExecutionStatus::ProcedureMissing, {}, 0};
 }
-// Cache source-only translation plans, never host/module/DAO/document state.
+// Cache translation plans with their explicit lexical Enum names; never retain
+// host/module/DAO/document state or infer bindings from another project.
 struct ProcedurePlan {
     std::string module,name,resultType;
+    VbaEnumAliases aliases;
     std::size_t moduleHash{},cost{};
     bool resolveLabels{},inheritedWith{},function{},cancel{};
     std::vector<Statement> statements;
@@ -1670,8 +1662,8 @@ struct ProcedurePlan {
 };
 VbaExecutionResult parseProcedure(std::string_view module,std::string_view name,
                                  std::vector<Statement>& statements,bool& function,bool& cancel,
-                                 std::vector<Parameter>* parameters,bool resolveLabels,std::string* resultType,bool inheritedWith) {
-    if(!statements.empty()) return parseProcedureUncached(module,name,statements,function,cancel,parameters,resolveLabels,resultType,inheritedWith);
+                                 std::vector<Parameter>* parameters,bool resolveLabels,std::string* resultType,bool inheritedWith,const VbaEnumAliases* aliases) {
+    if(!statements.empty()) return parseProcedureUncached(module,name,statements,function,cancel,parameters,resolveLabels,resultType,inheritedWith,nullptr,aliases);
     constexpr std::size_t budget=16*1024*1024,entryLimit=128;
     static thread_local std::list<ProcedurePlan> plans;
     static thread_local std::size_t accounted=0;
@@ -1683,7 +1675,8 @@ VbaExecutionResult parseProcedure(std::string_view module,std::string_view name,
     };
     const auto found=std::find_if(plans.begin(),plans.end(),[&](const ProcedurePlan& plan) {
         return plan.moduleHash==hash && plan.name==normalized && plan.resolveLabels==resolveLabels
-            && plan.inheritedWith==inheritedWith && plan.module==module;
+            && plan.inheritedWith==inheritedWith && plan.module==module
+            && (aliases ? plan.aliases==*aliases : plan.aliases.empty());
     });
     if(found!=plans.end()) {
         copy(*found); const auto result=found->result; plans.splice(plans.begin(),plans,found); return result;
@@ -1691,7 +1684,7 @@ VbaExecutionResult parseProcedure(std::string_view module,std::string_view name,
     std::vector<Parameter> inferredParameters; std::string inferredType;
     auto* parsedParameters=parameters ? parameters : &inferredParameters;
     auto* parsedType=resultType ? resultType : &inferredType;
-    const auto result=parseProcedureUncached(module,name,statements,function,cancel,parsedParameters,resolveLabels,parsedType,inheritedWith);
+    const auto result=parseProcedureUncached(module,name,statements,function,cancel,parsedParameters,resolveLabels,parsedType,inheritedWith,nullptr,aliases);
     if(result.status!=VbaExecutionStatus::Completed || result.typedReturnValue || result.returnValue) return result;
     ProcedurePlan plan; plan.result=result; plan.function=function; plan.cancel=cancel;
     plan.moduleHash=hash; plan.resolveLabels=resolveLabels; plan.inheritedWith=inheritedWith;
@@ -1716,9 +1709,10 @@ VbaExecutionResult parseProcedure(std::string_view module,std::string_view name,
     for(const auto& parameter:*parsedParameters) {
         add(parameter.name.capacity()+parameter.type.capacity()+parameter.defaultExpression.capacity()); scalar(parameter.defaultValue);
     }
+    if(aliases) for(const auto& alias:*aliases) add(64+alias.size());
     if(plan.cost>budget) return result;
     try {
-        plan.module=std::string(module); plan.name=normalized; plan.resultType=*parsedType;
+        plan.module=std::string(module); plan.name=normalized; plan.resultType=*parsedType;if(aliases) plan.aliases=*aliases;
         plan.statements=statements; plan.parameters=*parsedParameters;
         while(!plans.empty() && (plans.size()>=entryLimit || accounted>budget-plan.cost)) { accounted-=plans.back().cost; plans.pop_back(); }
         plans.push_front(std::move(plan)); accounted+=plans.front().cost;
@@ -1735,7 +1729,7 @@ std::unordered_set<std::string> moduleProcedureNames(std::string_view module) {
     }
     return names;
 }
-std::vector<std::string> procedureClassTypes(std::string_view module,const std::vector<Parameter>& parameters,const std::string& resultType,const std::vector<Statement>& instructions) {
+std::vector<std::string> procedureClassTypes(std::string_view module,const std::vector<Parameter>& parameters,const std::string& resultType,const std::vector<Statement>& instructions,const VbaEnumAliases* aliases=nullptr) {
     std::unordered_set<std::string> names;
     const auto declared=[&](std::string_view type) {if(isProjectClassType(type)) names.insert(std::string(projectClassTypeName(type)));};
     declared(resultType);for(const auto& parameter:parameters) declared(parameter.type);
@@ -1747,12 +1741,12 @@ std::vector<std::string> procedureClassTypes(std::string_view module,const std::
         if(instruction.type==Statement::Type::ObjectAssign || instruction.type==Statement::Type::IndexedAssign || instruction.type==Statement::Type::If) expression(instruction.argument);
         for(const auto& target:instruction.resizeTargets) {declared(target.elementType);expression(target.bounds);}
     }
-    const auto enums=moduleEnumNames(module);for(const auto& name:names) if(enums.contains(name)) throw VbaRuntimeError(3251,"Enum type aliases are not project class references");
+    const auto enums=moduleEnumNames(module,aliases);for(const auto& name:names) if(enums.contains(name)) throw VbaRuntimeError(3251,"Enum type aliases are not project class references");
     return {names.begin(),names.end()};
 }
-std::optional<VbaArgumentSignature> localProcedureSignature(std::string_view module,std::string_view name) {
+std::optional<VbaArgumentSignature> localProcedureSignature(std::string_view module,std::string_view name,const VbaEnumAliases* aliases=nullptr) {
     std::vector<Statement> statements; std::vector<Parameter> parameters; bool function=false,cancel=false; std::string resultType;
-    if(parseProcedure(module,name,statements,function,cancel,&parameters,true,&resultType).status!=VbaExecutionStatus::Completed) return {};
+    if(parseProcedure(module,name,statements,function,cancel,&parameters,true,&resultType,false,aliases).status!=VbaExecutionStatus::Completed) return {};
     VbaArgumentSignature signature; signature.localProcedure=true; signature.function=function; signature.resultType=std::move(resultType);
     signature.variadic=std::any_of(parameters.begin(),parameters.end(),[](const auto& parameter){return parameter.paramArray;});
     for(const auto& parameter:parameters) {
@@ -1768,15 +1762,44 @@ std::optional<VbaArgumentSignature> localProcedureSignature(std::string_view mod
 
 }
 
-std::vector<std::string> nativeVbaProcedureClassTypes(std::string_view module,std::string_view name) {
-    std::vector<Statement> statements;std::vector<Parameter> parameters;bool function=false,cancel=false;std::string result;
-    const auto parsed=parseProcedure(module,name,statements,function,cancel,&parameters,true,&result);
-    if(parsed.status!=VbaExecutionStatus::Completed) throw VbaRuntimeError(3251,"Project class declaration syntax is unavailable");
-    return procedureClassTypes(module,parameters,result,statements);
+VbaEnumAliases nativeVbaEnumTypeNames(std::string_view module,bool publicOnly) {
+    static const std::regex declaration(R"(^\s*(?:(Public|Private|Global)\s+)?Enum\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*$)",std::regex::icase);
+    static const std::regex identity(R"enum(^\s*Attribute\s+VB_Name\s*=\s*"([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)"\s*$)enum",std::regex::icase);
+    static const std::regex procedure(R"(^\s*(?:(?:Public|Private|Friend)\s+)?(?:Static\s+)?(?:Sub|Function|Property)\s+)",std::regex::icase);
+    if(module.size()>1024*1024) throw VbaRuntimeError(3035,"Enum source exceeds one MiB");
+    const auto active=preprocessVbaConditional(module);
+    static const std::regex classHeader(R"(^\s*VERSION[^\r\n]*\bCLASS\s*$)",std::regex::icase|std::regex::multiline);
+    const bool classModule=std::regex_search(active,classHeader);
+    std::istringstream source(active);std::string line,moduleName;VbaEnumAliases names;std::smatch match;
+    while(std::getline(source,line)) {
+        const auto stripped=withoutComment(line);if(std::regex_search(stripped,procedure)) break;
+        if(std::regex_match(stripped,match,identity)) {
+            if(!moduleName.empty()) throw VbaRuntimeError(5,"Duplicate module identity attribute");moduleName=lower(match[1].str());
+        } else if(std::regex_match(stripped,match,declaration)) {
+            if(classModule && lower(match[1].str())=="global") throw VbaRuntimeError(3251,"Global Enum is not allowed in a class module");
+            const auto name=lower(match[2].str());
+            static const VbaEnumAliases intrinsicTypes{"variant","boolean","byte","integer","long","single","double","currency","date","string","decimal","object","longlong","longptr","any"};
+            if(intrinsicTypes.contains(name)) throw VbaRuntimeError(5,"An Enum name cannot replace an intrinsic type keyword");
+            if(!publicOnly || lower(match[1].str())!="private") names.insert(name);
+        }
+    }
+    if(!moduleName.empty()) {const auto unqualified=names;for(const auto& name:unqualified) names.insert(moduleName+"."+name);}
+    return names;
 }
-std::optional<VbaArgumentSignature> nativeVbaProcedureSignature(std::string_view module,std::string_view procedure) {
+std::string vbaModuleBindingKey(std::string_view module,const VbaEnumAliases& aliases) {
+    if(aliases.empty()) return std::string(module);
+    std::vector<std::string> sorted(aliases.begin(),aliases.end());std::sort(sorted.begin(),sorted.end());
+    std::string key(module);key.push_back('\0');for(const auto& name:sorted) {key+=name;key.push_back('\0');}return key;
+}
+std::vector<std::string> nativeVbaProcedureClassTypes(std::string_view module,std::string_view name,const VbaEnumAliases* aliases) {
+    std::vector<Statement> statements;std::vector<Parameter> parameters;bool function=false,cancel=false;std::string result;
+    const auto parsed=parseProcedure(module,name,statements,function,cancel,&parameters,true,&result,false,aliases);
+    if(parsed.status!=VbaExecutionStatus::Completed) throw VbaRuntimeError(3251,"Project class declaration syntax is unavailable");
+    return procedureClassTypes(module,parameters,result,statements,aliases);
+}
+std::optional<VbaArgumentSignature> nativeVbaProcedureSignature(std::string_view module,std::string_view procedure,const VbaEnumAliases* aliases) {
     if(module.size()>1024*1024) return {};
-    return localProcedureSignature(module,procedure);
+    return localProcedureSignature(module,procedure,aliases);
 }
 
 namespace {
@@ -1784,7 +1807,7 @@ std::string propertySelector(std::string_view name,VbaPropertyAccess access) {
     return std::string("property ")+(access==VbaPropertyAccess::Get ? "get " : access==VbaPropertyAccess::Let ? "let " : "set ")+vbaIdentifierName(name);
 }
 }
-std::optional<VbaArgumentSignature> nativeVbaPropertySignature(std::string_view module,std::string_view name,VbaPropertyAccess access,bool publicOnly) {
+std::optional<VbaArgumentSignature> nativeVbaPropertySignature(std::string_view module,std::string_view name,VbaPropertyAccess access,bool publicOnly,const VbaEnumAliases* aliases) {
     if(module.size()>1024*1024) throw VbaRuntimeError(3035,"Property module exceeds one MiB");
     const auto requestedType=std::string(vbaIdentifierType(name));
     const auto canonicalName=vbaIdentifierName(name);name=canonicalName;
@@ -1808,7 +1831,7 @@ std::optional<VbaArgumentSignature> nativeVbaPropertySignature(std::string_view 
     if(!found || !visible) return {};
     const auto selector=propertySelector(name,access);
     std::vector<Statement> statements;std::vector<Parameter> parameters;bool function=false,cancel=false;std::string resultType;
-    if(parseProcedure(module,selector,statements,function,cancel,&parameters,true,&resultType).status!=VbaExecutionStatus::Completed)
+    if(parseProcedure(module,selector,statements,function,cancel,&parameters,true,&resultType,false,aliases).status!=VbaExecutionStatus::Completed)
         throw VbaRuntimeError(3251,"Property accessor syntax is unsupported");
     const auto indices=parameters.size()-(access!=VbaPropertyAccess::Get && !parameters.empty() ? 1 : 0);
     for(std::size_t index=0;index<parameters.size();++index) {
@@ -1818,7 +1841,7 @@ std::optional<VbaArgumentSignature> nativeVbaPropertySignature(std::string_view 
     for(const auto& sibling:accessors) {
         if(sibling==kind) continue;
         std::vector<Statement> siblingStatements;std::vector<Parameter> siblingParameters;bool siblingFunction=false,siblingCancel=false;std::string siblingResult;
-        if(parseProcedure(module,"property "+sibling+" "+std::string(name),siblingStatements,siblingFunction,siblingCancel,&siblingParameters,true,&siblingResult).status!=VbaExecutionStatus::Completed)
+        if(parseProcedure(module,"property "+sibling+" "+std::string(name),siblingStatements,siblingFunction,siblingCancel,&siblingParameters,true,&siblingResult,false,aliases).status!=VbaExecutionStatus::Completed)
             throw VbaRuntimeError(3251,"Matching property accessor syntax is unsupported");
         const auto siblingIndices=siblingParameters.size()-(sibling!="get" && !siblingParameters.empty() ? 1 : 0);
         if(indices!=siblingIndices) throw VbaRuntimeError(5,"Property index signatures do not match");
@@ -1835,7 +1858,7 @@ std::optional<VbaArgumentSignature> nativeVbaPropertySignature(std::string_view 
             if(normalizedType(getterType)!=normalizedType(valueType)) throw VbaRuntimeError(5,"Property Get and Let types do not match");
         }
     }
-    auto signature=nativeVbaProcedureSignature(module,selector);
+    auto signature=nativeVbaProcedureSignature(module,selector,aliases);
     if(!signature) throw VbaRuntimeError(3251,"Property accessor syntax is unsupported");
     if(access!=VbaPropertyAccess::Get) {
         if(parameters.empty() || parameters.back().optional || parameters.back().paramArray || parameters.back().type.ends_with("()"))
@@ -1855,42 +1878,43 @@ std::optional<VbaArgumentSignature> nativeVbaPropertySignature(std::string_view 
     return signature;
 }
 VbaExecutionResult executeVbaProperty(std::string_view module,std::string_view name,VbaPropertyAccess access,VbaHost& host,std::vector<VbaValue>& arguments,bool publicOnly) {
-    if(!nativeVbaPropertySignature(module,name,access,publicOnly)) return {VbaExecutionStatus::ProcedureMissing,{},0};
+    const auto aliases=host.projectEnumAliases();
+    if(!nativeVbaPropertySignature(module,name,access,publicOnly,&aliases)) return {VbaExecutionStatus::ProcedureMissing,{},0};
     if(access==VbaPropertyAccess::Set && !arguments.empty() && arguments.back().kind!=VbaValue::Kind::Object) throw VbaRuntimeError(13,"Property Set requires an object reference");
     return executeVbaProcedureWithArguments(module,propertySelector(name,access),host,arguments);
 }
 
-std::vector<int> vbaDebugExecutableLines(std::string_view source,std::string_view procedure) {
-    if(source.size()>1024*1024) throw VbaRuntimeError(3035,"Debugger source exceeds one MiB");std::vector<Statement> statements;bool function=false,cancel=false;const auto parsed=parseProcedure(source,procedure,statements,function,cancel);if(parsed.status!=VbaExecutionStatus::Completed) return {};std::vector<int> lines;for(const auto& statement:statements) if(debugExecutable(statement)) lines.push_back(statement.line);std::sort(lines.begin(),lines.end());lines.erase(std::unique(lines.begin(),lines.end()),lines.end());return lines;
+std::vector<int> vbaDebugExecutableLines(std::string_view source,std::string_view procedure,const VbaEnumAliases* aliases) {
+    if(source.size()>1024*1024) throw VbaRuntimeError(3035,"Debugger source exceeds one MiB");std::vector<Statement> statements;bool function=false,cancel=false;const auto parsed=parseProcedure(source,procedure,statements,function,cancel,nullptr,true,nullptr,false,aliases);if(parsed.status!=VbaExecutionStatus::Completed) return {};std::vector<int> lines;for(const auto& statement:statements) if(debugExecutable(statement)) lines.push_back(statement.line);std::sort(lines.begin(),lines.end());lines.erase(std::unique(lines.begin(),lines.end()),lines.end());return lines;
 }
 
-VbaExecutionResult validateVbaProcedure(std::string_view module, std::string_view procedure) {
+VbaExecutionResult validateVbaProcedure(std::string_view module, std::string_view procedure,const VbaEnumAliases* aliases) {
     if (module.size() > 1024 * 1024)
         return {VbaExecutionStatus::Unsupported, "VBA-Modul größer als 1 MiB", 0};
     const auto selector=lower(std::string(procedure));
     for(const auto access:{VbaPropertyAccess::Get,VbaPropertyAccess::Let,VbaPropertyAccess::Set}) {
         const auto prefix=propertySelector("",access);
         if(!selector.starts_with(prefix)) continue;
-        try {if(!nativeVbaPropertySignature(module,procedure.substr(prefix.size()),access,false)) return {VbaExecutionStatus::ProcedureMissing,{},0};}
+        try {if(!nativeVbaPropertySignature(module,procedure.substr(prefix.size()),access,false,aliases)) return {VbaExecutionStatus::ProcedureMissing,{},0};}
         catch(const VbaRuntimeError& error) {VbaExecutionResult result{VbaExecutionStatus::Unsupported,error.what(),0};result.errorNumber=error.number;return result;}
     }
     std::vector<Statement> instructions;
     bool function = false, cancel = false;
-    return parseProcedure(module, procedure, instructions, function, cancel);
+    return parseProcedure(module, procedure, instructions, function, cancel,nullptr,true,nullptr,false,aliases);
 }
 
-std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module) {
+std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module,const VbaEnumAliases* aliases) {
     const auto activeSource=preprocessVbaConditional(module);module=activeSource;
-    const auto implicitTypes=moduleImplicitTypes(module);const auto enumNames=moduleEnumNames(module);
+    const auto implicitTypes=moduleImplicitTypes(module);const auto enumNames=moduleEnumNames(module,aliases);
     auto state=std::make_shared<VbaModuleState>();
     state->procedures=moduleProcedureNames(module); state->procedureInventoryComplete=true;
     static const std::regex procedure(R"(^\s*(?:(?:Public|Private|Friend)\s+)?(?:Static\s+)?(?:Sub|Function|Property)\s+)",std::regex::icase);
     static const std::regex declaration(R"(^\s*(Dim|Private|Public|Global)\s+(.+)$)",std::regex::icase);
     static const std::regex variable(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?)(?:\s+As\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_.\x80-\xFF]*)(?:\s*\*\s*([0-9]+|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?))?)?$)",std::regex::icase);
     static const std::regex dynamicArray(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?)\s*\(\s*(.*)\s*\)\s*(?:As\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)(?:\s*\*\s*([0-9]+|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*[$%&!#@]?))?)?$)",std::regex::icase);
-    const auto scalarConstants=moduleConstantDeclarations(module); std::size_t constantIndex=0; int sourceLine=0;
+    const auto scalarConstants=moduleConstantDeclarations(module,aliases); std::size_t constantIndex=0; int sourceLine=0;
     VbaVariables knownConstants; const auto constantMode=moduleCompareMode(module);
-    ConstantTypes lengthTypes;const auto lengthConstants=moduleConstantValues(module,&lengthTypes);
+    ConstantTypes lengthTypes;const auto lengthConstants=moduleConstantValues(module,&lengthTypes,aliases);
     std::istringstream stream{std::string(module)}; std::string line;
     while (std::getline(stream,line)) {
         ++sourceLine;
@@ -1973,9 +1997,9 @@ int lastRaisedVbaError(VbaHost& host) {
 std::shared_ptr<VbaRandomState> VbaHost::randomState() {if(!randomState_) randomState_=std::make_shared<VbaRandomState>();return randomState_;}
 std::shared_ptr<VbaObject> VbaHost::errorObject() {if(!errorObject_) errorObject_=makeVbaErrorObject();return errorObject_;}
 std::shared_ptr<VbaModuleState> VbaHost::moduleState(std::string_view module) {
-    const auto key=std::string(module);
+    const auto aliases=projectEnumAliases();const auto key=vbaModuleBindingKey(module,aliases);
     if (const auto found=moduleStates_.find(key);found!=moduleStates_.end()) return found->second;
-    auto state=createVbaModuleState(module); moduleStates_.emplace(key,state); return state;
+    auto state=createVbaModuleState(module,&aliases); moduleStates_.emplace(key,state); return state;
 }
 void validateAutomaticVbaObjectType(std::string_view type,VbaHost& host) {
     if(isProjectClassType(type) && !type.ends_with("()")) {if(!host.canConstructClass(projectClassTypeName(type))) throw VbaRuntimeError(3251,"Automatic project class is unavailable");return;}
@@ -2156,15 +2180,16 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
     } guard(callDepth);
     if (module.size() > 1024 * 1024)
         return {VbaExecutionStatus::Unsupported, "VBA-Modul größer als 1 MiB", 0};
+    const auto enumAliases=host.projectEnumAliases();
     std::vector<Statement> instructions;
     bool isFunction = false;
     bool hasCancel = false;
     std::vector<Parameter> parameters;
     std::string resultType;
-    auto result = parseProcedure(module, procedure, instructions, isFunction, hasCancel, &parameters,true,&resultType);
+    auto result = parseProcedure(module, procedure, instructions, isFunction, hasCancel, &parameters,true,&resultType,false,&enumAliases);
     if (result.status != VbaExecutionStatus::Completed) return result;
     if(lower(std::string(procedure)).starts_with("property ")) {
-        const auto validation=validateVbaProcedure(module,procedure);
+        const auto validation=validateVbaProcedure(module,procedure,&enumAliases);
         if(validation.status!=VbaExecutionStatus::Completed) return validation;
     }
     const auto selectedName=lower(std::string(procedure));
@@ -2190,7 +2215,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
     // Resolve direct Sub calls before any effects in the calling procedure.
     // Syntax acceptance alone must not turn unknown APIs into successful calls.
     try {
-        for(const auto& name:procedureClassTypes(module,parameters,resultType,instructions)) if(!host.knowsClassType(name)) throw VbaRuntimeError(3251,"Declared project class type is unavailable");
+        for(const auto& name:procedureClassTypes(module,parameters,resultType,instructions,&enumAliases)) if(!host.knowsClassType(name)) throw VbaRuntimeError(3251,"Declared project class type is unavailable");
         std::unordered_set<std::string> checkedClasses;
         for(const auto& instruction:instructions) {
             if(instruction.automaticObject) validateAutomaticVbaObjectType(instruction.expression,host);
@@ -2203,10 +2228,10 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         }
         for (const auto& instruction : instructions) {
             if (instruction.type != Statement::Type::Call) continue;
-            auto declaration = validateVbaProcedure(module, instruction.argument);
+            auto declaration = validateVbaProcedure(module, instruction.argument,&enumAliases);
             if (declaration.status == VbaExecutionStatus::ProcedureMissing) {
                 const auto external = host.moduleForProcedure(vbaIdentifierName(instruction.argument));
-                if (external) declaration = validateVbaProcedure(*external, instruction.argument);
+                if (external) declaration = validateVbaProcedure(*external, instruction.argument,&enumAliases);
             }
             if(declaration.status==VbaExecutionStatus::ProcedureMissing
                && (lower(instruction.argument)=="doevents" || lower(instruction.argument)=="syscmd" || lower(instruction.argument)=="randomize")) continue;
@@ -2491,8 +2516,8 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
             if(omitted && instruction.argument!="mid$") {
                 const auto name=lower(vbaIdentifierName(instruction.argument));
                 const auto access=instruction.stepExpression=="object" ? VbaPropertyAccess::Set : VbaPropertyAccess::Let;
-                if(locals.contains(name) || (!nativeVbaPropertySignature(module,instruction.argument,access,false)
-                    && !nativeVbaPropertySignature(module,instruction.argument,VbaPropertyAccess::Get,false))) {
+                if(locals.contains(name) || (!nativeVbaPropertySignature(module,instruction.argument,access,false,&enumAliases)
+                    && !nativeVbaPropertySignature(module,instruction.argument,VbaPropertyAccess::Get,false,&enumAliases))) {
                     VbaExecutionResult failure{VbaExecutionStatus::Unsupported,"Omitted indices require a supported property",instruction.line};failure.errorNumber=3251;return failure;
                 }
             }
@@ -2555,12 +2580,12 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         const auto key=vbaIdentifierName(name);
         const auto source=host.moduleForProcedure(key);
         if(!source) return {};
-        if(auto signature=nativeVbaProcedureSignature(*source,key)) {
+        if(auto signature=nativeVbaProcedureSignature(*source,key,&enumAliases)) {
             const auto suffix=vbaIdentifierType(name);
             if(!suffix.empty() && (!signature->function || signature->resultType!=suffix)) throw VbaRuntimeError(13,"External function type character does not match its declaration");
             return signature;
         }
-        if(nativeVbaPropertySignature(*source,name,VbaPropertyAccess::Get,true))
+        if(nativeVbaPropertySignature(*source,name,VbaPropertyAccess::Get,true,&enumAliases))
             throw VbaRuntimeError(3251,"Unqualified cross-module properties are not implemented");
         return {};
     };
@@ -2664,8 +2689,8 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
             const auto& owner=stateOwners.front();
             std::optional<VbaArgumentSignature> signature;
             if(!owner->procedureInventoryComplete || owner->procedures.contains(key)) {
-                signature=localProcedureSignature(module,key);
-                if(!signature) signature=nativeVbaPropertySignature(module,key,VbaPropertyAccess::Get,false);
+                signature=localProcedureSignature(module,key,&enumAliases);
+                if(!signature) signature=nativeVbaPropertySignature(module,key,VbaPropertyAccess::Get,false,&enumAliases);
             } else if(!host.hasInstanceIdentifier(key)) signature=externalProcedure(name);
             if(!signature) return {};
             if(!signature->function) throw VbaRuntimeError(13,"Sub cannot have a type character");
@@ -2694,15 +2719,15 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                             const VbaArgumentReferences& referenceInfo, bool needsValue) -> VbaValue {
         std::string canonicalProcedure;
         if(!vbaIdentifierType(name).empty()) {
-            auto declaration=localProcedureSignature(module,name);
+            auto declaration=localProcedureSignature(module,name,&enumAliases);
             if(!declaration) declaration=externalProcedure(name);
             if(!declaration || !declaration->function) throw VbaRuntimeError(13,"Typed call does not match a function declaration");
             canonicalProcedure=vbaIdentifierName(name);name=canonicalProcedure;
         }
         storeAliases();
         std::string getterSelector;
-        auto signature=localProcedureSignature(module,name);const bool property=!signature;
-        if(property) signature=nativeVbaPropertySignature(module,name,VbaPropertyAccess::Get,false);
+        auto signature=localProcedureSignature(module,name,&enumAliases);const bool property=!signature;
+        if(property) signature=nativeVbaPropertySignature(module,name,VbaPropertyAccess::Get,false,&enumAliases);
         if(signature && signature->function && signature->names.empty() && !actuals.empty()
             && (signature->resultType.empty() || signature->resultType=="variant" || signature->resultType.ends_with("()") || isDeclaredObjectType(signature->resultType))) {
             for(const auto& reference:referenceInfo.names) if(reference.starts_with("@named:")) throw VbaRuntimeError(3251,"Unbound default indices cannot be named");
@@ -2795,12 +2820,12 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
             std::string targetModule(module);
             std::vector<Statement> compiled; std::vector<Parameter> parameters;
             bool function=false,cancel=false;
-            auto declaration=parseProcedure(targetModule,name,compiled,function,cancel,&parameters);
+            auto declaration=parseProcedure(targetModule,name,compiled,function,cancel,&parameters,true,nullptr,false,&enumAliases);
             if(declaration.status==VbaExecutionStatus::ProcedureMissing) {
                 const auto external=host.moduleForProcedure(name);
                 if(external) {
                     targetModule=*external; compiled.clear(); parameters.clear();
-                    declaration=parseProcedure(targetModule,name,compiled,function,cancel,&parameters);
+                    declaration=parseProcedure(targetModule,name,compiled,function,cancel,&parameters,true,nullptr,false,&enumAliases);
                 }
             }
             if(declaration.status==VbaExecutionStatus::ProcedureMissing && lower(std::string(name))=="syscmd") {
@@ -2886,14 +2911,14 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         const auto& names=state->procedureInventoryComplete ? state->procedures : *fallbackProcedures;
         if(!names.contains(key)) return host.hasInstanceIdentifier(key) ? std::optional<VbaArgumentSignature>{} : externalProcedure(name);
         if(!vbaIdentifierType(name).empty()) {
-            auto typed=localProcedureSignature(module,name);
-            if(!typed) typed=nativeVbaPropertySignature(module,name,VbaPropertyAccess::Get,false);
+            auto typed=localProcedureSignature(module,name,&enumAliases);
+            if(!typed) typed=nativeVbaPropertySignature(module,name,VbaPropertyAccess::Get,false,&enumAliases);
             if(!typed || !typed->function) throw VbaRuntimeError(13,"Typed call signature mismatch");
         }
         const auto found=signatureCache.find(key);
         if(found!=signatureCache.end()) return found->second;
-        auto signature=localProcedureSignature(module,name);
-        if(!signature) signature=nativeVbaPropertySignature(module,name,VbaPropertyAccess::Get,false);
+        auto signature=localProcedureSignature(module,name,&enumAliases);
+        if(!signature) signature=nativeVbaPropertySignature(module,name,VbaPropertyAccess::Get,false,&enumAliases);
         if(!signature) throw VbaRuntimeError(3251,"Declared local procedure binding is unsupported");
         return signatureCache.emplace(key,std::move(signature)).first->second;
     };
@@ -3010,10 +3035,10 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
     };
     const auto writeProperty=[&](std::string_view name,VbaPropertyAccess access,std::vector<VbaValue> arguments,const VbaArgumentReferences& indexReferences=VbaArgumentReferences{}) {
         if(!stateOwners.front()->procedures.contains(lower(vbaIdentifierName(name)))) return false;
-        const bool setter=nativeVbaPropertySignature(module,name,access,false).has_value();
+        const bool setter=nativeVbaPropertySignature(module,name,access,false,&enumAliases).has_value();
         std::vector<VbaValue> defaultIndices;VbaValue value;auto references=indexReferences;
         if(!setter) {
-            const auto getter=nativeVbaPropertySignature(module,name,VbaPropertyAccess::Get,false);
+            const auto getter=nativeVbaPropertySignature(module,name,VbaPropertyAccess::Get,false,&enumAliases);
             if(!getter || arguments.empty()) return false;
             const bool forwarded=getter->names.empty() && arguments.size()>1
                 && (getter->resultType.empty() || getter->resultType=="variant" || isDeclaredObjectType(getter->resultType));
@@ -3541,13 +3566,13 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                         assignVariable(boundVariableName(destination),result); break;
                     }
                     const auto propertyAccess=instruction.stepExpression=="object" ? VbaPropertyAccess::Set : VbaPropertyAccess::Let;
-                    const auto getter=initial==locals.end() && stateOwners.front()->procedures.contains(name) ? nativeVbaPropertySignature(module,instruction.argument,VbaPropertyAccess::Get,false) : std::nullopt;
+                    const auto getter=initial==locals.end() && stateOwners.front()->procedures.contains(name) ? nativeVbaPropertySignature(module,instruction.argument,VbaPropertyAccess::Get,false,&enumAliases) : std::nullopt;
                     const bool defaultWrite=getter && (propertyAccess==VbaPropertyAccess::Let || getter->names.empty())
                         && (isDeclaredObjectType(getter->resultType) || (getter->names.empty() && (getter->resultType.empty() || getter->resultType=="variant")));
                     if(initial==locals.end() && stateOwners.front()->procedures.contains(name)
-                        && (nativeVbaPropertySignature(module,instruction.argument,propertyAccess,false) || defaultWrite)) {
+                        && (nativeVbaPropertySignature(module,instruction.argument,propertyAccess,false,&enumAliases) || defaultWrite)) {
                         std::vector<VbaValue> arguments;VbaArgumentReferences references;
-                        auto signature=nativeVbaPropertySignature(module,instruction.argument,propertyAccess,false);
+                        auto signature=nativeVbaPropertySignature(module,instruction.argument,propertyAccess,false,&enumAliases);
                         const bool setter=signature.has_value();if(!signature) signature=getter;
                         std::vector<std::string> names;
                         for(const auto& expression:splitArguments(instruction.endExpression)) {
@@ -3635,7 +3660,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                     } else {
                         const auto value=evaluate(instruction.expression);
                         if(!locals.contains(name) && writeProperty(instruction.argument,VbaPropertyAccess::Let,{value})) break;
-                        if(!locals.contains(name) && stateOwners.front()->procedures.contains(name) && nativeVbaPropertySignature(module,instruction.argument,VbaPropertyAccess::Get,false)) throw VbaRuntimeError(383,"Property is read-only");
+                        if(!locals.contains(name) && stateOwners.front()->procedures.contains(name) && nativeVbaPropertySignature(module,instruction.argument,VbaPropertyAccess::Get,false,&enumAliases)) throw VbaRuntimeError(383,"Property is read-only");
                         if (locals.contains(name) || !host.assignIdentifier(instruction.argument,value)) assignVariable(name,value);
                     }
                 }
@@ -3844,6 +3869,7 @@ VbaExecutionResult executeVbaProcedure(std::string_view module, std::string_view
     return executeVbaProcedureWithArguments(module, procedure, host, arguments);
 }
 VbaExecutionResult executeVbaEventExpression(std::string_view module,std::string_view expression,VbaHost& host) {
+    const auto enumAliases=host.projectEnumAliases();
     auto source=trim(std::string(expression));
     if (source.empty() || source.front()!='=') {
         VbaExecutionResult result{VbaExecutionStatus::Unsupported,"Event binding requires a function expression",0}; result.errorNumber=3251; return result;
@@ -3866,7 +3892,7 @@ VbaExecutionResult executeVbaEventExpression(std::string_view module,std::string
                 }
                 if(!visible) return {};
             }
-            auto signature=localProcedureSignature(selected,key);
+            auto signature=localProcedureSignature(selected,key,&enumAliases);
             if(!signature || !signature->function) throw VbaRuntimeError(3251,"Event function signature is unsupported");
             if(const auto suffix=vbaIdentifierType(name); !suffix.empty() && signature->resultType!=suffix) throw VbaRuntimeError(13,"Event function type character does not match its declaration");
             return std::pair{std::move(selected),std::move(*signature)};

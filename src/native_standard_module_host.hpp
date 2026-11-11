@@ -12,6 +12,7 @@ public:
     NativeStandardModuleHost(QWidget* owner,QSqlDatabase db,std::function<void()> guard);
     ~NativeStandardModuleHost() override;
     void check() const;
+    VbaEnumAliases projectEnumAliases() override;
     std::shared_ptr<VbaObject> errorObject() override;
     std::shared_ptr<VbaRandomState> randomState() override;
     std::string projectClassName(std::string_view) override;

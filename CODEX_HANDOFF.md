@@ -6986,3 +6986,34 @@ F148/F168/F340/F368/F178 bleiben offen;456/386/70 unverändert.
 Vorstand2adda672e629e57ca5029186d725c529852279a9 privat/exakt publiziert, neuer
 positiver Gesamtpaket-/Originalbeleg dieses Vorstands180,90s/7Hashes gleich
 steht oben. Diese Feld-/PageDown-Erweiterung liegt nach diesem Paket.
+
+
+Projektweite native Enum-Typbindung (2026-11-11): VBA_PROJECT_ENUM_BINDINGS.md.
+Explizite öffentliche Enum-Namensumgebung aus geprüftem Modul-/Klassenkatalog;
+Private lokal, unqualifiziert eindeutig und ohne Modul-/Klassennamenskollision,
+qualifiziert über tatsächlichen Projekteigentümer. Headerlose native Module
+unterstützt; vorhandenes VB_Name muss bei öffentlichen Enums zum Besitzer passen.
+Source-only API erhält nur eigene VB_Name-Qualifizierung. Long-Bindung in Feldern/
+Const/Static/Parametern/Ergebnissen/Properties/Dim/ReDim/Arrays/Inline-Plänen,
+Standardhost/CodeBehind/Klassen/SQL/Debugger explizit durchgereicht; Global Enum
+im Standardmodul öffentlich, Class-Global/primitive Typwortersetzung verweigert.
+Plan-/Modulzustandsschlüssel enthalten die genaue Aliasmenge ohne Host/DB-Zustand;
+Projektcache beobachtet Changes/Data-/Schema-/Temp-Revisionen, SQL nutzt Registry-
+Snapshot statt Metadaten je Ergebniszeile. Mehrdeutige/private/verlorene Bindungen
+werden nicht geraten; wiederhergestellter Provider und getrennte Projekte geprüft.
+Bestehender Kern bestanden0,51s (Prüfdienst-Klassenpreflight an Kontext angepasst),
+DAO bestanden5,36s; zuletzt UI1/1 in17,29s (Ziel17,28), App gebaut. Tatsächliche
+SQL-Long-Metadaten/-Werte, Klassen/CodeBehind-Fassade, Class-Public/Global, fehlendes
+Sourceattribut, Cache-/Privat-/Mehrdeutigkeits-/Entfernungsfälle geprüft.
+Echten Standardmodul438-Fehler behoben: Metadaten prüfen Projektlebensdauer statt
+Me-Scope. Fehlerhafter Modul-Fähigkeitsbericht bleibt lesbar, meldet fehlende
+Enum-Typumgebung/Fehlernummer ohne stale Bindungen oder Volltypisierungsbehauptung.
+Temporäre ausführliche Metadatendiagnostik nach Eingrenzung entfernt, sichere
+Fehlernummer/Status/Zeile verbleibt. Keine neue CTest-ID/Windows-Parität.
+Referenzbibliotheken/Projektpräfixe, volle Unicode-/Konstantengrammatik und
+allgemeine Code-Edit-/Reentry-Gleichheit bleiben offen. F040/F041/F042/F043/F122
+bleiben offen;456 IDs/386 bestätigte Teilumfänge/70 offene Vollanforderungen.
+Vorstandf0c3c29636a5e23e4e71263b181a9bec6a91345a/Baum570525c5f17af9d389fb9a63bbaed1d3f17a7db4
+privat/exakt veröffentlicht. Letzter positiver Paket-/Originalbeleg2adda672
+180,90s/7Hashes gleich liegt vor neuer Feld-/PageDown-/Enum-Erweiterung; frischer
+gemeinsamer Nachweis folgt. Nicht als Zwischen-/Gesamtabschluss behandeln.

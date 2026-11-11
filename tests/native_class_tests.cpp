@@ -8,6 +8,7 @@
 #include "vba_redim_declaration_fixture.hpp"
 #include "vba_native_object_array_fixture.hpp"
 #include "vba_enum_type_fixture.hpp"
+#include "vba_project_enum_fixture.hpp"
 #include "vba_automatic_class_fixture.hpp"
 #include "vba_default_class_fixture.hpp"
 #include "access_form_objects.hpp"
@@ -69,6 +70,32 @@ void exerciseNativeClasses(MainWindow& window,QSqlDatabase db) {using namespace 
     sql.prepare("INSERT INTO main._la_objects(kind,name,definition) VALUES('module','EnumTypeScope',?)");sql.addBindValue(QJsonDocument(QJsonObject{{"version",1},{"vba",QString::fromStdString(enumTypeFixture)}}).toJson(QJsonDocument::Compact));assert(sql.exec());sql.finish();
     {assert(sql.exec("DELETE FROM main._la_objects WHERE kind='module' AND name='EnumTypeScope'"));sql.prepare("INSERT INTO main._la_objects(kind,name,definition) VALUES('module','EnumTypeScope',?)");sql.addBindValue(QJsonDocument(QJsonObject{{"version",1},{"vba",QString::fromStdString(qualifiedEnumSqlFixture)}}).toJson(QJsonDocument::Compact));assert(sql.exec());sql.finish();installJetSqlFunctions(db);assert(nativeVbaSqlFunctionResultTypes(db).value("enumsqlidentity")=="long");assert(sql.exec("SELECT EnumSqlIdentity(1234)") && sql.next() && sql.value(0).toInt()==1234);sql.finish();}
     assert(sql.exec("DELETE FROM main._la_objects WHERE kind='module' AND name='EnumTypeScope'"));
+    {
+        storeAutomatic("module","EnumProvider",projectEnumProvider);storeAutomatic("class","ProjectEnumHolder",projectEnumClassFixture);
+        const auto visible=projectVbaEnumAliases(db);assert(visible.contains("nativeshared_2") && visible.contains("enumprovider.nativeshared_2") && !visible.contains("enumprovider.nativehidden_2"));
+        NativeStandardModuleHost enumHost(&window,db,[]{});
+        for(const auto* source:{&projectEnumConsumer,&projectEnumQualifiedConsumer}) {
+            const auto outcome=executeVbaProcedure(*source,"EnumTypeProbe",enumHost);if(outcome.status!=VbaExecutionStatus::Completed) std::cerr<<"Project Enum GUI error="<<outcome.errorNumber<<" line="<<outcome.line<<"\n";assert(outcome.status==VbaExecutionStatus::Completed && outcome.typedReturnValue->number==64);
+        }
+        storeAutomatic("module","OtherEnumProvider","Attribute VB_Name = \"OtherEnumProvider\"\nPublic Enum NativeShared_2\nOtherFirst=99\nEnd Enum\n");
+        assert(!projectVbaEnumAliases(db).contains("nativeshared_2") && projectVbaEnumAliases(db).contains("enumprovider.nativeshared_2"));
+        assert(executeVbaProcedure(projectEnumConsumer,"EnumTypeProbe",enumHost).status!=VbaExecutionStatus::Completed && executeVbaProcedure(projectEnumQualifiedConsumer,"EnumTypeProbe",enumHost).status==VbaExecutionStatus::Completed);
+        assert(sql.exec("DELETE FROM main._la_objects WHERE kind='module' AND name='OtherEnumProvider'"));
+        const auto objectProbe=executeVbaProcedure(projectEnumClassConsumer,"ProjectEnumClassProbe",enumHost);assert(objectProbe.status==VbaExecutionStatus::Completed && objectProbe.typedReturnValue->number==13);
+        AccessFormPreview enumForm("Technical project Enum",QByteArray("Begin Form\nEnd\n"),QByteArray::fromStdString(projectEnumConsumer),db,&window);auto facade=makePreviewFormObject(enumForm);
+        facade->assign("CurrentEnum",VbaValue::numeric(3.5));assert(facade->member("CurrentEnum",{}).numericType==VbaValue::NumericType::Long && facade->member("CurrentEnum",{}).number==4);
+        std::vector<VbaValue> arguments;const auto formProbe=enumForm.executeProcedure("EnumTypeProbe",arguments);assert(formProbe.status==VbaExecutionStatus::Completed && formProbe.typedReturnValue->number==64);assert(enumForm.close());
+        storeAutomatic("module","ProjectEnumSqlScope",projectEnumSqlConsumer);installJetSqlFunctions(db);assert(nativeVbaSqlFunctionResultTypes(db).value("projectenumsql")=="long" && nativeVbaSqlFunctionResultTypes(db).value("projectlegacysql")=="long" && nativeVbaSqlFunctionResultTypes(db).value("projectclassenumsql")=="long");
+        assert(sql.exec("SELECT ProjectEnumSql(1234),ProjectLegacySql(12),ProjectClassEnumSql(17)") && sql.next() && sql.value(0).toInt()==1234 && sql.value(1).toInt()==12 && sql.value(2).toInt()==17);sql.finish();
+        assert(sql.exec("DELETE FROM main._la_objects WHERE kind='module' AND name='EnumProvider'"));
+        assert(!projectVbaEnumAliases(db).contains("nativeshared_2") && executeVbaProcedure(projectEnumConsumer,"EnumTypeProbe",enumHost).status!=VbaExecutionStatus::Completed);
+        storeAutomatic("module","EnumProvider",projectEnumProvider);assert(executeVbaProcedure(projectEnumConsumer,"EnumTypeProbe",enumHost).status==VbaExecutionStatus::Completed);
+        const auto headerless=projectEnumProvider.substr(projectEnumProvider.find('\n')+1);
+        assert(!nativeVbaEnumTypeNames(headerless,true).contains("enumprovider.nativeshared_2"));
+        sql.prepare("UPDATE main._la_objects SET definition=? WHERE kind='module' AND name='EnumProvider'");sql.addBindValue(QJsonDocument(QJsonObject{{"version",1},{"vba",QString::fromStdString(headerless)}}).toJson(QJsonDocument::Compact));assert(sql.exec());sql.finish();
+        assert(projectVbaEnumAliases(db).contains("enumprovider.nativeshared_2") && executeVbaProcedure(projectEnumQualifiedConsumer,"EnumTypeProbe",enumHost).status==VbaExecutionStatus::Completed);
+        assert(sql.exec("DELETE FROM main._la_objects WHERE name IN('EnumProvider','ProjectEnumHolder','ProjectEnumSqlScope')"));sql.finish();
+    }
     {const QByteArray layout="Begin Form\nBegin Section\nBegin TextBox\nName =\"ArrayFirst\"\nEnd\nBegin TextBox\nName =\"ArraySecond\"\nEnd\nEnd\nEnd\n";AccessFormPreview arraysForm("Native array controls",layout,QByteArray::fromStdString(nativeAccessArrayFixture),db,&window);arraysForm.show();QApplication::processEvents();std::vector<VbaValue> inputs;const auto probe=arraysForm.executeProcedure("NativeAccessArrayProbe",inputs);if(probe.status!=VbaExecutionStatus::Completed) std::cerr<<"Access native array: "<<probe.explanation<<" line "<<probe.line<<" error "<<probe.errorNumber<<"\n";assert(probe.status==VbaExecutionStatus::Completed && probe.typedReturnValue->number==39);assert(arraysForm.close());}
     {NativeStandardModuleHost declarationHost(&window,db,[]{});for(const auto& probe:std::vector<std::pair<const char*,int>>{{"ReDimDeclarationProbe",30},{"ReDimExistingProbe",17},{"ReDimStaticProbe",7},{"ReDimStaticProbe",14}}) {const auto outcome=executeVbaProcedure(nativeReDimDeclarationFixture,probe.first,declarationHost);if(outcome.status!=VbaExecutionStatus::Completed) std::cerr<<"Project ReDim declaration "<<probe.first<<": "<<outcome.explanation<<" line "<<outcome.line<<" error "<<outcome.errorNumber<<"\n";assert(outcome.status==VbaExecutionStatus::Completed && outcome.typedReturnValue->number==probe.second);}}
     {NativeStandardModuleHost errorHost(&window,db,[]{});for(const auto& probe:std::vector<std::pair<const char*,int>>{{"ErrorClearProbe",704},{"ErrorExitProbe",17}}) {const auto outcome=executeVbaProcedure(nativeErrorClearFixture,probe.first,errorHost);if(outcome.status!=VbaExecutionStatus::Completed) std::cerr<<"Project Err reset "<<probe.first<<": "<<outcome.explanation<<" line "<<outcome.line<<" error "<<outcome.errorNumber<<"\n";assert(outcome.status==VbaExecutionStatus::Completed && outcome.typedReturnValue->number==probe.second);}}

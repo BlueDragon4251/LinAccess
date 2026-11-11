@@ -18,6 +18,8 @@
 #include <QPointer>
 #include <QRegularExpression>
 #include <QSet>
+#include <sqlite3.h>
+#include <cctype>
 
 namespace linaccess {
 namespace {
@@ -28,6 +30,7 @@ public:
     std::shared_ptr<VbaObject> error;
     std::shared_ptr<VbaRandomState> random;
     std::unordered_map<std::string,std::shared_ptr<VbaModuleState>> frames;
+    VbaEnumAliases enums;sqlite3_int64 enumChanges{-1};int enumData{-1},enumSchema{-1},enumTemp{-1};
 };
 ProjectModuleContext& context(QSqlDatabase db) {
     if (!db.isOpen() || !db.driver()) throw VbaRuntimeError(3420,"VBA project is closed");
@@ -43,11 +46,12 @@ bool isVbaClassModule(std::string_view source) {
     static const QRegularExpression pattern("^\\s*VERSION[^\\r\\n]*\\bCLASS\\s*$",QRegularExpression::MultilineOption|QRegularExpression::CaseInsensitiveOption);
     return pattern.match(QString::fromUtf8(source.data(),source.size())).hasMatch();
 }
-std::shared_ptr<VbaModuleState> standardVbaModuleState(QSqlDatabase db,std::string_view source) {
+std::shared_ptr<VbaModuleState> standardVbaModuleState(QSqlDatabase db,std::string_view source,const VbaEnumAliases* suppliedAliases) {
     if (isVbaClassModule(source)) throw VbaRuntimeError(3251,"CodeBehind state requires its document instance");
-    auto& frames=context(db).frames; const auto key=std::string(source);
+    const auto aliases=suppliedAliases ? *suppliedAliases : projectVbaEnumAliases(db);
+    auto& frames=context(db).frames; const auto key=vbaModuleBindingKey(source,aliases);
     if (auto found=frames.find(key);found!=frames.end()) return found->second;
-    auto state=createVbaModuleState(source); frames.emplace(key,state); return state;
+    auto state=createVbaModuleState(source,&aliases); frames.emplace(key,state); return state;
 }
 QMap<QString,QByteArray> standardVbaModuleSources(QSqlDatabase db,QMap<QString,QString>* canonicalNames,QSet<QString>* standaloneClasses) {
     (void)context(db);QElapsedTimer timer;timer.start();
@@ -113,14 +117,37 @@ QMap<QString,QByteArray> standardVbaModuleSources(QSqlDatabase db,QMap<QString,Q
     for(auto it=sources.begin();it!=sources.end();++it) if(!classes.contains(it.key()) && !documents.contains(it.key()) && standaloneVbaClassHeader(names.value(it.key()),it.value())) classes.insert(it.key());
     if(canonicalNames) *canonicalNames=std::move(names);if(standaloneClasses) *standaloneClasses=std::move(classes);return sources;
 }
-std::vector<std::shared_ptr<VbaModuleState>> publicVbaModuleStates(QSqlDatabase db) {
+VbaEnumAliases projectVbaEnumAliases(QSqlDatabase db) {
+    auto& state=context(db);const auto handle=db.driver()->handle();
+    if(!handle.isValid() || QByteArray(handle.typeName())!="sqlite3*") throw VbaRuntimeError(3251,"Project type binding requires native SQLite");
+    auto* native=*static_cast<sqlite3* const*>(handle.constData());if(!native) throw VbaRuntimeError(3420,"Project type binding connection is closed");
+    const auto pragma=[&](const char* command) {QSqlQuery query(db);if(!query.exec(QString::fromLatin1(command)) || !query.next()) throw VbaRuntimeError(3251,"Project type metadata revision unavailable");return query.value(0).toInt();};
+    const auto changes=sqlite3_total_changes64(native);const int data=pragma("PRAGMA main.data_version"),schema=pragma("PRAGMA main.schema_version"),temporary=pragma("PRAGMA temp.schema_version");
+    if(state.enumChanges==changes && state.enumData==data && state.enumSchema==schema && state.enumTemp==temporary) return state.enums;
+    QMap<QString,QString> names;const auto sources=standardVbaModuleSources(db,&names);VbaEnumAliases aliases;
+    std::unordered_map<std::string,int> bare;
+    for(auto item=sources.cbegin();item!=sources.cend();++item) {
+        const auto source=decodeVbaSource(item.value()).toUtf8().toStdString();
+        auto owner=names.value(item.key()).toUtf8().toStdString();for(auto& ch:owner) ch=static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+        for(const auto& name:nativeVbaEnumTypeNames(source,true)) {
+            const auto dot=name.find('.');
+            if(dot!=std::string::npos) {if(name.substr(0,dot)!=owner) throw VbaRuntimeError(5,"Public Enum module identity does not match its project owner");continue;}
+            ++bare[name];if(!owner.empty()) ++bare[owner+"."+name];
+        }
+    }
+    for(const auto& [name,count]:bare) if(count==1 && (name.find('.')!=std::string::npos || !sources.contains(QString::fromStdString(name).toCaseFolded()))) aliases.insert(name);
+    state.enums=std::move(aliases);state.enumChanges=changes;state.enumData=data;state.enumSchema=schema;state.enumTemp=temporary;
+    return state.enums;
+}
+std::vector<std::shared_ptr<VbaModuleState>> publicVbaModuleStates(QSqlDatabase db,const VbaEnumAliases* suppliedAliases) {
     (void)context(db);
     std::vector<std::shared_ptr<VbaModuleState>> states;
+    const auto aliases=suppliedAliases ? *suppliedAliases : projectVbaEnumAliases(db);
     const auto sources=standardVbaModuleSources(db);
     for (const auto& bytes:sources) {
         const auto source=decodeVbaSource(bytes).toUtf8().toStdString();
         if (isVbaClassModule(source)) continue;
-        auto state=standardVbaModuleState(db,source);
+        auto state=standardVbaModuleState(db,source,&aliases);
         if (!state->publicVariables.empty()) states.push_back(std::move(state));
     }
     return states;

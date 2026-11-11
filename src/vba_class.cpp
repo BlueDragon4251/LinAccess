@@ -16,12 +16,13 @@ void failed(const VbaExecutionResult& result) {if(result.status!=VbaExecutionSta
 }
 struct NativeVbaClassDefinition {
     std::string name,source,defaultName;
+    VbaEnumAliases enums;
     std::shared_ptr<VbaModuleState> initial;
     std::unordered_map<std::string,bool> visible;
     bool initialize{};
     std::unordered_set<std::string> classTypes;
 };
-std::shared_ptr<const NativeVbaClassDefinition> compileNativeVbaClass(std::string name,std::string source) {
+std::shared_ptr<const NativeVbaClassDefinition> compileNativeVbaClass(std::string name,std::string source,const VbaEnumAliases* aliases) {
     static const std::regex identifier(R"(^[A-Za-z_][A-Za-z0-9_]{0,63}$)");
     if(!std::regex_match(name,identifier) || !isProjectClassIdentifier(folded(name)) || source.size()>1024*1024) throw VbaRuntimeError(3251,"Native class name/source is outside its supported bounds");
     const auto active=preprocessVbaConditional(source);std::vector<std::string> lines;std::istringstream stream(active);std::string line;
@@ -44,26 +45,27 @@ std::shared_ptr<const NativeVbaClassDefinition> compileNativeVbaClass(std::strin
     }
     if(versions!=1 || names!=1) throw VbaRuntimeError(3251,"Native class requires one CLASS version and matching VB_Name attribute");
     auto definition=std::make_shared<NativeVbaClassDefinition>();definition->name=std::move(name);definition->source=std::move(source);definition->defaultName=std::move(defaultName);
-    definition->initial=createVbaModuleState(definition->source);
+    if(aliases) definition->enums=*aliases;
+    definition->initial=createVbaModuleState(definition->source,aliases);
     const auto analysis=analyzeVba(active);
     for(const auto& procedure:analysis.procedures) {
         const auto key=folded(vbaProcedureExecutionName(procedure));
         if(procedure.line<1 || static_cast<std::size_t>(procedure.line)>lines.size()) throw VbaRuntimeError(3251,"Native class procedure source mapping unavailable");
         const bool visible=!std::regex_search(lines[procedure.line-1],privateScope);
         if(!definition->visible.emplace(key,visible).second) throw VbaRuntimeError(5,"Ambiguous native class member");
-        failed(validateVbaProcedure(definition->source,key));
-        for(const auto& type:nativeVbaProcedureClassTypes(definition->source,key)) definition->classTypes.insert(type);
+        failed(validateVbaProcedure(definition->source,key,aliases));
+        for(const auto& type:nativeVbaProcedureClassTypes(definition->source,key,aliases)) definition->classTypes.insert(type);
         if(key=="class_terminate") throw VbaRuntimeError(3251,"Native class termination events are not implemented");
         if(key=="class_initialize") {
-            const auto signature=nativeVbaProcedureSignature(definition->source,key);
+            const auto signature=nativeVbaProcedureSignature(definition->source,key,aliases);
             if(visible || !signature || signature->function || !signature->names.empty()) throw VbaRuntimeError(3251,"Class_Initialize requires a private parameterless Sub");
             definition->initialize=true;
         }
     }
     if(!definition->defaultName.empty()) {
-        const auto& name=definition->defaultName;auto shape=nativeVbaPropertySignature(definition->source,name,VbaPropertyAccess::Get,true);
+        const auto& name=definition->defaultName;auto shape=nativeVbaPropertySignature(definition->source,name,VbaPropertyAccess::Get,true,aliases);
         const auto found=definition->visible.find(name);
-        if(!shape && found!=definition->visible.end() && found->second) shape=nativeVbaProcedureSignature(definition->source,name);
+        if(!shape && found!=definition->visible.end() && found->second) shape=nativeVbaProcedureSignature(definition->source,name,aliases);
         if(!shape || !shape->function) throw VbaRuntimeError(3251,"Default member requires a public Function or Property Get");
     }
     for(const auto& [name,type]:definition->initial->types) if(isProjectClassType(type)) definition->classTypes.insert(std::string(projectClassTypeName(type)));
@@ -83,6 +85,7 @@ public:
     std::shared_ptr<VbaRandomState> randomState() override {return services_->randomState();}
     bool hasClassInstance() const override;
     bool hasInstanceIdentifier(std::string_view) override;
+    VbaEnumAliases projectEnumAliases() override {return services_->projectEnumAliases();}
     std::shared_ptr<VbaModuleState> moduleState(std::string_view) override;
     std::shared_ptr<VbaObject> currentForm() override;
     std::optional<std::string> field(std::string_view) override;
@@ -125,7 +128,7 @@ public:
     bool ownScope() const {return activeVbaModuleSource()==definition_->source;}
     bool declared(std::string_view name) const {const auto key=folded(name);return state_->values.contains(key) || state_->procedures.contains(key);}
     std::optional<VbaArgumentSignature> signature(std::string_view name,VbaPropertyAccess access) const {
-        auto result=nativeVbaPropertySignature(definition_->source,name,access,!ownScope());
+        auto result=nativeVbaPropertySignature(definition_->source,name,access,!ownScope(),&definition_->enums);
         if(result) facade(*result);return result;
     }
     static void facade(const VbaArgumentSignature& signature) {
@@ -134,7 +137,7 @@ public:
     std::optional<VbaArgumentSignature> method(std::string_view name) const {
         const auto key=folded(name);const auto item=definition_->visible.find(key);
         if(key=="class_initialize" || key=="class_terminate" || item==definition_->visible.end() || (!ownScope() && !item->second)) return {};
-        auto result=nativeVbaProcedureSignature(definition_->source,name);if(result) facade(*result);return result;
+        auto result=nativeVbaProcedureSignature(definition_->source,name,&definition_->enums);if(result) facade(*result);return result;
     }
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         check();if(auto result=signature(name,VbaPropertyAccess::Get)) return result;return method(name);
