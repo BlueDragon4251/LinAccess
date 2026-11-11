@@ -7867,3 +7867,32 @@ Vorstandc0747ac7/Baumc214749e678889113a7e4b9370e634e625179d28 privat/exakt
 veröffentlicht, dessenInventar55,54s/7Hashesgleich/78von100 unverändert.
 Gesamtpaket-/Originalbelegf1f145cd182,16s liegt vorPrädikaten/Alias-Erweiterung.
 Direkt weiterentwickeln, kein Zwischen-/Gesamtabschluss.
+
+
+Aktueller kombinierter Typbindungs-Paket-/Originalbeleg (2026-11-11): Quelle
+6c7cfa15a94d26f1fd3419c1b521676375881192, Baum
+e48a8986fd6d5549de66dbb21a1f0a6df60b374b, privat/exakt veröffentlicht.
+Integrationsbau/DEB/Paketprüfung bestanden; Inventar/Original2/2 in181,97s
+bestanden (54,35s/127,62s), alle7 geschütztenHashwerte unverändert. Enthält
+Decimal-/allgemeine nativeIN/BETWEEN-Prädikate undeindeutigeAS-Typweitergabe.
+BekannteOriginal-Makrogrenze bleibt unverändert; kein neuer Windows-/vollständig
+initialisierterGeschäftsablaufnachweis. Paket:/workspace/work/typed-query-package/package/linaccess-0.7.0-Linux.deb.
+Die nachfolgende typisierteDAO-Find-Erweiterung ist darin noch nicht enthalten.
+Feste456/386/70 unverändert; unmittelbar weiterentwickeln.
+
+
+Native typisierteDAO-Find-Kriterien (2026-11-11): NATIVE_TYPED_DAO_FIND.md.
+FindFirst/Last/Next/Previous mit belegtenRecordset-Feldtypen kompilieren, reale
+Zeilen weiterhingebundenprüfen; Bool/Date/Single/Currency undexakteDecimal-
+Ergebnisse ohneDouble. BestehendeNavigation/NoMatch/Budgets/Revisionen erhalten.
+UnbekannteDecimal-Kontexte auchbeiFeldreferenzen abweisen; ersterNegativlauf
+fandCAST-Fallback-Durchlass, gezieltaufgleichenUnknown-Guard umgestellt.
+App gebaut, Querymodell0,42s bestanden; nur betroffenesDAO erneut1/1 in5,99s
+bestanden. TatsächlicheSuchbewegungen/Null/EOF-Rückkehr, nativeArten,96-Bit-Max,
+Skalenvergleiche undPositionserhaltbeiCAST-Verweigerung. CurrencyTicks und
+Decimal-Filter/Sort-Snapshots nochbegrenzt; keine vollständigeFind-/Locale-/
+Wildcard-/Fehlerreihenfolge-Parität. Keine neueCTest-ID/Windows-Referenz.
+F014/F041/F055/F067/F068/F373 offen, feste456/386/70 unverändert.
+Vorstand6c7cfa15/Baume48a8986fd6d5549de66dbb21a1f0a6df60b374b privat/exakt
+veröffentlicht; dessenGesamtpaket-/Originalbeleg181,97s/7Hashesgleich enthält
+Find-Erweiterung noch nicht. Direkt weiterentwickeln, keinZwischenabschluss.

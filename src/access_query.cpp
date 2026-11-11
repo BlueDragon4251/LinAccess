@@ -471,7 +471,20 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
         code.append({Token::Other,")"}); return code;
     };
     std::function<Expression(QVector<Token>,int)> parse=[&](QVector<Token> expression,int recursion)->Expression {
-        const auto decimalSyntax=[&](const QVector<Token>& code) {for(qsizetype at=0;at+1<code.size();++at) if(code[at].kind==Token::Word && symbol(code[at+1],"(")) {const auto fn=code[at].value.toCaseFolded();if(fn=="cdec" || fn=="linaccess_jet_cdec" || fn=="linaccess_jet_cdec_typed" || fn.startsWith("linaccess_jet_decimal_")) return true;}return false;};
+        const auto decimalSyntax=[&](const QVector<Token>& code) {
+            for(qsizetype at=0;at<code.size();++at) {
+                const auto& token=code[at];if(token.kind!=Token::Word && token.kind!=Token::Identifier) continue;
+                const auto key=token.value.toCaseFolded();
+                if(at+1<code.size() && symbol(code[at+1],"(")) {
+                    if(key=="cdec" || key=="linaccess_jet_cdec" || key=="linaccess_jet_cdec_typed" || key.startsWith("linaccess_jet_decimal_")) return true;
+                    continue;
+                }
+                if(token.kind==Token::Word && (key=="null" || key=="true" || key=="false")) continue;
+                if(resolvedFields.value(key)=="DECIMAL_EXACT") return true;
+                if(at+2<code.size() && symbol(code[at+1],".") && resolvedFields.value(key+'.'+code[at+2].value.toCaseFolded())=="DECIMAL_EXACT") return true;
+            }
+            return false;
+        };
         const auto unknown=[&]()->Expression {if(decimalSyntax(expression)) throw VbaRuntimeError(3251,"Decimal SQL expression context has no proven exact binding");return {{},expression};};
         if(recursion>64 || expression.isEmpty()) return unknown();
         if(expression.size()>=2 && symbol(expression.front(),"(")) {
@@ -891,7 +904,7 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
             return unknown();
         }
         const bool currency=expression.front().value.compare("CCur",Qt::CaseInsensitive)==0,sum=expression.front().value.compare("Sum",Qt::CaseInsensitive)==0;
-        if(!currency && !sum) return {{},expression};
+        if(!currency && !sum) return unknown();
         nesting=0;
         for(qsizetype i=1;i<expression.size();++i) {
             if(symbol(expression[i],"(")) ++nesting;
@@ -1955,6 +1968,10 @@ QMap<QString,QString> numericSourceFields(QSqlDatabase db,const QString& table,c
     if(cache->entries.size()>=128) cache->entries.clear();cache->entries.insert(key,{definition,physical,result});return result;
 }
 }
+AccessQueryPlan compileAccessFindCriteria(const QString& criteria,const QMap<QString,QString>& fieldTypes) {
+    return compileCurrencyQuery("SELECT IIf(("+criteria+"),1,0) FROM [__la_find_scope]",fieldTypes);
+}
+
 static AccessQueryPlan resolveCurrencyQuery(QSqlDatabase db,const AccessQueryPlan& input) {
     if(input.source.isEmpty()) return input;
     if(input.sql!=input.compiledSql) { auto changed=input; changed.resultTypes.clear(); changed.source.clear(); return changed; }

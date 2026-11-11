@@ -80,6 +80,8 @@ QString accessWhereClause(const QString& criteria);
 // Bounded scalar domain expression; no clauses, aggregates or unregistered calls.
 QString accessScalarDomainExpression(const QString& expression,bool deterministicOnly=false);
 AccessQueryPlan compileAccessQuery(const QString& source);
+// Bind an already-known native recordset schema; no result-value type inference.
+AccessQueryPlan compileAccessFindCriteria(const QString& criteria,const QMap<QString,QString>& fieldTypes);
 // Resolves compiled action metadata against the live writable destination.
 QString accessActionSql(QSqlDatabase db,const AccessQueryPlan& plan);
 // Recover the SELECT source through SQL tokens, preserving parameter declarations.

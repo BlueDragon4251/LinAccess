@@ -1110,11 +1110,10 @@ private:
         navigate(data_->rows.size());noMatch_=true;
     }
     void find(const std::string& kind,const QString& criteria) {
-        if(data_->types.values().contains("DECIMAL_EXACT")) throw VbaRuntimeError(3251,"DAO: Decimal Find criteria are not implemented");
         if(data_->types.values().contains("CURRENCY_TICKS")) throw VbaRuntimeError(3251,"DAO: Textual Find criteria on exact Currency projections are not implemented");
         const auto pendingMode=mode_;
         if (criteria.trimmed().isEmpty()) throw VbaRuntimeError(3075,"DAO: Empty find criterion");
-        auto plan=compileAccessQuery("SELECT IIf(("+criteria+"),1,0) FROM [__la_find_scope]");
+        auto plan=compileAccessFindCriteria(criteria,data_->types);
         if (!plan.parameters.empty()) throw VbaRuntimeError(3061,"DAO: Unbound find parameter");
         QStringList projections;
         for (const auto& column:data_->columns) projections.append("? AS "+quote(column));
