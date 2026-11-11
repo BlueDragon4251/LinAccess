@@ -86,6 +86,11 @@ bool boolean(const QVariant& value) {
 }
 VbaValue qtFieldValue(const QVariant& value,const QString& type) {
     if (value.isNull()) return {};
+    if(type=="DECIMAL_EXACT") {
+        if(value.metaType().id()==QMetaType::QByteArray) {const auto bytes=value.toByteArray();return decimalFromSqlKey(std::vector<unsigned char>(bytes.cbegin(),bytes.cend()));}
+        if(value.metaType().id()!=QMetaType::QString) throw VbaRuntimeError(13,"Exact Decimal result requires its encoded value or canonical text");
+        const auto text=value.toString().toUtf8().toStdString();const auto result=decimalLiteral(text);if(result.text!=text) throw VbaRuntimeError(13,"Exact Decimal result text is not canonical");return result;
+    }
     if ((integerType(type) || realType(type) || type.contains("BOOL",Qt::CaseInsensitive)) && value.toString().isEmpty()) return {};
     if(type=="SINGLE_REAL") {
         if(value.metaType().id()==QMetaType::Bool) return coerceVbaModuleValue(VbaValue::logical(value.toBool()),"single");
@@ -137,9 +142,10 @@ VbaValue qtFieldValue(const QVariant& value,const QString& type) {
 }
 QString qtFieldText(const QVariant& value,const QString& type) {
     if(value.isNull()) return {};
-    return (type=="CURRENCY_REAL" || type=="CURRENCY_TICKS") ? QString::fromStdString(qtFieldValue(value,type).asText()) : value.toString();
+    return (type=="CURRENCY_REAL" || type=="CURRENCY_TICKS" || type=="DECIMAL_EXACT") ? QString::fromStdString(qtFieldValue(value,type).asText()) : value.toString();
 }
 QVariant sqlFieldValue(const VbaValue& value,const QString& type) {
+    if(type=="DECIMAL_EXACT") throw VbaRuntimeError(3251,"Exact Decimal query results do not define writable physical Jet columns");
     if (value.kind == VbaValue::Kind::Null) return {};
     if(type=="SINGLE_REAL") {const auto converted=coerceVbaModuleValue(value,"single");if(converted.number==0 && std::signbit(converted.number)) throw VbaRuntimeError(3251,"Negative-zero Single storage is not validated");return converted.number;}
     if(type=="CURRENCY_TICKS") return QVariant::fromValue(static_cast<qlonglong>(convertCurrency(scalarVbaValue(value)).currencyUnits));

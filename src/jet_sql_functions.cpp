@@ -262,7 +262,7 @@ void double_subtract(sqlite3_context* context,int count,sqlite3_value** args) no
 void double_multiply(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"*",2,2,0,true);}
 void double_divide(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"/",2,2,0,true);}
 void numericPower(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"^",2,2,0,true);}
-QVariant boundSqlStorage(sqlite3_value* argument) {
+QVariant boundSqlStorage(sqlite3_value* argument,bool decimalBlob=false) {
     auto& native=api();QVariant storage;
     switch(native.type(argument)) {
     case SQLITE_NULL: break;
@@ -275,6 +275,7 @@ QVariant boundSqlStorage(sqlite3_value* argument) {
         if(!input.isValidUtf8()) throw VbaRuntimeError(13,"Scalar SQL text is not valid UTF-8");
         storage=QString::fromUtf8(input);break;
     }
+    case SQLITE_BLOB: {if(!decimalBlob) throw VbaRuntimeError(13,"Scalar SQL binary input is unsupported");const auto* bytes=static_cast<const char*>(sqlite3_value_blob(argument));const auto size=native.bytes(argument);if(!bytes && size) throw VbaRuntimeError(7,"Decimal SQL bytes unavailable");storage=QByteArray(bytes ? bytes : "",size);break;}
     default: throw VbaRuntimeError(13,"Scalar SQL binary input is unsupported");
     }
     return storage;
@@ -288,12 +289,13 @@ void returnBoundSqlValue(sqlite3_context* context,const VbaValue& result) {
         native.numberResult(context,result.number);
     }
     else if(result.kind==VbaValue::Kind::Currency) native.numberResult(context,currencyToRealStorage(result));
+    else if(result.kind==VbaValue::Kind::Decimal) {const auto bytes=decimalSqlKey(result);sqlite3_result_blob(context,bytes.data(),static_cast<int>(bytes.size()),SQLITE_TRANSIENT);}
     else if(result.kind==VbaValue::Kind::Date) returnText(context,sqlFieldValue(result,"DATETIME").toString());
     else if(result.kind==VbaValue::Kind::Text) returnText(context,QString::fromUtf8(result.text.data(),static_cast<qsizetype>(result.text.size())));
     else if(result.kind==VbaValue::Kind::Number && (result.numericType==VbaValue::NumericType::Integer || result.numericType==VbaValue::NumericType::Long || result.numericType==VbaValue::NumericType::Byte)) native.integerResult(context,static_cast<qlonglong>(result.number));
     else throw VbaRuntimeError(13,"Scalar SQL result type mismatch");
 }
-void boundScalarSqlFunction(sqlite3_context* context,int count,sqlite3_value** args,std::string_view builtin,int minimum,int maximum,bool typed,bool dateComparison=false,bool booleanOperator=false) noexcept {
+void boundScalarSqlFunction(sqlite3_context* context,int count,sqlite3_value** args,std::string_view builtin,int minimum,int maximum,bool typed,bool dateComparison=false,bool booleanOperator=false,bool decimalOperator=false) noexcept {
     auto& native=api();
     try {
         const int offset=typed ? 1 : 0,arguments=count-offset;
@@ -303,7 +305,7 @@ void boundScalarSqlFunction(sqlite3_context* context,int count,sqlite3_value** a
             if(native.type(args[0])!=SQLITE_TEXT) throw VbaRuntimeError(450,"Typed scalar SQL requires argument types");
             declared=scalarText(args[0]).split(',');
             if(declared.size()!=arguments) throw VbaRuntimeError(450,"Typed scalar SQL argument types mismatch");
-            static const QSet<QString> supported{"","CURRENCY_REAL","DATETIME","SINGLE_REAL","INTEGER1","INTEGER2","INTEGER4","BOOL","BOOLEAN","DOUBLE"};
+            static const QSet<QString> supported{"","DECIMAL_EXACT","CURRENCY_REAL","DATETIME","SINGLE_REAL","INTEGER1","INTEGER2","INTEGER4","BOOL","BOOLEAN","DOUBLE"};
             for(const auto& type:declared) if(!supported.contains(type)) throw VbaRuntimeError(3251,"Scalar SQL source type is unsupported");
         }
         if(dateComparison && declared!=QStringList{"DATETIME","DATETIME"}) throw VbaRuntimeError(450,"Date comparison requires two proven Date operands");
@@ -314,10 +316,11 @@ void boundScalarSqlFunction(sqlite3_context* context,int count,sqlite3_value** a
         if(booleanOperator) for(int index=0;index<arguments;++index) {
             if(declared[index]!="BOOL" && declared[index]!="BOOLEAN" && !(declared[index].isEmpty() && native.type(args[index+offset])==SQLITE_NULL)) throw VbaRuntimeError(13,"Boolean SQL operator requires proven Boolean or NULL operands");
         }
-        const bool infix=dateComparison || booleanOperator;
+        if(decimalOperator && !declared.contains("DECIMAL_EXACT")) throw VbaRuntimeError(450,"Decimal operator requires a proven Decimal operand");
+        const bool infix=dateComparison || booleanOperator || decimalOperator;
         VbaVariables values;std::string expression=infix ? std::string{} : std::string(builtin)+"(";
         for(int index=0;index<arguments;++index) {
-            auto* argument=args[index+offset];const auto storage=boundSqlStorage(argument);
+            auto* argument=args[index+offset];const auto storage=boundSqlStorage(argument,declared.value(index)=="DECIMAL_EXACT");
             const auto name="_la_arg"+std::to_string(index);
             // Formatting already preserves unproven SQLite int64 input exactly.
             // A proven source declaration still goes through checked field decoding.
@@ -328,12 +331,18 @@ void boundScalarSqlFunction(sqlite3_context* context,int count,sqlite3_value** a
         if(builtin=="Nz" && arguments==1) {
             values.emplace("_la_nz_default",VbaValue::string(""));expression+=",_la_nz_default";
         }
-        if(booleanOperator && arguments==1) expression=std::string(builtin)+" "+expression;
+        if((booleanOperator || decimalOperator) && arguments==1) expression=std::string(builtin)+" "+expression;
         if(!infix) expression+=')';ScalarStringHost host;
         const auto result=evaluateVbaExpression(expression,host,values);
         returnBoundSqlValue(context,result);
     } catch(const VbaRuntimeError& failure) { functionError(context,failure); }
       catch(...) { native.error(context,"SQL bound scalar evaluation failed",-1); }
+}
+void decimalConversion(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"CDec",1,1,false);}
+void decimalConversionTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"CDec",1,1,true);}
+template<int Operation> void decimalOperation(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
+    constexpr std::string_view operators[]={"+","-","*","/","=","<>","<","<=",">",">=","-"};
+    boundScalarSqlFunction(context,count,args,operators[Operation],Operation==10 ? 1 : 2,Operation==10 ? 1 : 2,true,false,false,true);
 }
 void variantIdentity(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
     auto& native=api();if(count!=1) {native.error(context,"LinAccess SQL function error 450",-1);return;}
@@ -849,9 +858,9 @@ template<int Selector> void typedSelectorStep(sqlite3_context* context,int count
     try {
         if(count!=2 || native.type(args[0])!=SQLITE_TEXT) throw VbaRuntimeError(450,"Typed selector requires a source type and value");
         const auto type=scalarText(args[0]);
-        static const QSet<QString> supported{"DATETIME","CURRENCY_REAL","SINGLE_REAL","INTEGER1","INTEGER2","INTEGER4","DOUBLE","BOOL","BOOLEAN"};
+        static const QSet<QString> supported{"DECIMAL_EXACT","DATETIME","CURRENCY_REAL","SINGLE_REAL","INTEGER1","INTEGER2","INTEGER4","DOUBLE","BOOL","BOOLEAN"};
         if(!supported.contains(type)) throw VbaRuntimeError(3251,"Selector source type is not proven");
-        auto value=qtFieldValue(boundSqlStorage(args[1]),type);
+        auto value=qtFieldValue(boundSqlStorage(args[1],type=="DECIMAL_EXACT"),type);
         if constexpr(Selector<2) {
             if(value.kind==VbaValue::Kind::Null) return;
             if(state->value) {ScalarStringHost host;if(!compareVbaValues(Selector==0 ? "<" : ">",value,*state->value,host,VbaCompareMode::Binary).truthy()) return;}
@@ -1174,6 +1183,19 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_dateserial_typed",-1,&calendarDateSerialTyped,nullptr,nullptr);
     ensure("linaccess_jet_timeserial",-1,&calendarTimeSerial,nullptr,nullptr);
     ensure("linaccess_jet_timeserial_typed",-1,&calendarTimeSerialTyped,nullptr,nullptr);
+    ensure("linaccess_jet_cdec",-1,&decimalConversion,nullptr,nullptr);
+    ensure("linaccess_jet_cdec_typed",-1,&decimalConversionTyped,nullptr,nullptr);
+    ensure("linaccess_jet_decimal_add",-1,&decimalOperation<0>,nullptr,nullptr);
+    ensure("linaccess_jet_decimal_subtract",-1,&decimalOperation<1>,nullptr,nullptr);
+    ensure("linaccess_jet_decimal_multiply",-1,&decimalOperation<2>,nullptr,nullptr);
+    ensure("linaccess_jet_decimal_divide",-1,&decimalOperation<3>,nullptr,nullptr);
+    ensure("linaccess_jet_decimal_equal",-1,&decimalOperation<4>,nullptr,nullptr);
+    ensure("linaccess_jet_decimal_not_equal",-1,&decimalOperation<5>,nullptr,nullptr);
+    ensure("linaccess_jet_decimal_less",-1,&decimalOperation<6>,nullptr,nullptr);
+    ensure("linaccess_jet_decimal_less_equal",-1,&decimalOperation<7>,nullptr,nullptr);
+    ensure("linaccess_jet_decimal_greater",-1,&decimalOperation<8>,nullptr,nullptr);
+    ensure("linaccess_jet_decimal_greater_equal",-1,&decimalOperation<9>,nullptr,nullptr);
+    ensure("linaccess_jet_decimal_negate",-1,&decimalOperation<10>,nullptr,nullptr);
     ensure("linaccess_jet_cvar",-1,&variantIdentity,nullptr,nullptr);
     ensure("linaccess_jet_cvar_typed",-1,&variantIdentityTyped,nullptr,nullptr);
     ensure("linaccess_jet_cvdate",-1,&calendarCVDate,nullptr,nullptr);

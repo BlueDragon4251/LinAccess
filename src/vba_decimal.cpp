@@ -43,6 +43,18 @@ Parts parts(const VbaValue& value) {return parse(convertDecimal(value).text);}
 cpp_int signedMagnitude(const Parts& value,int scale) {cpp_int result=value.magnitude*power(scale-value.scale);return value.negative ? -result : result;}
 }
 VbaValue decimalLiteral(std::string_view text) {return store(parse(text));}
+std::vector<unsigned char> decimalSqlKey(const VbaValue& input) {
+    const auto value=parts(decimalLiteral(convertDecimal(input).text));
+    cpp_int ordered=signedMagnitude(value,28)+(cpp_int(1)<<191);
+    std::vector<unsigned char> bytes(24);for(int index=23;index>=0;--index) {bytes[index]=static_cast<unsigned char>((ordered&255).convert_to<unsigned>());ordered>>=8;}return bytes;
+}
+VbaValue decimalFromSqlKey(const std::vector<unsigned char>& bytes) {
+    if(bytes.size()!=24) throw VbaRuntimeError(13,"Decimal SQL encoding requires24 bytes");
+    cpp_int scaled=0;for(const auto byte:bytes) {scaled<<=8;scaled+=byte;}scaled-=(cpp_int(1)<<191);
+    auto result=store({scaled<0 ? -scaled : scaled,28,scaled<0},true);
+    if(decimalSqlKey(result)!=bytes) throw VbaRuntimeError(13,"Decimal SQL encoding is not an exact96-bit value");
+    return result;
+}
 VbaValue convertDecimal(const VbaValue& input) {
     const auto value=scalarVbaValue(input);if(value.kind==VbaValue::Kind::Decimal) return value;
     if(value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"Invalid Null Decimal conversion");

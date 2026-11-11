@@ -26,7 +26,7 @@ mixed sums and unproven Decimal average/variance paths refuse instead of silentl
 summing through Double. Unbound native controls retain their Decimal kind and
 exact text. Explicit typed destination conversions keep their own existing
 bounds. This does not enable native dbDecimal fields, exact imported Jet Decimal
-storage, general SQL Decimal arithmetic/indexes, Decimal dictionary keys or full
+storage, general SQL Decimal indexes, Decimal dictionary keys or full
 original-format write support. Those broader requirements remain open.
 
 The actual user reference was executed with Access11.0, DAO3.6, de-AT/de-DE.
@@ -63,3 +63,7 @@ Double and resolve scalar defaults once. Native Double→Currency conversion use
 checked integer mantissa/exponent scaling and ties-to-even, independent of the
 platform long-double width. Five existing core/DAO/window/Currency targets passed
 (10.03s), app built; full Currency SQL/storage/original-format scope remains open.
+
+Bounded native SELECT Decimal expressions, ordering and grouping now have a
+separate exact transport; see [Exact SQL Decimal](EXACT_SQL_DECIMAL.md).
+Physical field storage and representation/scale identity remain outside that scope.

@@ -509,6 +509,13 @@ End Function)BOUND";
     assert(eval("Val(\"16777217!\")").number==16777216 && eval("Val(\"1.2345@\")").number==1.2345);
     assert(eval("Val(CSng(16777217))").number==16777220); // Existing seven-digit native Single text policy.
 
+    {
+        const std::vector<std::string> values{"-79228162514264337593543950335","-9007199254740993","-0.0000000000000000000000000001","0","0.0000000000000000000000000001","1.23","9007199254740993","79228162514264337593543950335"};
+        std::vector<unsigned char> previous;for(const auto& text:values) {const auto value=decimalLiteral(text);const auto bytes=decimalSqlKey(value);assert(bytes.size()==24 && decimalCompare(value,decimalFromSqlKey(bytes))==0);if(!previous.empty()) assert(previous<bytes);previous=bytes;}
+        assert(decimalSqlKey(decimalLiteral("1.2300"))==decimalSqlKey(decimalLiteral("1.23")));
+        int invalidDecimal=0;try{(void)decimalFromSqlKey({0});}catch(const VbaRuntimeError& failure){invalidDecimal=failure.number;}assert(invalidDecimal==13);
+        assert(eval("dbDecimal").number==20);
+    }
     const auto variantDate=eval("CVDate(Expression:=-0.25)");assert(variantDate.kind==VbaValue::Kind::Date && variantDate.number==-0.25 && variantDate.arithmeticBinding==VbaValue::ArithmeticBinding::Variant);
     assert(eval("VBA.CVDate(1.5)").number==1.5 && eval("CDate(1.5)").arithmeticBinding==VbaValue::ArithmeticBinding::Static);
     assert(eval("VarType(CVDate(0))=vbDate And TypeName(CVDate(0))=\"Date\"").truthy());

@@ -47,7 +47,7 @@ VbaValue integerCount(qlonglong value) {
 }
 int provenDaoFieldType(const QString& declaration) {
     const auto type=declaration.toUpper();
-    return (type=="BOOL" || type=="BOOLEAN") ? 1 : type=="DOUBLE" ? 7 : type=="SINGLE_REAL" ? 6 : type=="INTEGER1" ? 2 : type=="INTEGER2" ? 3 : type=="INTEGER4" ? 4 : (type=="CURRENCY_REAL" || type=="CURRENCY_TICKS") ? 5 : (type=="DATE" || type=="DATETIME") ? 8 : type=="BLOB" ? 11 : 0;
+    return type=="DECIMAL_EXACT" ? 20 : (type=="BOOL" || type=="BOOLEAN") ? 1 : type=="DOUBLE" ? 7 : type=="SINGLE_REAL" ? 6 : type=="INTEGER1" ? 2 : type=="INTEGER2" ? 3 : type=="INTEGER4" ? 4 : (type=="CURRENCY_REAL" || type=="CURRENCY_TICKS") ? 5 : (type=="DATE" || type=="DATETIME") ? 8 : type=="BLOB" ? 11 : 0;
 }
 VbaValue fixedDaoFieldSize(int type) {
     const int size=(type==1 || type==2) ? 1 : type==3 ? 2 : (type==4 || type==6) ? 4
@@ -1063,6 +1063,7 @@ public:
     }
 private:
     void checkDerivedSource() const {
+        if(data_->types.values().contains("DECIMAL_EXACT")) throw VbaRuntimeError(3251,"DAO: Derived Decimal snapshots require preserved encoded source identity");
         if(frozen_ || (table_ && !queryBased_) || queryPlan_.sql.isEmpty() || !recordsetType_ || (*recordsetType_!=2 && *recordsetType_!=4))
             throw VbaRuntimeError(3251,"DAO: Derived snapshots require a query-backed dynaset or snapshot");
     }
@@ -1109,6 +1110,7 @@ private:
         navigate(data_->rows.size());noMatch_=true;
     }
     void find(const std::string& kind,const QString& criteria) {
+        if(data_->types.values().contains("DECIMAL_EXACT")) throw VbaRuntimeError(3251,"DAO: Decimal Find criteria are not implemented");
         if(data_->types.values().contains("CURRENCY_TICKS")) throw VbaRuntimeError(3251,"DAO: Textual Find criteria on exact Currency projections are not implemented");
         const auto pendingMode=mode_;
         if (criteria.trimmed().isEmpty()) throw VbaRuntimeError(3075,"DAO: Empty find criterion");

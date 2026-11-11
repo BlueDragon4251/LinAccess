@@ -7755,3 +7755,30 @@ Vorstand30bbc5de4c52a487ce0f5df7c7960ae540872600/Baumdb4eccc2e7b0a109b799ad289ab
 privat/exakt veröffentlicht; letzter positiver Gesamtpaket-/Originalbeleg
 weiterhin918c2c4 mit182,07s/7Hashes gleich vor Val/CVDate/CVar/Validierungsfix.
 Direkt weiterentwickeln, kein Zwischen-/Gesamtabschluss.
+
+
+Aktueller kombinierter Paket-/Originalbeleg (2026-11-11): Quellcommit
+64291db168e97a9c70fa2ef18bef13af85e37bf0, Baum
+d3fda532115d45261e9c28737172b8389e88a544. App-/Integrationsbau, DEB-Erzeugung
+und Paketprüfung bestanden; bestehende Original-/Inventarziele gemeinsam2/2
+in181,79s bestanden (52,69s/129,10s), alle7 geschützten Hashes unverändert.
+Enthält Val-Double, CVDate, CVar und Enum-Validierungskorrektur. Der bekannte
+Original-Makrogrenzfall bleibt eine dokumentierte Beobachtung; kein Nachweis
+eines vollständig initialisierten Geschäftsablaufs oder neuer Windows-Parität.
+Feste456/386/70 unverändert.
+
+
+Exakte native SQL-Decimal-Ergebnisse (2026-11-11): EXACT_SQL_DECIMAL.md.
+Bestehenden96-Bit-/Skala28-Kern für CDec, Grundrechnung/Vergleiche, native
+Skalarkonvertierung und Selektoren angebunden. Sortierbarer24-Byte-Schlüssel
+erhält numerische Ordnung/Gruppierung ohneDouble; Qt zeigt kanonischen Text,
+DAO liefert Decimal/dbDecimal20. Keine Scale-/Formatidentität oder physische
+Jet-Decimal-Erstellung/Import/Roundtrips behauptet. Unsichere Funktionen,
+SUM, verschachtelte SELECT/UNION, Schreibpfade und unbelegte DAO-Ableitungen
+verweigert. App gebaut; bestehender Kern0,58s und Querymodell0,45s bestanden.
+Ein falscher OpenRecordset-UPDATE-Negativfall erwartete3251 statt bestehendem
+Namensauflösungsfehler3265; entfernt, da tatsächliches Execute bereits3251 und
+unveränderte Daten prüft. Nur betroffenes DAO erneut1/1 in5,41s bestanden.
+Keine neue CTest-ID/Windows-Referenz. F014/F041/F067/F068 bleiben offen;
+feste456/386/70 unverändert. Gesamtpaket-/Originalbeleg64291db liegt vor diesem
+Decimal-Umfang. Direkt weiterentwickeln, kein Zwischen-/Gesamtabschluss.

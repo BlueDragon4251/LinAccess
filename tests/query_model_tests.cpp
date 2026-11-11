@@ -28,6 +28,11 @@ int main(int argc, char** argv) {
     auto db = QSqlDatabase::addDatabase("QSQLITE");
     db.setDatabaseName(":memory:"); assert(db.open());
     QSqlQuery query(db);
+    {
+        linaccess::AccessQueryModel decimalModel;decimalModel.execute(db,"SELECT CDec('79228162514264337593543950335') AS exact_value,CDec('0.1')+CDec('0.2') AS exact_sum");
+        assert(decimalModel.rowCount()==1 && decimalModel.fieldSqlType(0)=="DECIMAL_EXACT" && decimalModel.index(0,0).data().toString()=="79228162514264337593543950335" && decimalModel.index(0,1).data().toString()=="0.3");
+        assert(!(decimalModel.flags(decimalModel.index(0,0))&Qt::ItemIsEditable));
+    }
     assert(query.exec("CREATE TABLE samples(id INTEGER, score INTEGER, label TEXT)"));
     assert(query.exec("INSERT INTO samples VALUES(1,10,'one'),(2,20,'two'),(3,20,NULL),(4,30,'four')"));
     {
