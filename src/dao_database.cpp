@@ -332,7 +332,7 @@ QString sqliteLiteralDefaultSql(const QVariant& declaration) {
     // Raw SQLite TRUE is1; imported Access TRUE is already normalized to-1.
     return token.compare("TRUE",Qt::CaseInsensitive)==0 ? QString("1") : literal.value_or(QString{});
 }
-struct TableSchemaColumn { QString name,type; int sourceType{},sourceSize{}; QString literalDefault; bool hasDefault{}; QString foreignName; int indexAttributes{-1},generatorAttributes{-1}; std::optional<bool> required;std::optional<int> nativeAttributes;std::optional<bool> allowZeroLength;QString storedDefault;std::optional<bool> canonicalDate;QString validationRule,validationText;std::optional<QString> caption,description,format;QString captionIdentity,descriptionIdentity,formatIdentity;bool sourceDisplayProven{},sourceFormatProven{};QPair<QString,QString> fieldOrigin; };
+struct TableSchemaColumn { QString name,type; int sourceType{},sourceSize{}; QString literalDefault; bool hasDefault{}; QString foreignName; int indexAttributes{-1},generatorAttributes{-1}; std::optional<bool> required;std::optional<int> nativeAttributes;std::optional<bool> allowZeroLength;QString storedDefault;std::optional<bool> canonicalDate;QString validationRule,validationText;std::optional<QString> caption,description,format;QString captionIdentity,descriptionIdentity,formatIdentity;bool sourceDisplayProven{},sourceFormatProven{};QPair<QString,QString> fieldOrigin;int decimalPrecision{},decimalScale{}; };
 using TableSchemaReader=std::function<QVector<TableSchemaColumn>()>;
 using NativeFieldSetter=std::function<TableSchemaReader(const QString&,std::string_view,const VbaValue&)>;
 std::shared_ptr<VbaObject> makeNativeFieldProperties(TableSchemaReader reader,QString field,NativeFieldSetter setter={},std::function<VbaValue(std::string_view)> intrinsic={});
@@ -410,7 +410,7 @@ QVector<TableSchemaColumn> readTableSchemaColumns(QSqlDatabase db,const QString&
                 if(size>0 && (code!=10 || (origin!="MDBTOOLS_MYSQL" && origin!="DAO_NATIVE"))) throw VbaRuntimeError(3251,"DAO source field capacity provenance unavailable");
                 for(auto& column:columns) if(column.name.toCaseFolded()==name) {
                     column.sourceType=code;column.sourceSize=static_cast<int>(size);
-                    if(code==20) {const auto precision=object.value("source_precision"),scale=object.value("source_scale");const auto p=precision.toDouble(-1),s=scale.toDouble(-1);if(column.type!="DECIMAL_EXACT" || !precision.isDouble() || !scale.isDouble() || p<1 || p>28 || std::floor(p)!=p || s<0 || s>p || std::floor(s)!=s) throw VbaRuntimeError(3251,"DAO: Decimal source precision/scale is not proven");}
+                    if(code==20) {const auto precision=object.value("source_precision"),scale=object.value("source_scale");const auto p=precision.toDouble(-1),s=scale.toDouble(-1);if(column.type!="DECIMAL_EXACT" || !precision.isDouble() || !scale.isDouble() || p<1 || p>28 || std::floor(p)!=p || s<0 || s>p || std::floor(s)!=s) throw VbaRuntimeError(3251,"DAO: Decimal source precision/scale is not proven");column.decimalPrecision=static_cast<int>(p);column.decimalScale=static_cast<int>(s);}
                     if(origin=="DAO_NATIVE" && object.contains("native_required")) {
                         const auto required=object.value("native_required");
                         if(!required.isBool() || (required.toBool() && !notNull.value(name))) throw VbaRuntimeError(3251,"DAO native Required definition is not enforced");
@@ -457,6 +457,34 @@ QVector<TableSchemaColumn> readTableSchemaColumns(QSqlDatabase db,const QString&
     }
     return columns;
 }
+bool hasExactNativeCheck(const QString& sql,const QString& expected) {
+    const auto opaque=[&](qsizetype& at) {
+        if(at>=sql.size()) return false;const auto ch=sql[at];
+        if(ch=='\'' || ch=='"' || ch=='`' || ch=='[') {const auto close=ch=='[' ? QChar(']') : ch;++at;while(at<sql.size()) {if(sql[at++]==close) {if(at<sql.size() && sql[at]==close) {++at;continue;}break;}}return true;}
+        if(sql.mid(at,2)=="--") {const auto end=sql.indexOf('\n',at+2);at=end<0 ? sql.size() : end+1;return true;}
+        if(sql.mid(at,2)=="/*") {const auto end=sql.indexOf("*/",at+2);at=end<0 ? sql.size() : end+2;return true;}return false;
+    };
+    for(qsizetype at=0;at<sql.size();) {
+        if(opaque(at)) continue;
+        if(!sql[at].isLetter() && sql[at]!='_') {++at;continue;}
+        const auto first=at++;while(at<sql.size() && (sql[at].isLetterOrNumber() || sql[at]=='_')) ++at;
+        if(sql.mid(first,at-first).compare("CHECK",Qt::CaseInsensitive)!=0) continue;
+        while(at<sql.size() && sql[at].isSpace()) ++at;if(at>=sql.size() || sql[at]!='(') continue;
+        const auto begin=++at;int depth=1;
+        while(at<sql.size()) {if(opaque(at)) continue;if(sql[at]=='(') ++depth;else if(sql[at]==')' && --depth==0) break;++at;}
+        if(depth==0 && sql.mid(begin,at-begin).trimmed()==expected) return true;if(at<sql.size()) ++at;
+    }
+    return false;
+}
+QMap<QString,QPair<int,int>> checkedDecimalStorage(QSqlDatabase db,const QString& table,const QVector<TableSchemaColumn>& columns) {
+    QMap<QString,QPair<int,int>> result;bool any=false;for(const auto& column:columns) any=any || column.type=="DECIMAL_EXACT";
+    if(!any) return result;QSqlQuery query(db);query.prepare("SELECT sql FROM main.sqlite_schema WHERE type='table' AND name=? COLLATE NOCASE");query.addBindValue(table);if(!query.exec()) queryFailure(query);if(!query.next()) return result;const auto sql=query.value(0).toString();query.finish();
+    for(const auto& column:columns) if(column.type=="DECIMAL_EXACT" && column.sourceType==20 && column.decimalPrecision>0) {
+        const auto check="linaccess_jet_decimal_field_valid("+quote(column.name)+","+QString::number(column.decimalPrecision)+","+QString::number(column.decimalScale)+")";
+        if(hasExactNativeCheck(sql,check)) result.insert(column.name.toCaseFolded(),{column.decimalPrecision,column.decimalScale});
+    }
+    return result;
+}
 bool exactNativeCurrencyColumn(QSqlDatabase db,const QString& table,const TableSchemaColumn& column) {
     if(column.sourceType!=5 || !column.nativeAttributes || *column.nativeAttributes!=1 || !column.required || column.type!="CURRENCY_REAL") return false;
     QSqlQuery declared(db);if(!declared.exec("PRAGMA main.table_info("+quote(table)+")")) queryFailure(declared);
@@ -493,6 +521,7 @@ struct RecordsetData {
     std::optional<NativeRecordsetIndex> selectedIndex;
     QMap<QString,QString> types;
     QMap<QString,int> daoTypes,definitionSizes;
+    QMap<QString,QPair<int,int>> decimalTypes;
     QMap<QString,QVariant> literalDefaults;
     QMap<QString,QString> defaultExpressions,validationRules,validationTexts;
     QMap<QString,bool> requiredFields,allowZeroLengthFields;
@@ -693,7 +722,7 @@ public:
             std::vector<VbaValue> cells; cells.reserve(static_cast<std::size_t>(count*fields));
             for(qsizetype row=position_;row<position_+count;++row) for(qsizetype field=0;field<fields;++field) {
                 const auto raw=data_->rows[row][field];
-                if(!raw.isNull() && raw.metaType().id()==QMetaType::QByteArray) {
+                if(!raw.isNull() && raw.metaType().id()==QMetaType::QByteArray && data_->types.value(data_->columns[field].toCaseFolded())!="DECIMAL_EXACT") {
                     const auto bytes=raw.toByteArray(); cells.push_back(VbaValue::byteArray(std::vector<unsigned char>(bytes.begin(),bytes.end())));
                 } else cells.push_back(qtFieldValue(raw,data_->types.value(data_->columns[field].toCaseFolded())));
             }
@@ -933,7 +962,7 @@ public:
     }
     VbaValue fieldDataUpdatable(const QString& name) const {
         const auto declaration=fieldType(name);
-        return VbaValue::logical(declaration!="DECIMAL_EXACT" && !readOnly_ && !frozen_ && connectionUpdatable(db_));
+        return VbaValue::logical((declaration!="DECIMAL_EXACT" || data_->decimalTypes.contains(name.toCaseFolded())) && !readOnly_ && !frozen_ && connectionUpdatable(db_));
     }
     VbaValue fieldAttributes(const QString& name) const {
         (void)fieldType(name);
@@ -1007,7 +1036,7 @@ public:
         if(mode_==Mode::Browse) current();
         const auto& raw=mode_!=Mode::Browse ? pending_[index] : data_->rows[position_][index];
         const auto type=data_->types.value(name.toCaseFolded());
-        if(!raw.isNull() && raw.metaType().id()==QMetaType::QByteArray) {
+        if(!raw.isNull() && raw.metaType().id()==QMetaType::QByteArray && type!="DECIMAL_EXACT") {
             if(!type.isEmpty() && !binaryFieldType(type)) throw VbaRuntimeError(13,"Binary storage does not match declared field type");
             const auto bytes=raw.toByteArray();
             return VbaValue::byteArray(std::vector<unsigned char>(bytes.begin(),bytes.end()));
@@ -1058,7 +1087,11 @@ public:
             const auto scalar=data_->daoTypes.value(name.toCaseFolded())==6 ? scalarVbaValue(value) : value;
             const auto converted=data_->daoTypes.value(name.toCaseFolded())==6 && scalar.kind!=VbaValue::Kind::Null
                 ? coerceVbaModuleValue(scalar,"single") : scalar;
-            pending_[index]=sqlFieldValue(converted,type);
+            if(type=="DECIMAL_EXACT") {
+                const auto shape=data_->decimalTypes.constFind(name.toCaseFolded());if(shape==data_->decimalTypes.cend()) throw VbaRuntimeError(3251,"DAO: Decimal field write context is not proven");
+                const auto mode=mode_;const auto revision=data_->revision;const auto encoded=sqlDecimalFieldValue(converted,shape->first,shape->second);
+                checkTransaction();if(closed_) throw VbaRuntimeError(3420,"DAO: Recordset closed during Decimal conversion");if(mode_!=mode || data_->revision!=revision) throw VbaRuntimeError(3219,"DAO: Recordset changed during Decimal conversion");pending_[index]=encoded;
+            } else pending_[index]=sqlFieldValue(converted,type);
         }
         changed_.insert(index);
     }
@@ -1197,7 +1230,7 @@ private:
             completed=true;
         };
         QString tableOrigin;data_->fieldOrigins.clear();
-        data_->types.clear(); data_->daoTypes.clear(); data_->definitionSizes.clear(); data_->literalDefaults.clear(); data_->defaultExpressions.clear();data_->requiredFields.clear();data_->allowZeroLengthFields.clear();data_->validationRules.clear();data_->validationTexts.clear();
+        data_->types.clear();data_->decimalTypes.clear(); data_->daoTypes.clear(); data_->definitionSizes.clear(); data_->literalDefaults.clear(); data_->defaultExpressions.clear();data_->requiredFields.clear();data_->allowZeroLengthFields.clear();data_->validationRules.clear();data_->validationTexts.clear();
         if(table_) {
             QSqlQuery origin(db_); origin.prepare("SELECT name FROM main.sqlite_schema WHERE type='table' AND name=? COLLATE NOCASE"); origin.addBindValue(source_);
             if(!origin.exec()) queryFailure(origin);
@@ -1205,6 +1238,7 @@ private:
             if(mainName.isEmpty()) data_->types=sqliteColumnTypes(db_,source_);
             else {
                 const auto schema=readTableSchemaColumns(db_,mainName);
+                const auto decimalTypes=checkedDecimalStorage(db_,mainName,schema);
                 const auto defaults=literalDefaultValues(db_,schema);
                 for(const auto& field:schema) {
                 int projected=-1;if(queryBased_) {for(int i=0;i<queryProjection_.size();++i) if(queryProjection_[i].compare(field.name,Qt::CaseInsensitive)==0) projected=i;if(projected<0) continue;}
@@ -1212,6 +1246,7 @@ private:
                 if(defaults.contains(field.name.toCaseFolded())) data_->literalDefaults.insert(key,defaults.value(field.name.toCaseFolded())); data_->types.insert(key,field.type);
                 if(field.nativeAttributes) {data_->validationRules.insert(key,field.validationRule);data_->validationTexts.insert(key,field.validationText);}
                 if(field.required) data_->requiredFields.insert(key,*field.required);if(field.allowZeroLength) data_->allowZeroLengthFields.insert(key,*field.allowZeroLength);
+                if(decimalTypes.contains(field.name.toCaseFolded())) data_->decimalTypes.insert(key,decimalTypes.value(field.name.toCaseFolded()));
                 const auto code=field.sourceType ? field.sourceType : provenDaoFieldType(field.type);
                 data_->daoTypes.insert(key,code);
                 const auto size=(code<=0 || code==20) ? -1 : code==10 ? (field.sourceSize>0 ? field.sourceSize : -1)
@@ -3786,6 +3821,10 @@ bool nativeFieldHasExactCurrencyStorage(QSqlDatabase db,const QString& table,con
 }
 bool nativeFieldHasCanonicalDateStorage(QSqlDatabase db,const QString& table,const QString& field) {
     workspaceState(db)->check();for(const auto& column:readTableSchemaColumns(db,table)) if(column.name.compare(field,Qt::CaseInsensitive)==0) return canonicalNativeDateColumn(db,table,column);return false;
+}
+QMap<QString,QPair<int,int>> nativeTableDecimalTypes(QSqlDatabase db,const QString& requested) {
+    workspaceState(db)->check();QString table;for(const auto& name:nativeTableNames(db)) if(name.compare(requested,Qt::CaseInsensitive)==0) {table=name;break;}if(table.isEmpty()) return {};
+    return checkedDecimalStorage(db,table,readTableSchemaColumns(db,table));
 }
 QMap<QString,NativeFieldDisplayProperties> nativeTableFieldDisplayProperties(QSqlDatabase db,const QString& requested) {
     workspaceState(db)->check();QString table;for(const auto& name:nativeTableNames(db)) if(name.compare(requested,Qt::CaseInsensitive)==0) {table=name;break;}if(table.isEmpty()) return {};QMap<QString,NativeFieldDisplayProperties> result;for(const auto& field:readTableSchemaColumns(db,table)) if(field.nativeAttributes || field.sourceDisplayProven) result.insert(field.name.toCaseFolded(),{field.caption,field.description,field.nativeAttributes.has_value(),field.format});return result;

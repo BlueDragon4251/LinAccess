@@ -145,6 +145,12 @@ QString qtFieldText(const QVariant& value,const QString& type) {
     if(value.isNull()) return {};
     return (type=="CURRENCY_REAL" || type=="CURRENCY_TICKS" || type=="DECIMAL_EXACT") ? QString::fromStdString(qtFieldValue(value,type).asText()) : value.toString();
 }
+QVariant sqlDecimalFieldValue(const VbaValue& input,int precision,int scale) {
+    if(precision<1 || precision>28 || scale<0 || scale>precision) throw VbaRuntimeError(3251,"Decimal write requires proven precision/scale");
+    const auto value=scalarVbaValue(input);if(value.kind==VbaValue::Kind::Null) return {};
+    const auto decimal=convertDecimal(value);if(!decimalFitsField(decimal,precision,scale)) throw VbaRuntimeError(6,"Decimal value does not fit declared precision/scale without rounding");
+    const auto bytes=decimalSqlKey(decimal);return QByteArray(reinterpret_cast<const char*>(bytes.data()),bytes.size());
+}
 QVariant sqlFieldValue(const VbaValue& value,const QString& type) {
     if(type=="DECIMAL_EXACT") throw VbaRuntimeError(3251,"Exact Decimal query results do not define writable physical Jet columns");
     if (value.kind == VbaValue::Kind::Null) return {};

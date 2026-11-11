@@ -1301,3 +1301,22 @@ Gruppenköpfe auf Folgeseiten und native Abschnitts-API: [Umfang](docs/NATIVE_RE
 Typisierte ASCII-Schreibweise und Rückwärtssuche in SQL: [LCase/UCase, StrReverse/InStrRev](docs/NATIVE_SQL_CASE_REVERSE.md).
 
 VBA-Standardmodule modelllos öffnen und bearbeiten: [DoCmd.OpenModule](docs/MODELESS_MODULE_EDITOR.md).
+
+
+Begrenzte exakte Decimal-Feldbearbeitung (2026-11-11):
+[NATIVE_DECIMAL_FIELD_WRITES.md](docs/NATIVE_DECIMAL_FIELD_WRITES.md).
+Physische Felder mit belegtem p/s und tatsächlichem passendem CHECK erlauben
+DAO Edit/AddNew/Update/GetRows sowie Datenblatt-Eingabe/Paste/Undo/Redo/NULL/Save.
+Rundung erfordernde Werte verweigern Fehler6 vor Pufferänderung. Originalwerte
+für gebundene UPDATE/DELETE kommen aus dem unveränderten Query-Speicher statt
+aus Qt-EditRole-Text; eindeutiger Treffer erforderlich, Dubletten unverändert.
+App/Helper gebaut; bestehendes GUI-/Import-Bündel2/2 in17,78s (17,52/0,25),
+einschließlich unabhängiger Jet-Datei, bestanden. Keine neue CTest-ID.
+Formularschreiben, Erstellung, NichtNULL-Defaults, volle DAO-/Locale-/Rundungs-
+und MDB-Roundtripparität bleiben offen. F014/F017/F055/F067/F068/F340 offen;
+feste456/386 bestätigte Teilumfänge/70 offene Vollanforderungen unverändert.
+Aktueller Gesamtpaket-/Originalbeleg: Quelle e666d576064bf0976175dbc0fdb78aa23a21a5bf,
+Baum4624e67ce04b00e31652d2016b44169f248bc330, Integrationsbau/DEB/Paketprüfung
+bestanden, Inventar/Original2/2 in183,33s (54,43/128,89), alle7 Hashwerte gleich.
+Dieses Paket enthält den exakten Jet-Import, noch nicht die Feldbearbeitung.
+Bekannte Original-Makrogrenze unverändert; keine vollständige Access-Parität.

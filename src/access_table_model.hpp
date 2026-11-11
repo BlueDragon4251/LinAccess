@@ -66,14 +66,19 @@ signals:
 protected:
     QString orderByClause() const override;
     bool insertRowIntoTable(const QSqlRecord& record) override;
+    bool updateRowInTable(int row,const QSqlRecord& record) override;
+    bool deleteRowFromTable(int row) override;
 private:
     bool applyDataBlock(int firstRow,int firstColumn,const QVector<QVector<QVariant>>& values,bool typed,const QMap<QString,QVariant>* restoredDefaults=nullptr,bool skipGenerated=false,const QSet<int>* suppliedColumns=nullptr,const QVector<int>* mappedColumns=nullptr);
     bool refreshTypes();
+    bool changeDecimalRow(int row,const QSqlRecord* values);
+    QVariant checkedColumnInput(int column,const QVariant& input) const;
     bool reject(int number);
     QString columnType(int column) const;
     QVector<QPersistentModelIndex> rowAnchors(const QSet<int>& rows) const;
     QSet<int> anchoredRows(const QVector<QPersistentModelIndex>& anchors) const;
     QMap<QString,QString> types_,captions_,descriptions_,formats_;
+    QMap<QString,QPair<int,int>> decimalTypes_;
     QMap<int,QString> queryAliases_;
     QSet<QString> generated_;
     int metadataError_{};

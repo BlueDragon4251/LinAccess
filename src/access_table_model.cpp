@@ -52,9 +52,23 @@ bool AccessTableModel::rejectEdit(int number,const QString& message) {
 }
 bool AccessTableModel::reject(int number) { return rejectEdit(number,editMessage(number)); }
 bool AccessTableModel::refreshTypes() {
-    types_.clear();captions_.clear();descriptions_.clear();formats_.clear(); generated_.clear(); metadataError_=0;
-    try { types_=sqliteColumnTypes(database(),tableName()); generated_=generatedAccessColumns(database(),tableName());const auto properties=nativeTableFieldDisplayProperties(database(),tableName());for(auto it=properties.cbegin();it!=properties.cend();++it) {if(it.value().caption) captions_.insert(it.key(),*it.value().caption);if(it.value().description) descriptions_.insert(it.key(),*it.value().description);if(it.value().format) formats_.insert(it.key(),*it.value().format);}return true; }
+    types_.clear();decimalTypes_.clear();captions_.clear();descriptions_.clear();formats_.clear(); generated_.clear(); metadataError_=0;
+    try { types_=sqliteColumnTypes(database(),tableName());if(types_.values().contains("DECIMAL_EXACT")) decimalTypes_=nativeTableDecimalTypes(database(),tableName()); generated_=generatedAccessColumns(database(),tableName());const auto properties=nativeTableFieldDisplayProperties(database(),tableName());for(auto it=properties.cbegin();it!=properties.cend();++it) {if(it.value().caption) captions_.insert(it.key(),*it.value().caption);if(it.value().description) descriptions_.insert(it.key(),*it.value().description);if(it.value().format) formats_.insert(it.key(),*it.value().format);}return true; }
     catch(const VbaRuntimeError& error) { metadataError_=error.number; return reject(error.number); }
+}
+QVariant AccessTableModel::checkedColumnInput(int column,const QVariant& input) const {
+    const auto type=columnType(column);if(type!="DECIMAL_EXACT") return checkedInput(type,input);
+    const auto shape=decimalTypes_.constFind(record().fieldName(column).toCaseFolded());if(shape==decimalTypes_.cend()) throw VbaRuntimeError(3251,"Decimal column write context is not proven");
+    VbaValue value;
+    if(input.isNull() || (input.metaType().id()==QMetaType::QString && input.toString().isEmpty())) value=VbaValue{};
+    else if(input.metaType()==QMetaType::fromType<NativeGridCurrency>()) value=VbaValue::currency(input.value<NativeGridCurrency>().units);
+    else if(input.metaType().id()==QMetaType::QString) value=VbaValue::string(input.toString().toStdString());
+    else if(input.metaType().id()==QMetaType::Bool) value=VbaValue::logical(input.toBool());
+    else if(input.metaType().id()==QMetaType::Double || input.metaType().id()==QMetaType::Float) value=VbaValue::numeric(input.toDouble());
+    else if(input.metaType().id()==QMetaType::LongLong || input.metaType().id()==QMetaType::ULongLong || input.metaType().id()==QMetaType::Int || input.metaType().id()==QMetaType::UInt) value=VbaValue::string(input.toString().toStdString());
+    else if(replayingHistory_ && input.metaType().id()==QMetaType::QByteArray) value=qtFieldValue(input,"DECIMAL_EXACT");
+    else throw VbaRuntimeError(13,"Decimal input requires a supported numeric/text value");
+    return sqlDecimalFieldValue(value,shape->first,shape->second);
 }
 void AccessTableModel::setTable(const QString& table) {
     if(saving_) { (void)reject(2501); return; }
@@ -68,7 +82,7 @@ bool AccessTableModel::select() {
 }
 void AccessTableModel::clear() {
     if(saving_) { (void)reject(2501); return; }
-    queryAliases_.clear();sourceSort_.clear();clearBlockHistory();QSqlTableModel::clear();captions_.clear();descriptions_.clear(); dirtyRows_.clear(); deletedRows_.clear(); submittedKeys_.clear(); insertedKey_.clear();
+    queryAliases_.clear();sourceSort_.clear();clearBlockHistory();QSqlTableModel::clear();decimalTypes_.clear();captions_.clear();descriptions_.clear(); dirtyRows_.clear(); deletedRows_.clear(); submittedKeys_.clear(); insertedKey_.clear();
 }
 QVector<QPersistentModelIndex> AccessTableModel::rowAnchors(const QSet<int>& rows) const {
     QVector<QPersistentModelIndex> result; result.reserve(rows.size());
@@ -240,6 +254,7 @@ bool AccessTableModel::submitTransactionally() {
     submittedKeys_.clear();
     if(saving_ || changing_) return reject(2501);
     if(readOnly_) return reject(2448);
+    if(metadataError_) return reject(metadataError_);
     if(editStrategy()!=OnManualSubmit) return reject(3251);
     if(!isDirty()) return select();
     struct Pending { int row; enum Kind { Update,Insert,Delete } kind; QSqlRecord values; };
@@ -328,7 +343,7 @@ bool AccessTableModel::replaceAllLiteralTextColumns(const QVector<int>& columns,
             if(!(flags(target)&Qt::ItemIsEditable) || !indexInQuery(target).isValid()) return reject(2448);
             if(changed.value.size()>16*1024*1024-outputUnits) return reject(3251);outputUnits+=changed.value.size();
             if(matches.size()>=1000000) return reject(3251);
-            matches.append({row,column});affectedRows.insert(row);prepared.append(checkedInput(columnType(column),changed.value));
+            matches.append({row,column});affectedRows.insert(row);prepared.append(checkedColumnInput(column,changed.value));
         }
     } catch(const VbaRuntimeError& error) { return reject(error.number); }
       catch(const std::bad_alloc&) { return reject(7); }
@@ -473,7 +488,7 @@ Qt::ItemFlags AccessTableModel::flags(const QModelIndex& index) const {
     auto result=QSqlTableModel::flags(index); if(!index.isValid()) return result;
     if(readOnly_) return result & ~(Qt::ItemIsEditable|Qt::ItemIsUserCheckable);
     const auto type=columnType(index.column());
-    if(type=="DECIMAL_EXACT" || metadataError_ || generated_.contains(record().fieldName(index.column()).toCaseFolded()) || (type.contains("BLOB",Qt::CaseInsensitive) && !binaryWriting_)) return result & ~Qt::ItemIsEditable;
+    if((type=="DECIMAL_EXACT" && !decimalTypes_.contains(record().fieldName(index.column()).toCaseFolded())) || metadataError_ || generated_.contains(record().fieldName(index.column()).toCaseFolded()) || (type.contains("BLOB",Qt::CaseInsensitive) && !binaryWriting_)) return result & ~Qt::ItemIsEditable;
     if(type.contains("BOOL",Qt::CaseInsensitive)) result |= Qt::ItemIsUserCheckable;
     if(checkedDisplay(type)) {
         try { (void)qtFieldValue(QSqlTableModel::data(index,Qt::EditRole),type); }
@@ -497,7 +512,7 @@ bool AccessTableModel::setData(const QModelIndex& index,const QVariant& value,in
             if(!valid || state<Qt::Unchecked || state>Qt::Checked) return reject(5);
             input=state==Qt::PartiallyChecked ? QVariant{} : QVariant(state==Qt::Checked);
         }
-        const auto converted=checkedInput(type,input);
+        const auto converted=checkedColumnInput(index.column(),input);
         const bool accepted=QSqlTableModel::setData(index,converted,Qt::EditRole);
         if(accepted) { setLastError({}); if(checkbox) emit dataChanged(index,index,{Qt::CheckStateRole}); }
         return accepted;
@@ -527,6 +542,7 @@ bool AccessTableModel::isGeneratedColumn(int column) const {
 bool AccessTableModel::isPasteColumn(int column,bool binary) const {
     return !readOnly_ && !metadataError_ && column>=0 && column<columnCount()
         && !generated_.contains(record().fieldName(column).toCaseFolded())
+        && (columnType(column)!="DECIMAL_EXACT" || decimalTypes_.contains(record().fieldName(column).toCaseFolded()))
         && (binary || !columnType(column).contains("BLOB",Qt::CaseInsensitive));
 }
 bool AccessTableModel::setDataBlock(int firstRow,int firstColumn,const QVector<QVector<QString>>& values) {
@@ -607,6 +623,7 @@ bool AccessTableModel::applyDataBlock(int firstRow,int firstColumn,const QVector
                 } else if(!isPasteColumn(targetColumn,typed)) return reject(2448);
                 const auto input=values[row][column];QVariant converted;
                 if(typed && input.isNull()) converted={};
+                else if(type=="DECIMAL_EXACT") converted=checkedColumnInput(targetColumn,input);
                 else if(typed && input.metaType()==QMetaType::fromType<NativeGridCurrency>()) {
                     const auto exact=VbaValue::currency(input.value<NativeGridCurrency>().units);
                     if(nativeFindTextType(type) || type=="CURRENCY_REAL") converted=sqlFieldValue(exact,type);
@@ -619,7 +636,7 @@ bool AccessTableModel::applyDataBlock(int firstRow,int firstColumn,const QVector
                 } else if(typed && input.metaType().id()==QMetaType::QByteArray) return reject(13);
                 else if(typed && (type=="INTEGER" || type=="INT" || type=="BIGINT") && (input.metaType().id()==QMetaType::LongLong || input.metaType().id()==QMetaType::Int)) converted=input;
                 else if(typed && (input.metaType().id()==QMetaType::Double || input.metaType().id()==QMetaType::Bool)) converted=sqlFieldValue(input.metaType().id()==QMetaType::Bool ? VbaValue::logical(input.toBool()) : VbaValue::numeric(input.toDouble()),type);
-                else converted=checkedInput(type,input);
+                else converted=checkedColumnInput(targetColumn,input);
                 checked.push_back({targetRow,targetColumn,converted});historyRow.push_back(converted);
             }
             history.values.push_back(std::move(historyRow));
@@ -767,6 +784,38 @@ bool AccessTableModel::redoBlock() {
         if(generation!=historyGeneration_) return reject(2501);
         undoHistory_.swap(nextUndo);redoHistory_.swap(nextRedo);setLastError({});return true;
     } catch(const std::bad_alloc&) {return reject(7);}
+}
+bool AccessTableModel::changeDecimalRow(int row,const QSqlRecord* values) {
+    // Qt captures original records through our textual EditRole. Bind raw query
+    // values so that stored Decimal keys never become strings in WHERE.
+    if(readOnly_) return reject(2448);if(metadataError_) return reject(metadataError_);
+    const auto original=primaryValues(row);if(original.isEmpty()) return reject(3251);
+    const auto* driver=database().driver();const auto table=driver->escapeIdentifier(tableName(),QSqlDriver::TableName);
+    QStringList predicates,assignments;QVector<QVariant> changed,originalValues;
+    for(int field=0;field<original.count();++field) {
+        const auto column=fieldIndex(original.fieldName(field));const auto cell=index(row,column);if(column<0 || !indexInQuery(cell).isValid()) return reject(3251);
+        // primaryValues() has already captured our textual EditRole. Fetch the
+        // raw original query value, bypassing the editable/formatting overrides.
+        originalValues.append(QSqlQueryModel::data(cell,Qt::EditRole));
+        predicates.append(driver->escapeIdentifier(original.fieldName(field),QSqlDriver::FieldName)+" IS ?");
+    }
+    if(values) for(int field=0;field<values->count();++field) if(values->isGenerated(field) && !generated_.contains(values->fieldName(field).toCaseFolded())) {if(columnType(field)=="DECIMAL_EXACT" && !decimalTypes_.contains(values->fieldName(field).toCaseFolded())) return reject(3251);assignments.append(driver->escapeIdentifier(values->fieldName(field),QSqlDriver::FieldName)+"=?");changed.append(values->value(field));}
+    if(values && assignments.isEmpty()) return reject(3251);
+    const auto where=predicates.join(" AND ");
+    const auto sql=(values ? "UPDATE "+table+" SET "+assignments.join(',') : "DELETE FROM "+table)+" WHERE "+where+" AND (SELECT COUNT(*) FROM "+table+" WHERE "+where+")=1";
+    QSqlQuery query(database());if(!query.prepare(sql)) {setLastError(query.lastError());return false;}
+    for(const auto& value:changed) query.addBindValue(value);
+    for(int pass=0;pass<2;++pass) for(const auto& value:originalValues) query.addBindValue(value);
+    if(!query.exec()) {setLastError(query.lastError());return false;}
+    if(query.numRowsAffected()!=1) return reject(3251);return true;
+}
+bool AccessTableModel::updateRowInTable(int row,const QSqlRecord& values) {
+    if(!types_.values().contains("DECIMAL_EXACT")) return QSqlTableModel::updateRowInTable(row,values);
+    auto changed=values;emit beforeUpdate(row,changed);return changeDecimalRow(row,&changed);
+}
+bool AccessTableModel::deleteRowFromTable(int row) {
+    if(!types_.values().contains("DECIMAL_EXACT")) return QSqlTableModel::deleteRowFromTable(row);
+    emit beforeDelete(row);return changeDecimalRow(row,nullptr);
 }
 bool AccessTableModel::insertRowIntoTable(const QSqlRecord& row) {
     insertedKey_.clear();
