@@ -4574,3 +4574,35 @@ Vorstand49e695d2bb2bb134f2c24dff2e4be2f35f4ea33c/Baum72229b394f8c28b5df933d988a9
 privat/exakt veröffentlicht (Remote-Lesebestätigung verzögert, nachgeprüft/adoptiert).
 Dessen Original-Fix2/2 in177,19s und7Hashes gleich; frischer gemeinsamer Paket-
 /Originallauf folgt. Alter57fb-DEB bleibt nicht vollständig geprüft.
+
+
+Erneuerter gültiger SQL-Gesamtpaketbeleg (2026-11-11):
+Privater Standcf9d6933a700e3957b7cb4a2c886b897760cb4b4,
+Baum2e2121ad3aee243e32f0bd67c864b7287c4b9d00. DEB unter
+work/sql-conditional/package-proof/package/linaccess-0.7.0-Linux.deb:
+Integrationsbau/CPack/check-deb bestanden; vorhandenes Original-/Inventarbündel
+2/2 in184,68s (Original129,82/Inventar54,86s).7 geschützte Hashes unverändert;
+100/78/22, Kategorien73/5/3/9/10 unverändert. Enthält SQL-Typabfragen, logische/
+primitive Prädikatergebnisse, Wertzustand/Nz/Auswahlfamilien und RIGHT-JOIN-/
+Wiederbindungsfix. Vorheriger57fb-DEB mit fehlgeschlagenen Originalzielen wird
+nicht als positiver Beleg verwendet. Keine vollständige Windows-/Originalablauf-
+oder Katalogparität behauptet.456/386/70 unverändert. Das Paket liegt vor der
+nun vorbereiteten Entwurfs-Cut-Erweiterung; kein Zwischen-/Gesamtabschluss.
+
+
+Native Cut über vorhandenen Entwürfen (2026-11-11): TYPED_GRID_CLIPBOARD.md.
+Ansicht nutzt die vorhandene begrenzte Bereichs-Snapshotstrecke statt globalem
+Clean-Cache-Zwang. Frühere Updates, Insert-Default-/Generated-Zustand und fremde
+Löschmarker bleiben erhalten; ausgewählte gelöschte/geschützte Zellen vor Copy
+verweigert. Nach synchroner Clipboard-Publikation Modell/Auswahl/Visible-Mapping/
+Zeilen/Felder/rohe Typen/Werte prüfen, bevor tatsächlich kopierter Bereich geleert
+wird; geänderte Quellwerte bleiben ungeleert. SQL erst mit normalem Save.
+Vorhandene UI/Feld-Ziele zusammen2/2 in17,74s (Hauptfenster17,12/Felder0,61)
+bestanden, App gebaut; gemischter Pending-Cache, typed BLOB/NULL/Text, Cut Undo/
+Redo, erhaltene Inserts/Deletes/Defaults bis SQL-Save, geschützter/deleted Ziel-
+Clipboard-Erhalt und echte synchrone Clipboard-Reentry geprüft. Kein neuer
+CTest/Katalogpunkt, kein Original-/Windows-Oracle, kein allgemeiner mehrstufiger
+Access-Undo-Stack. F340 bleibt breit offen;456/386/70 unverändert.
+Vorstandcf9d6933a700e3957b7cb4a2c886b897760cb4b4/Baum2e2121ad3aee243e32f0bd67c864b7287c4b9d00
+privat/exakt veröffentlicht. Gültiger DEB/Originalbeleg dieses Vorstands184,68s/
+7Hash gleich siehe oben; neue Cut-Erweiterung liegt nach diesem Paket.

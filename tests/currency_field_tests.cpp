@@ -401,6 +401,37 @@ End Function
     }
 
     {
+        assert(sql.exec("CREATE TABLE cut_draft_scope(id INTEGER PRIMARY KEY AUTOINCREMENT,note TEXT,payload BLOB,extra TEXT DEFAULT 'retained-default')"));
+        assert(sql.exec("INSERT INTO cut_draft_scope(note,payload) VALUES('one',x'0102'),('two',x'03')"));sql.finish();
+        linaccess::AccessTableModel cells(nullptr,db);cells.setTable("cut_draft_scope");cells.setEditStrategy(QSqlTableModel::OnManualSubmit);assert(cells.select());
+        linaccess::AccessTableView sheet;sheet.setModel(&cells);sheet.show();
+        assert(cells.setData(cells.index(0,1),"edited-draft"));
+        assert(cells.insertRows(2,1) && cells.setData(cells.index(2,1),"insert-draft") && cells.removeRows(1,1));
+        sheet.setCurrentIndex(cells.index(0,1));sheet.selectionModel()->select(QItemSelection(cells.index(0,1),cells.index(0,2)),QItemSelectionModel::ClearAndSelect);
+        assert(sheet.canCutSelection() && sheet.cutSelection());
+        assert(cells.QSqlTableModel::data(cells.index(0,1),Qt::EditRole).isNull() && cells.QSqlTableModel::data(cells.index(0,2),Qt::EditRole).isNull());
+        const auto copied=QJsonDocument::fromJson(QApplication::clipboard()->mimeData()->data(linaccess::nativeGridMime)).object();
+        assert(copied["fields"].toArray()==QJsonArray({"note","payload"}) && QApplication::clipboard()->text().startsWith("edited-draft\t0x0102"));
+        assert(sql.exec("SELECT COUNT(*),SUM(id),hex((SELECT payload FROM cut_draft_scope WHERE id=1)) FROM cut_draft_scope") && sql.next() && sql.value(0).toInt()==2 && sql.value(1).toInt()==3 && sql.value(2).toString()=="0102");sql.finish();
+        assert(sheet.undoPastedBlock() && cells.isDirty() && cells.rowCount()==3 && cells.isPendingRecordDeleted(1));
+        assert(cells.QSqlTableModel::data(cells.index(0,1),Qt::EditRole).toString()=="edited-draft" && cells.QSqlTableModel::data(cells.index(0,2),Qt::EditRole).toByteArray()==QByteArray::fromHex("0102") && cells.QSqlTableModel::data(cells.index(2,1),Qt::EditRole).toString()=="insert-draft");
+        assert(sheet.undoPastedBlock(true) && cells.QSqlTableModel::data(cells.index(0,1),Qt::EditRole).isNull() && cells.isPendingRecordDeleted(1));
+        assert(sheet.undoPastedBlock() && cells.submitTransactionally());
+        assert(sql.exec("SELECT id,note,hex(payload),extra FROM cut_draft_scope ORDER BY id") && sql.next() && sql.value(0).toInt()==1 && sql.value(1).toString()=="edited-draft" && sql.value(2).toString()=="0102");
+        assert(sql.next() && sql.value(0).toInt()==3 && sql.value(1).toString()=="insert-draft" && sql.value(3).toString()=="retained-default" && !sql.next());sql.finish();
+        assert(cells.setData(cells.index(0,1),"before-copy"));sheet.setCurrentIndex(cells.index(0,1));sheet.selectionModel()->select(cells.index(0,1),QItemSelectionModel::ClearAndSelect);
+        bool reentered=false;QObject clipboardScope;
+        const auto callback=QObject::connect(QApplication::clipboard(),&QClipboard::dataChanged,&clipboardScope,[&]{if(!reentered){reentered=true;assert(cells.setData(cells.index(0,1),"after-copy"));}});
+        assert(!sheet.cutSelection() && reentered && cells.QSqlTableModel::data(cells.index(0,1),Qt::EditRole).toString()=="after-copy");QObject::disconnect(callback);
+        assert(sql.exec("SELECT note FROM cut_draft_scope WHERE id=1") && sql.next() && sql.value(0).toString()=="edited-draft");sql.finish();
+        sheet.setCurrentIndex(cells.index(0,0));sheet.selectionModel()->select(cells.index(0,0),QItemSelectionModel::ClearAndSelect);QApplication::clipboard()->setText("protected-draft-cut");
+        assert(!sheet.canCutSelection() && !sheet.cutSelection() && QApplication::clipboard()->text()=="protected-draft-cut" && cells.QSqlTableModel::data(cells.index(0,1),Qt::EditRole).toString()=="after-copy");
+        cells.revertAll();assert(cells.select() && cells.removeRows(0,1));sheet.setCurrentIndex(cells.index(0,1));sheet.selectionModel()->select(cells.index(0,1),QItemSelectionModel::ClearAndSelect);QApplication::clipboard()->setText("deleted-draft-cut");
+        assert(!sheet.canCutSelection() && !sheet.cutSelection() && QApplication::clipboard()->text()=="deleted-draft-cut");
+        cells.revertAll();assert(cells.select());
+    }
+
+    {
         assert(sql.exec("CREATE TABLE current_save(id INTEGER PRIMARY KEY AUTOINCREMENT,n INTEGER CHECK(n>=0),note TEXT,payload BLOB)"));
         assert(sql.exec("INSERT INTO current_save VALUES(1,10,NULL,x''),(2,20,'original',x'01'),(3,30,NULL,NULL)"));
         linaccess::AccessTableModel current(nullptr,db);current.setTable("current_save");current.setEditStrategy(QSqlTableModel::OnManualSubmit);assert(current.select());

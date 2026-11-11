@@ -51,10 +51,10 @@ fields are not clipboard write targets; supplied hidden fields remain protected.
 Normal range paste and older payloads without names retain positional semantics.
 Form-record MIME and general external clipboard interoperability remain separate.
 
-Clean native table datasheets can Cut a contiguous visible cell rectangle with
+Native table datasheets with supported pending caches can Cut a contiguous visible cell rectangle with
 Ctrl+X, Shift+Delete, the Edit/context menus or RunCommand Cut(189). Copy validates
 and publishes the typed values before the cells become pending SQL NULL values.
-Generated fields/readonly sources are protected; an unrelated dirty cache is
+Generated fields/readonly sources are protected; a pending cache beyond the supported snapshot bound is
 refused. SQL remains unchanged until normal transactional Save. The same bounded
 block Undo/Redo restores or reapplies the pending clear. This clears cells; it
 is not record deletion or a claimed full Access Cut/clipboard event protocol.
@@ -65,7 +65,7 @@ updates rather than discarding them; Redo reapplies the checked range on that
 state. A failed range mutation uses the same cache restoration path. No SQL
 transaction is used to simulate cache changes, and no automatic Save is added.
 The capture is bounded to one million loaded cells. It preserves inserted
-records, their supplied/default-field state and prior deletion markers. Cut retains its clean-cache
+records, their supplied/default-field state and prior deletion markers. Cut uses the same bounded cache restoration
 requirement. General Access multi-operation undo remains open.
 
 Cache restoration recreates pending inserted rows at their actual positions,
@@ -91,3 +91,22 @@ Undo/Redo/Save und vollständige Verweigerung großer Currency→REAL ohne Entwu
 SQL-Änderung. Fehlendes QMimeData-Include beim Build gezielt korrigiert. Keine neue
 CTest-ID/Windows-Beobachtung. TYPED_GRID_CLIPBOARD.md; F340/F168/F173/F014 und
 456/384/72 unverändert. Direkt weiterimplementieren.
+
+
+Cut over pending native drafts (2026-11-11)
+------------------------------------------
+Native table Cut uses the existing bounded pending-range snapshot instead of
+requiring an entirely clean cache. Earlier updates, inserted records/default
+state and unrelated deletion markers remain pending. The target rectangle must
+still contain writable, non-deleted records and no generated/readonly columns.
+Typed MIME, visible field mapping and binary/NULL distinctions are unchanged.
+Undo restores the exact pre-cut drafts; Redo reapplies the clear on that state.
+Normal transactional Save remains the only persistence step. This is one range
+history step, not a general Access multi-operation stack.
+
+Clipboard publication can synchronously call application code. Cut checks the
+same model, selection, visible mapping, row positions, field identities and raw
+value types/values after publication before clearing. A changed source is refused
+without clearing its new values. The clipboard may contain the successful copy;
+no SQL write or forced draft save occurs. Existing range/source/memory/error
+bounds remain; no Windows/Access event-equivalence claim is added.

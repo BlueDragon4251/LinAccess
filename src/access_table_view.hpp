@@ -440,21 +440,30 @@ public:
     }
     bool canCutSelection() const {
         const auto* typed=qobject_cast<AccessTableModel*>(model());
-        if(!typed || typed->isReadOnly() || typed->isDirty() || typed->editStrategy()!=QSqlTableModel::OnManualSubmit || hasPendingEditor() || !selectionModel() || !selectionModel()->hasSelection()) return false;
-        for(const auto& range:selectionModel()->selection()) for(int column=range.left();column<=range.right();++column)
-            if((isColumnHidden(column) && !property("la_projected_query").toBool()) || (!isColumnHidden(column) && !typed->isPasteColumn(column,true))) return false;
+        if(!typed || typed->isReadOnly() || !typed->canPasteOverUpdates() || typed->editStrategy()!=QSqlTableModel::OnManualSubmit || hasPendingEditor() || !selectionModel() || !selectionModel()->hasSelection()) return false;
+        for(const auto& range:selectionModel()->selection()) {
+            for(int row=range.top();row<=range.bottom();++row) if(typed->isPendingRecordDeleted(row)) return false;
+            for(int column=range.left();column<=range.right();++column)
+                if((isColumnHidden(column) && !property("la_projected_query").toBool()) || (!isColumnHidden(column) && !typed->isPasteColumn(column,true))) return false;
+        }
         return true;
     }
     bool cutSelection() {
         const QPointer<AccessTableView> self=this;QPointer<AccessTableModel> typed=qobject_cast<AccessTableModel*>(model());
-        if(!typed || !finishEditing() || !self || !typed) return false;
+        if(!typed || !finishEditing() || !self || !typed || model()!=typed) return false;
         if(typed->isReadOnly()) return refuse(2448,"Die Datenquelle ist schreibgeschützt.");
-        if(typed->isDirty()) return refuse(2501,"Vor dem Ausschneiden eines Bereichs Änderungen speichern oder verwerfen.");
+        if(!typed->canPasteOverUpdates()) return refuse(3251,"Der vorhandene Entwurfsumfang überschreitet die native Bereichsgrenze.");
         if(typed->editStrategy()!=QSqlTableModel::OnManualSubmit) return refuse(3251,"Bereichsausschneiden ist in dieser Ansicht nicht verfügbar.");
+        if(!selectionModel()) return false;
+        const auto selected=selectionModel()->selection();const auto visible=visibleModelColumns();
+        const int originalRows=typed->rowCount();
+        struct CutCell {QPersistentModelIndex index;int row,column;QString field;QVariant value;};
+        QVector<CutCell> captured;
         QVector<QVector<QVariant>> cleared;QVector<QVariant> cells;QVector<int> columns;int previous=-1;QPersistentModelIndex first;
         try {
             (void)nativeGridClipboardText(*this,[&](const QModelIndex& index) {
-                if(!typed->isPasteColumn(index.column(),true)) throw VbaRuntimeError(2448,"Cut target is protected");
+                if(typed->isPendingRecordDeleted(index.row()) || !typed->isPasteColumn(index.column(),true)) throw VbaRuntimeError(2448,"Cut target is protected");
+                captured.push_back({index,index.row(),index.column(),typed->record().fieldName(index.column()),typed->QSqlTableModel::data(index,Qt::EditRole)});
                 if(!first.isValid()) first=index;
                 if(index.row()==first.row()) columns.push_back(index.column());
                 if(previous>=0 && previous!=index.row()) {cleared.push_back(cells);cells.clear();}
@@ -463,7 +472,18 @@ public:
             if(!cells.isEmpty()) cleared.push_back(cells);
         } catch(const VbaRuntimeError& error) {return refuse(error.number,"Die Auswahl kann nicht als zusammenhängender Bereich ausgeschnitten werden.");}
           catch(const std::bad_alloc&) {return refuse(7,"Der Bereich konnte nicht im Speicher vorbereitet werden.");}
-        if(!copySelection() || !self || !typed || !first.isValid()) return false;
+        if(!copySelection() || !self || !typed || model()!=typed || !first.isValid()) return false;
+        // Clipboard publication can synchronously invoke application callbacks.
+        // Clear only the exact records/fields/values that were copied.
+        if(!selectionModel() || selectionModel()->selection()!=selected || visibleModelColumns()!=visible || typed->rowCount()!=originalRows)
+            return refuse(2501,"Die Auswahl wurde während des Kopierens verändert.");
+        for(const auto& cell:captured) {
+            if(!cell.index.isValid() || cell.index.row()!=cell.row || cell.index.column()!=cell.column || typed->isPendingRecordDeleted(cell.row) || typed->record().fieldName(cell.column)!=cell.field)
+                return refuse(2501,"Die Datensätze wurden während des Kopierens verändert.");
+            const auto value=typed->QSqlTableModel::data(cell.index,Qt::EditRole);
+            if(value.metaType()!=cell.value.metaType() || value.isNull()!=cell.value.isNull() || value!=cell.value)
+                return refuse(2501,"Die Werte wurden während des Kopierens verändert.");
+        }
         return typed->setTypedDataBlock(first.row(),columns,cleared);
     }
     bool copySelection() {
