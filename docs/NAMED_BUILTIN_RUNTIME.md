@@ -44,3 +44,23 @@ particular Nz(DateField) can contain Date-encoded text or the SQL empty String
 and does not acquire a fake Date declaration. Full heterogeneous Variant identity
 through nested SQL consumers is not implemented by this transport. Source-kind,
 object/array, precision and locale guards remain; no new Windows oracle follows.
+
+
+Native SQL conditional branch binding (2026-11-11)
+-------------------------------------------------
+IIf/Choose/Switch retain proven Date/Boolean/Single/integral/bounded Currency
+argument values through dedicated typed callbacks using the existing evaluator.
+Compatible non-NULL selection branches retain result metadata and actual DAO
+values; a literal NULL branch does not invent a conflicting type. Unknown/mixed
+branches remain without a guessed declaration. Existing eager evaluation, Choice
+index rounding/out-of-range behavior, Switch condition rules and error boundaries
+are unchanged. This is not a lazy CASE/COALESCE replacement. Raw IIf retains its
+existing exact SQLite int64 branch transport when only a Boolean condition is
+proven; typed transport retains its normal precision guards. Actual engine
+argument limits include the descriptor argument. Full heterogeneous Variant,
+locale, source and Access error-precedence equivalence remain open.
+
+Raw IIf now validates its three-argument contract inside the native callback,
+so invalid arity reaches the established450 protocol instead of SQLite3146.
+Switch continues to skip NULL conditions, as in the existing evaluator; the
+technical check uses its next True branch rather than expecting a new Null error.

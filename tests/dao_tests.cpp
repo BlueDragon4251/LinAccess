@@ -2373,6 +2373,30 @@ FROM calendar_inputs WHERE marker=1)SQL");
         }
         const auto normalizedAgain=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT linaccess_jet_boolean_result(linaccess_jet_boolean_result(1)),linaccess_jet_boolean_result(-1),linaccess_jet_boolean_result(Null)"),{});
         assert(normalizedAgain.rows.size()==1 && normalizedAgain.rows[0][0].toInt()==-1 && normalizedAgain.rows[0][1].toInt()==-1 && normalizedAgain.rows[0][2].isNull());
+        calendarPhase="native SQL conditional branch family";
+        const auto conditionalSource=QStringLiteral("SELECT IIf(enabled,stamp,#2000-01-01#) AS stamp_value,IIf(offset_date,amount,CCur(0)) AS money_value,Choose(offset_date,stamp,#2000-01-01#) AS chosen_stamp,Choose(offset_date,True,False) AS chosen_flag,Switch(IsNull(stamp),#2000-01-01#,True,stamp) AS switched_stamp,Switch(True,enabled,False,False) AS nullable_flag,IIf(True,elapsed,CSng(0)) AS single_value,Choose(offset_date,CInt(10),CInt(20)) AS integer_value,Switch(False,CCur(1),True,amount) AS switched_money,VarType(IIf(enabled,True,False)) AS logical_type,TypeName(Choose(offset_date,stamp,#2000-01-01#)) AS chosen_name,IIf(offset_date,'yes','no') AS date_condition FROM calendar_inputs ORDER BY marker");
+        const auto conditionals=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery(conditionalSource),{});
+        assert(conditionals.rows.size()==2 && conditionals.columnTypes==QVector<QString>({"DATETIME","CURRENCY_REAL","DATETIME","BOOLEAN","DATETIME","BOOLEAN","SINGLE_REAL","INTEGER2","CURRENCY_REAL","INTEGER2","TEXT","TEXT"}));
+        for(int row=0;row<2;++row) {
+            assert(conditionals.rows[row][0].toString()==(row==0 ? "2024-02-28 12:34:56" : "2000-01-01 00:00:00"));
+            assert(conditionals.rows[row][2].toString()=="2000-01-01 00:00:00" && conditionals.rows[row][3].toInt()==0 && conditionals.rows[row][4].toString()==(row==0 ? "2024-02-28 12:34:56" : "2000-01-01 00:00:00"));
+            assert(conditionals.rows[row][7].toInt()==20 && conditionals.rows[row][9].toInt()==11 && conditionals.rows[row][10].toString()=="Date" && conditionals.rows[row][11].toString()=="yes");
+        }
+        assert(conditionals.rows[0][1].toDouble()==1.5 && conditionals.rows[1][1].isNull() && conditionals.rows[0][5].toInt()==-1 && conditionals.rows[1][5].isNull());
+        assert(conditionals.rows[0][6].toDouble()==16777216 && conditionals.rows[1][6].isNull() && conditionals.rows[0][8].toDouble()==1.5 && conditionals.rows[1][8].isNull());
+        const auto conditionalFields=database->member("OpenRecordset",{linaccess::VbaValue::string(conditionalSource.toStdString())}).object;
+        assert(conditionalFields->member("Fields",{linaccess::VbaValue::string("stamp_value")}).object->member("Type",{}).asNumber()==8 && conditionalFields->item("stamp_value").kind==linaccess::VbaValue::Kind::Date);
+        assert(conditionalFields->member("Fields",{linaccess::VbaValue::string("money_value")}).object->member("Type",{}).asNumber()==5 && conditionalFields->item("single_value").numericType==linaccess::VbaValue::NumericType::Single);conditionalFields->member("Close",{});
+        const auto conditionalFilter=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT marker FROM calendar_inputs WHERE IIf(enabled,True,False)=True"),{});
+        assert(conditionalFilter.rows.size()==1 && conditionalFilter.rows[0][0].toInt()==1);
+        const auto conditionalGroups=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT IIf(IsNull(stamp),#2000-01-01#,stamp) AS stamp_value,Count(*) AS tally FROM calendar_inputs GROUP BY IIf(IsNull(stamp),#2000-01-01#,stamp) ORDER BY IIf(IsNull(stamp),#2000-01-01#,stamp) DESC"),{});
+        assert(conditionalGroups.rows.size()==2 && conditionalGroups.columnTypes[0]=="DATETIME" && conditionalGroups.rows[0][0].toString()=="2024-02-28 12:34:56" && conditionalGroups.rows[1][0].toString()=="2000-01-01 00:00:00");
+        const auto conditionalNulls=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT IIf(Null,CInt(1),CInt(2)),Choose(0,CInt(1),CInt(2)),Switch(False,CInt(1),False,CInt(2)),Choose(True,CInt(1),CInt(2)),IIf(True,9007199254740993,0),Switch(Null,CInt(1),True,CInt(2))"),{});
+        assert(conditionalNulls.rows.size()==1 && conditionalNulls.rows[0][0].toInt()==2 && conditionalNulls.rows[0][1].isNull() && conditionalNulls.rows[0][2].isNull() && conditionalNulls.rows[0][3].isNull() && conditionalNulls.rows[0][4].toLongLong()==9007199254740993LL && conditionalNulls.rows[0][5].toInt()==2);
+        for(const auto& failure:std::vector<std::pair<std::string,int>>{{"SELECT IIf(True,1)",450},{"SELECT Choose(1)",450},{"SELECT Switch(True,1,False)",450},{"SELECT IIf(True,1,1/0)",11},{"SELECT Choose(1,1,1/0)",11},{"SELECT Switch(True,1,False,1/0)",11}}) {
+            int actual=0;try{(void)database->member("OpenRecordset",{linaccess::VbaValue::string(failure.first)});}catch(const linaccess::VbaRuntimeError& error){actual=error.number;}
+            if(actual!=failure.second) std::cerr<<"SQL conditional error actual="<<actual<<" expected="<<failure.second<<"\n";assert(actual==failure.second);
+        }
         calendarPhase="DAO fields";
         const auto calendarFields=database->member("OpenRecordset",{linaccess::VbaValue::string(calendarSource.toStdString())}).object;
         assert(calendarFields->member("Fields",{linaccess::VbaValue::string("shifted")}).object->member("Type",{}).asNumber()==8);

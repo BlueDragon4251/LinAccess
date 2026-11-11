@@ -6834,3 +6834,23 @@ privat veröffentlicht/exakt verifiziert. Dessen DEB baute/checkte zwar, bestand
 Originalziele aber vor Fix NICHT: kein gültiger neuer Paketbeleg. Letzter komplett
 geprüfter DEB bleibt9f73a8c5 (167,90s/7Hash gleich), bis gemeinsamer Refresh folgt.
 Kein Gesamtabschluss: vorbereitete IIf/Choose/Switch-Bindung weiter umsetzen.
+
+
+Native SQL-Auswahlfamilie (2026-11-11): NAMED_BUILTIN_RUNTIME.md.
+IIf/Choose/Switch erhalten nachgewiesene Date/Boolean/Single/Integer/Currency-
+Argumente und kompatible Zweigmetadaten samt tatsächlichen DAO-Werten. Literal-
+NULL-Zweige, fehlende Auswahl, Null-Bedingungen, Date-Bedingung, eager Fehler/
+Arity und Verschachtelung/Filter/Gruppierung/Sortierung geprüft. Unbekannte/
+gemischte Zweige ohne geratenen Typ. Roher IIf-int64-Transport bleibt erhalten,
+wenn nur Boolean-Bedingung bewiesen; typisierter Transport mit bisherigen Grenzen.
+IIf-Arity im nativen Callback statt SQLite-Vorabweigerung:450 statt3146. Falsche
+technische Switch-Null-Erwartung korrigiert: bestehender Kern überspringt NULL,
+Produktregel unverändert. Exakt bekannte reine typed-IIf/Choose/Switch-Callbacks
+für RIGHT-JOIN-Adaption zugelassen; bestehender2000-Schlüssel-Fall prüft nun
+rohen und typisierten IIf mit Ergebnissen und echten Vollscans<10000.
+App/DAO/Modell gebaut; Modell0,38s bestanden; final betroffener DAO-Lauf1/1 in5,06s
+(Test5,03) bestanden. Keine neuen IDs/Windows-Oracle-Behauptungen;456/386/70.
+Vorstand49e695d2bb2bb134f2c24dff2e4be2f35f4ea33c/Baum72229b394f8c28b5df933d988a9a0e38b6a74ed6
+privat/exakt veröffentlicht (Remote-Lesebestätigung verzögert, nachgeprüft/adoptiert).
+Dessen Original-Fix2/2 in177,19s und7Hashes gleich; frischer gemeinsamer Paket-
+/Originallauf folgt. Alter57fb-DEB bleibt nicht vollständig geprüft.

@@ -373,6 +373,9 @@ void state_iserror(sqlite3_context* context,int count,sqlite3_value** args) noex
 void state_iserror_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"IsError",1,1,true);}
 void nullReplacement(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Nz",1,2,false);}
 void nullReplacementTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Nz",1,2,true);}
+void selected_iif_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"IIf",3,3,true);}
+void selected_choose_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Choose",2,1000,true);}
+void selected_switch_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Switch",2,1000,true);}
 void stringCStr(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"CStr",1,1,false);}
 void stringCStrTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"CStr",1,1,true);}
 void stringStr(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Str",1,1,false);}
@@ -752,9 +755,10 @@ void textLength(sqlite3_context* context,int,sqlite3_value** args) noexcept {
     } catch(const VbaRuntimeError& failure) { functionError(context,failure); }
       catch(...) { native.error(context,"SQL Len evaluation failed",-1); }
 }
-void iif(sqlite3_context* context,int,sqlite3_value** args) noexcept {
+void iif(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
     auto& native = api();
     try {
+        if(count!=3) throw VbaRuntimeError(450,"IIf requires three arguments");
         bool condition = false;
         const auto type = native.type(args[0]);
         if (type == 1 || type == 2) condition = native.number(args[0]) != 0;
@@ -768,7 +772,8 @@ void iif(sqlite3_context* context,int,sqlite3_value** args) noexcept {
             }
         } else if (type != 5) { native.error(context,"Jet IIf condition type mismatch",-1); return; }
         native.result(context,args[condition ? 1 : 2]);
-    } catch (...) { native.error(context,"Jet IIf evaluation failed",-1); }
+    } catch(const VbaRuntimeError& failure) {functionError(context,failure);}
+      catch (...) { native.error(context,"Jet IIf evaluation failed",-1); }
 }
 void formatDate(sqlite3_context* context,sqlite3_value** args,bool stringResult) noexcept {
     auto& native=api();
@@ -938,8 +943,12 @@ void installJetSqlFunctions(QSqlDatabase db) {
             throw VbaRuntimeError(3251,"Jet SQL function registration failed");
     };
     ensure("linaccess_next_counter",2,&nextAccessCounter,nullptr,nullptr);
-    ensure("linaccess_jet_iif",3,&iif,nullptr,nullptr);
+    ensure("linaccess_jet_iif",-1,&iif,nullptr,nullptr);
     ensure("linaccess_jet_rgb",-1,&rgbColor,nullptr,nullptr);
+    ensure("linaccess_jet_iif_typed",-1,&selected_iif_typed,nullptr,nullptr);
+    ensure("linaccess_jet_choose_typed",-1,&selected_choose_typed,nullptr,nullptr);
+    ensure("linaccess_jet_switch_typed",-1,&selected_switch_typed,nullptr,nullptr);
+
     ensure("linaccess_jet_nz",-1,&nullReplacement,nullptr,nullptr);
     ensure("linaccess_jet_nz_typed",-1,&nullReplacementTyped,nullptr,nullptr);
     ensure("linaccess_jet_isnull",-1,&state_isnull,nullptr,nullptr);

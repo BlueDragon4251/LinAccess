@@ -502,10 +502,14 @@ int main(int argc, char** argv) {
             auto* probe=static_cast<JoinScanProbe*>(state);auto* stmt=static_cast<sqlite3_stmt*>(statement);const auto sql=QString::fromUtf8(sqlite3_sql(stmt));
             if(sql.contains("join_budget_probe_r",Qt::CaseInsensitive)) {++probe->seen;probe->steps=std::max(probe->steps,sqlite3_stmt_status(stmt,SQLITE_STMTSTATUS_FULLSCAN_STEP,0));}return 0;
         },&scan)==SQLITE_OK);
-        model.execute(db,"SELECT r.id AS rid,IIf(l.id=r.id,1,0) AS matched FROM join_budget_probe_l AS l RIGHT JOIN join_budget_probe_r AS r ON l.id=r.id ORDER BY r.id");
+        for(const auto& source:QStringList{
+            "SELECT r.id AS rid,IIf(l.id=r.id,1,0) AS matched FROM join_budget_probe_l AS l RIGHT JOIN join_budget_probe_r AS r ON l.id=r.id ORDER BY r.id",
+            "SELECT r.id AS rid,IIf(l.id=r.id,CInt(1),CInt(0)) AS matched FROM join_budget_probe_l AS l RIGHT JOIN join_budget_probe_r AS r ON l.id=r.id ORDER BY r.id"}) {
+            model.execute(db,source);assert(model.rowCount()==2000);
+            for(int row=0;row<2000;++row) assert(model.index(row,0).data().toInt()==row+1 && model.index(row,1).data().toInt()==((row+1)%2==0 ? 1 : 0));
+        }
         assert(sqlite3_trace_v2(connection,0,nullptr,nullptr)==SQLITE_OK);
-        assert(model.rowCount()==2000 && scan.seen>0 && scan.steps<10000);
-        for(int row=0;row<2000;++row) assert(model.index(row,0).data().toInt()==row+1 && model.index(row,1).data().toInt()==((row+1)%2==0 ? 1 : 0));
+        assert(scan.seen>0 && scan.steps<10000);
         assert(query.exec("DROP TABLE join_budget_probe_l"));assert(query.exec("DROP TABLE join_budget_probe_r"));query.finish();
     }
     query.clear(); db.close(); assert(db.open());
