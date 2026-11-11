@@ -745,7 +745,7 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
             const bool arithmetic=QSet<QString>{"add","subtract","multiply","divide","negate"}.contains(operation);
             return {arithmetic ? QString("DECIMAL_EXACT") : QString("BOOLEAN"),expression};
         }
-        static const QSet<QString> selectorTypes{"DECIMAL_EXACT","DATETIME","CURRENCY_REAL","SINGLE_REAL","INTEGER1","INTEGER2","INTEGER4","DOUBLE","BOOL","BOOLEAN"};
+        static const QSet<QString> selectorTypes{"DECIMAL_EXACT","DATETIME","CURRENCY_TICKS","CURRENCY_REAL","SINGLE_REAL","INTEGER1","INTEGER2","INTEGER4","DOUBLE","BOOL","BOOLEAN"};
         if(QSet<QString>{"linaccess_jet_min_typed","linaccess_jet_max_typed","linaccess_jet_first_typed","linaccess_jet_last_typed"}.contains(function)
             && expression.size()>=6 && expression[2].kind==Token::String && selectorTypes.contains(expression[2].value) && symbol(expression[3],","))
             return {expression[2].value=="BOOL" ? QString("BOOLEAN") : expression[2].value,expression};

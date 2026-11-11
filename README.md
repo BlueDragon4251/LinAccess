@@ -1498,3 +1498,14 @@ Currency-SQL-Zielkonvertierung bereits4ee2dafe1d0a3ed6606225a83eafe34de66989eb,
 Baumab93422991a81abeec2cf451d2795a53e7608550 privat/exaktveröffentlicht.
 Letzter Gesamtpaket-/Originalbeleg bb7/183,19s liegt vor diesenbeidenEtappen.
 Direkt weiterentwickeln; Original-MONEY-Import/volleParität bleibenoffen.
+
+
+Exakte Currency-Selektoraggregate (2026-11-11):
+EXACT_CURRENCY_SELECTORS.md. Min/Max/DISTINCT und First/Last erhaltenTicktransport,
+Typ5 und volleCurrencygrenzen, auch gruppiert und inVarType/CStr. Bestehende
+NULL-/Ausführungsreihenfolgegrenzen bleiben. App/Parameter/DAO/Modell gebaut,
+Bündel3/3 in6,73s (0,20/6,07/0,45) bestanden. Keine neueCTest-ID/Windows-Referenz.
+456/386Teilumfänge/70offen. VorigeDatenblattetappe4ce175841213d0a83dda7c14b090dd53e18f4d3e,
+Baum94832e55adfc5b66322a952fdf4d73eb25a9ce73 privat/exaktveröffentlicht.
+Gesamtpaket-/Originalbeleg für gemeinsameSQL-/Datenblatt-/Selektoretappen folgt.
+Direkt weiterarbeiten; keinevollständigeParitätbehaupten.

@@ -954,7 +954,7 @@ void aggregateStep(sqlite3_context* context,sqlite3_value* value,bool first) noe
 }
 // Proven scalar selectors compare decoded values rather than SQLite storage.
 // One owned native value per group also preserves First/Last NULL selection.
-struct TypedSelectorState {VbaValue* value;int error;};
+struct TypedSelectorState {VbaValue* value;int error;bool currencyTicks;};
 template<int Selector> void typedSelectorStep(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
     auto& native=api();auto* state=static_cast<TypedSelectorState*>(native.aggregate(context,sizeof(TypedSelectorState)));
     if(!state) {native.error(context,"LinAccess SQL function error 7",-1);return;}
@@ -962,8 +962,9 @@ template<int Selector> void typedSelectorStep(sqlite3_context* context,int count
     try {
         if(count!=2 || native.type(args[0])!=SQLITE_TEXT) throw VbaRuntimeError(450,"Typed selector requires a source type and value");
         const auto type=scalarText(args[0]);
-        static const QSet<QString> supported{"DECIMAL_EXACT","DATETIME","CURRENCY_REAL","SINGLE_REAL","INTEGER1","INTEGER2","INTEGER4","DOUBLE","BOOL","BOOLEAN"};
+        static const QSet<QString> supported{"DECIMAL_EXACT","DATETIME","CURRENCY_TICKS","CURRENCY_REAL","SINGLE_REAL","INTEGER1","INTEGER2","INTEGER4","DOUBLE","BOOL","BOOLEAN"};
         if(!supported.contains(type)) throw VbaRuntimeError(3251,"Selector source type is not proven");
+        state->currencyTicks=type=="CURRENCY_TICKS";
         auto value=qtFieldValue(boundSqlStorage(args[1],type=="DECIMAL_EXACT"),type);
         if constexpr(Selector<2) {
             if(value.kind==VbaValue::Kind::Null) return;
@@ -978,7 +979,7 @@ void typedSelectorFinal(sqlite3_context* context) noexcept {
     std::unique_ptr<VbaValue> selected(state ? state->value : nullptr);if(state) state->value=nullptr;
     try {
         if(state && state->error) throw VbaRuntimeError(state->error,"Typed selector failed");
-        if(selected) returnBoundSqlValue(context,*selected);else native.nullResult(context);
+        if(selected) returnBoundSqlValue(context,*selected,state && state->currencyTicks);else native.nullResult(context);
     } catch(const VbaRuntimeError& failure) {functionError(context,failure);}
       catch(...) {native.error(context,"LinAccess SQL function error 7",-1);}
 }

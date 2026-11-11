@@ -33,3 +33,5 @@ First/Last NULL and untyped integers above2^53. No new CTest or Access oracle.
 
 Exact Decimal selectors use the checked sortable transport described in
 [Exact SQL Decimal](EXACT_SQL_DECIMAL.md), without a Double intermediate.
+
+Full signed64 Currency tick selectors: [scope](EXACT_CURRENCY_SELECTORS.md).
