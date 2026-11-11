@@ -139,7 +139,7 @@ public:
             for(int column:columns) {
                 if((arguments.formatted || arguments.wildcards) && clock.hasExpired(5000)) throw VbaRuntimeError(3035,"Formatierte Suche überschreitet ihr Zeitlimit.");
                 const auto candidate=result->index(row,column); const auto value=candidate.data(Qt::EditRole);
-                if(value.isNull() || value.metaType().id()==QMetaType::QByteArray) continue;
+                if(value.isNull() || (value.metaType().id()==QMetaType::QByteArray && result->fieldSqlType(column)!="DECIMAL_EXACT")) continue;
                 if(arguments.formatted) (void)result->clipboardText(candidate); // Reject undecodable typed/binary cells.
                 const auto text=arguments.formatted ? nativeVisibleFindText(*this,candidate) : value.toString();
                 const bool matches=arguments.value ? nativeFindEqual(qtFieldValue(value,result->fieldSqlType(column)),*arguments.value)

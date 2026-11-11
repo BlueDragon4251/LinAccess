@@ -2169,9 +2169,10 @@ void AccessFormPreview::loadRecords() {
                 linaccess::SqliteExecutionBudget budget(db_);
                 QSqlQuery query(db_);
                 auto name=source; name.replace(']',"]]");
-                const auto plan=linaccess::compileAccessQuery("SELECT rowid AS [__la_rowid],* FROM main.["+name+"]"+(filterOn_ && !filter_.trimmed().isEmpty() ? " WHERE ("+filter_+")" : QString{}));
-                QStringList sortColumns; const auto record=db_.record(source);
-                for(int i=0;i<record.count();++i) sortColumns.append(record.fieldName(i));
+                QStringList sortColumns,sourceColumns{"rowid AS [__la_rowid]"};const auto record=db_.record(source);
+                for(int i=0;i<record.count();++i) {const auto field=record.fieldName(i);sortColumns.append(field);sourceColumns.append('['+QString(field).replace(']',"]]")+']');}
+                auto plan=linaccess::compileAccessQuery("SELECT "+sourceColumns.join(',')+" FROM ["+name+"]");
+                if(filterOn_ && !filter_.trimmed().isEmpty()) plan=linaccess::filterAccessQueryPlan(db_,plan,filter_);
                 const auto order=orderByOn_ ? linaccess::accessOrderByClause(orderBy_,sortColumns,source) : QString{};
                 auto statement=plan.sql;
                 QVariantList entryBindings;
@@ -2800,6 +2801,7 @@ linaccess::VbaValue AccessFormPreview::getFieldValue(std::string_view name) cons
         if (kind == linaccess::VbaValue::Kind::Number) type = "REAL";
         if (kind == linaccess::VbaValue::Kind::Boolean || qobject_cast<QCheckBox*>(widget)) type = "BOOLEAN";
     }
+    if(type=="DECIMAL_EXACT") return linaccess::convertDecimal(linaccess::VbaValue::string(textOf(widget).toUtf8().toStdString()));
     return linaccess::qtFieldValue(textOf(widget),type);
 }
 void AccessFormPreview::refreshFormattedControl(const QString& name) {
@@ -3535,7 +3537,7 @@ QString AccessFormPreview::findNextRecord(QString text,QString field,int mode,bo
                     value=pending.kind==linaccess::VbaValue::Kind::Null ? QVariant{} : QVariant(QString::fromStdString(pending.asText())); break;
                 }
             }
-            if(value.isNull() || value.metaType().id()==QMetaType::QByteArray) continue;
+            if(value.isNull() || (value.metaType().id()==QMetaType::QByteArray && self->dataTypes_.value(self->dataColumns_[column].toCaseFolded())!="DECIMAL_EXACT")) continue;
             auto candidate=value.toString();
             if(formatted) {
                 const auto type=self->dataTypes_.value(self->dataColumns_[column].toCaseFolded());const auto actual=editedValue ? *editedValue : linaccess::qtFieldValue(value,type);

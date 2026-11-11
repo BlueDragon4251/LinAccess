@@ -1,6 +1,7 @@
 #pragma once
 #include "vba_qt_value.hpp"
 #include "vba_like.hpp"
+#include "vba_decimal.hpp"
 #include <QVariantMap>
 #include <cmath>
 #include <limits>
@@ -21,9 +22,10 @@ inline bool nativeFindTextMatches(const QString& candidate,const QString& text,i
 inline bool nativeFindTextType(const QString& type) {
     return type.contains("TEXT",Qt::CaseInsensitive) || type.contains("CHAR",Qt::CaseInsensitive) || type.contains("CLOB",Qt::CaseInsensitive);
 }
-enum class NativeFindFieldKind { Unsupported,Text,Number,Currency,Date,Boolean };
+enum class NativeFindFieldKind { Unsupported,Text,Number,Currency,Date,Boolean,Decimal };
 inline NativeFindFieldKind nativeFindFieldKind(const QString& sqlType) {
     const auto type=sqlType.toUpper();
+    if(type=="DECIMAL_EXACT") return NativeFindFieldKind::Decimal;
     if(nativeFindTextType(type)) return NativeFindFieldKind::Text;
     if(type.contains("CURRENCY")) return NativeFindFieldKind::Currency;
     if(type.contains("DATE")) return NativeFindFieldKind::Date;
@@ -33,6 +35,7 @@ inline NativeFindFieldKind nativeFindFieldKind(const QString& sqlType) {
 }
 inline bool nativeFindSupports(const VbaValue& sought,const QString& sqlType) {
     switch(nativeFindFieldKind(sqlType)) {
+        case NativeFindFieldKind::Decimal:return sought.kind==VbaValue::Kind::Decimal;
         case NativeFindFieldKind::Text:return sought.kind==VbaValue::Kind::Text;
         case NativeFindFieldKind::Number:return sought.kind==VbaValue::Kind::Number;
         case NativeFindFieldKind::Currency:return sought.kind==VbaValue::Kind::Currency;
@@ -43,6 +46,7 @@ inline bool nativeFindSupports(const VbaValue& sought,const QString& sqlType) {
 }
 inline QString nativeFindInputHint(const QString& sqlType) {
     switch(nativeFindFieldKind(sqlType)) {
+        case NativeFindFieldKind::Decimal:return "Exakte Dezimalzahl mit Dezimalpunkt eingeben.";
         case NativeFindFieldKind::Number:return sqlType.contains("INT",Qt::CaseInsensitive) ? QStringLiteral("Ganze Zahlen eingeben.") : QStringLiteral("Zahlen mit Dezimalpunkt eingeben.");
         case NativeFindFieldKind::Currency:return "Währung mit Dezimalpunkt und bis zu vier Nachkommastellen eingeben.";
         case NativeFindFieldKind::Date:return "Datum: JJJJ-MM-TT, optional hh:mm:ss; Uhrzeit: hh:mm:ss.";
@@ -57,17 +61,19 @@ inline VbaValue normalizeNativeFindValue(const VbaValue& sought) {
     }
     if(sought.kind==VbaValue::Kind::Date)
         return qtFieldValue(sqlFieldValue(sought,"DATETIME"),"DATETIME");
+    if(sought.kind==VbaValue::Kind::Decimal) return convertDecimal(sought);
     if(sought.kind==VbaValue::Kind::Text || sought.kind==VbaValue::Kind::Currency || sought.kind==VbaValue::Kind::Boolean) return sought;
     throw VbaRuntimeError(3251,"FindRecord value subtype is not implemented");
 }
 inline VbaValue nativeFindInput(const QString& text,const QString& sqlType) {
-    const auto value=qtFieldValue(text,sqlType);
+    const auto value=sqlType=="DECIMAL_EXACT" ? convertDecimal(VbaValue::string(text.toUtf8().toStdString())) : qtFieldValue(text,sqlType);
     if(value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(13,"Search value is empty for the selected field");
     return normalizeNativeFindValue(value);
 }
 inline bool nativeFindEqual(const VbaValue& candidate,const VbaValue& sought) {
     if(candidate.kind==VbaValue::Kind::Null) return false;
     if(candidate.kind!=sought.kind) throw VbaRuntimeError(13,"FindRecord field/value subtype mismatch");
+    if(sought.kind==VbaValue::Kind::Decimal) return decimalSqlKey(candidate)==decimalSqlKey(sought);
     if(sought.kind==VbaValue::Kind::Currency) return candidate.currencyUnits==sought.currencyUnits;
     if(sought.kind==VbaValue::Kind::Boolean) return candidate.boolean==sought.boolean;
     if(sought.kind==VbaValue::Kind::Number || sought.kind==VbaValue::Kind::Date) return candidate.number==sought.number;
@@ -93,6 +99,10 @@ inline QVariantMap nativeFindValuePayload(const VbaValue& input) {
 inline VbaValue nativeFindValueFromPayload(const QVariantMap& request) {
     bool valid=false; const int kind=request.value("kind").toInt(&valid);
     if(!valid) throw VbaRuntimeError(5,"Missing FindRecord value kind");
+    if(kind==static_cast<int>(VbaValue::Kind::Decimal)) {
+        if(request.value("text").metaType().id()!=QMetaType::QString) throw VbaRuntimeError(13,"Invalid FindRecord Decimal");
+        return decimalLiteral(request.value("text").toString().toUtf8().toStdString());
+    }
     if(kind==static_cast<int>(VbaValue::Kind::Text)) {
         if(request.value("text").metaType().id()!=QMetaType::QString) throw VbaRuntimeError(13,"Invalid FindRecord text");
         return VbaValue::string(request.value("text").toString().toUtf8().toStdString());

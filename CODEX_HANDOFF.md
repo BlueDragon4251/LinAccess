@@ -7321,3 +7321,17 @@ Fehler6 ohne Wert-/Dirty-Verlust, NULL-Speicherung. Keine neue CTest-ID.
 F014/F055/F056 offen; feste456/386 Teilumfänge/70 Vollanforderungen unverändert.
 Vorstandd68581f2/Baumc94b77ed32a48a980a8390bed20131b8ea191a7c privat/exakt
 veröffentlicht; Paket-/Originalbeleg e666/183,33s liegt vor Schreibwegen.
+
+
+Exakte native Decimal-Suche und physische Formularfilter (2026-11-11):
+NATIVE_DECIMAL_FIND_FILTER.md. Gemeinsamer FindRecord-Payload und numerisch
+exakter Vergleich für Tabelle/Abfrage/Formular; belegte Schlüssel nicht als
+beliebige BLOBs überspringen. Direkte Formulare nutzen explizite Feldprojektion
+und typisierte Filter nach physischer/TEMP-Prüfung. Tatsächliche Texteingabe mit
+zusätzlicher Nachkomma-Null bleibt exakt; numerische Gleichheit statt erfundener
+Skalen-Textidentität. Navigation der Prüfung über RecordsetClone/Bookmark.
+App/Helper gebaut, bestehendes Modell bestanden0,47s; nach Projektionskorrektur
+nur betroffene GUI wiederholt: bestanden18,18s. Keine neueCTest-ID/Windows-
+Referenz. F014/F056/F067/F068/F373 offen, feste456/386/70 unverändert.
+Vorstand69bceb60/Baum5ff24c1e3f55fc77938d770f241ee74ae6e11ec4 privat/exakt
+veröffentlicht. Paket-/Originalbeleg e666/183,33s liegt vor diesen Schreibwegen.
