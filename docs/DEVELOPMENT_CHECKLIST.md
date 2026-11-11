@@ -6349,3 +6349,17 @@ Integrationsbau/DEB/Paketprüfung bestanden, Inventar/Original2/2 in183,19s
 Original-Makrogrenze unverändert. Paket currency-warnings-package enthält
 SetWarnings/Currency-Snapshots/Quellarithmetik, noch nicht dieseZielkonvertierung.
 Direkt weiterarbeiten; keine vollständigeAccess-Parität.
+
+
+Exakte Currency-Datenblattbearbeitung (2026-11-11):
+EXACT_CURRENCY_GRID.md. Tickfelder zeigen/bearbeiten exaktenCurrencytext;
+typisierteZwischenablage und Undo/Redo behalten Tickeinheiten ohneZweitskalierung.
+Vorbereitete physische UPDATE/DELETE benutzen roheOriginalwerte statt Qt-Textcache.
+App/GUI gebaut, bestehender gebündelterGUI-Bereich1/1 in18.46s bestanden:
+Signed64-Grenzen/echterEditor/Kopie/Undo/Redo/Rundung/Überlauf/NULL-Speichern.
+Prüffallmarkierung nach Save korrigiert, nurbetroffenenBereich wiederholt.
+Keine neueCTest-ID/Windows-Beobachtung;456/386Teilumfänge/70offen.
+Currency-SQL-Zielkonvertierung bereits4ee2dafe1d0a3ed6606225a83eafe34de66989eb,
+Baumab93422991a81abeec2cf451d2795a53e7608550 privat/exaktveröffentlicht.
+Letzter Gesamtpaket-/Originalbeleg bb7/183,19s liegt vor diesenbeidenEtappen.
+Direkt weiterentwickeln; Original-MONEY-Import/volleParität bleibenoffen.

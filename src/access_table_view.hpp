@@ -519,7 +519,7 @@ public:
                 if(type=="DECIMAL_EXACT") {
                     const auto text=typed->clipboardText(index);cells.append(nativeGridEncode(raw.isNull() ? QVariant{} : QVariant(text)));return text;
                 }
-                cells.append(nativeGridEncode(raw));
+                cells.append(nativeGridEncode(raw,type));
                 if(raw.metaType().id()==QMetaType::QByteArray) return QStringLiteral("0x")+QString::fromLatin1(raw.toByteArray().toHex());
                 if(raw.metaType().id()==QMetaType::LongLong && (type=="INTEGER" || type=="INT" || type=="BIGINT")) return QString::number(raw.toLongLong());
                 return typed->clipboardText(index);

@@ -3295,6 +3295,20 @@ End Sub
 
 }
 
+static void exerciseExactCurrencyGrid() {
+    using namespace linaccess;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","exact-currency-grid");db.setDatabaseName(":memory:");assert(db.open());QSqlQuery sql(db);
+    assert(sql.exec("CREATE TABLE exact_money(v CURRENCY_TICKS)"));assert(sql.exec("INSERT INTO exact_money VALUES(9223372036854775807),(-9223372036854775808)"));sql.finish();
+    AccessTableModel source(nullptr,db);source.setEditStrategy(QSqlTableModel::OnManualSubmit);source.setTable("exact_money");assert(source.select());AccessTableView sheet;sheet.setModel(&source);sheet.setCurrentIndex(source.index(0,0));sheet.selectionModel()->select(source.index(0,0),QItemSelectionModel::ClearAndSelect);
+    assert(source.index(0,0).data(Qt::EditRole).toString()=="922337203685477.5807" && sheet.copySelection() && QApplication::clipboard()->text()=="922337203685477.5807");
+    sheet.setCurrentIndex(source.index(1,0));sheet.selectionModel()->select(source.index(1,0),QItemSelectionModel::ClearAndSelect);assert(sheet.pasteSelection() && source.index(1,0).data().toString()=="922337203685477.5807");assert(source.undoBlock() && source.index(1,0).data().toString()=="-922337203685477.5808");assert(source.redoBlock() && source.index(1,0).data().toString()=="922337203685477.5807");source.revertAll();
+    sheet.resize(400,150);sheet.show();sheet.edit(source.index(0,0));QApplication::processEvents();auto* editor=sheet.findChild<QLineEdit*>();assert(editor && editor->text()=="922337203685477.5807");editor->setText("922337203685477.5806");QTest::keyClick(editor,Qt::Key_Return);QApplication::processEvents();assert(source.index(0,0).data().toString()=="922337203685477.5806" && source.submitTransactionally());
+    assert(sql.exec("SELECT v FROM exact_money WHERE v>0") && sql.next() && sql.value(0).toLongLong()==std::numeric_limits<qint64>::max()-1);sql.finish();
+    assert(!source.setData(source.index(0,0),QString("922337203685477.5808")) && !source.isDirty());
+    QApplication::clipboard()->setText("1.23455");sheet.setCurrentIndex(source.index(0,0));sheet.selectionModel()->select(source.index(0,0),QItemSelectionModel::ClearAndSelect);assert(sheet.pasteSelection() && source.index(0,0).data().toString()=="1.2346");assert(source.undoBlock() && source.redoBlock() && source.index(0,0).data().toString()=="1.2346" && source.submitTransactionally());
+    sheet.setCurrentIndex(source.index(0,0));sheet.selectionModel()->select(source.index(0,0),QItemSelectionModel::ClearAndSelect);assert(sheet.clearSelectedCells() && source.submitTransactionally());assert(sql.exec("SELECT COUNT(*) FROM exact_money WHERE v IS NULL") && sql.next() && sql.value(0).toInt()==1);sql.finish();assert(sheet.close());
+}
+
 static void exerciseNativeDecimalClipboard() {
     using namespace linaccess;
     auto db=QSqlDatabase::addDatabase("QSQLITE","decimal-grid-clipboard");db.setDatabaseName(":memory:");assert(db.open());QSqlQuery sql(db);assert(sql.exec("CREATE TABLE _la_import_log(source_file,kind,name,status,details)"));sql.finish();
@@ -3387,6 +3401,7 @@ int main(int argc,char** argv) {
     QSettings::setPath(QSettings::IniFormat,QSettings::UserScope,temporary.path());
     exerciseNativeRelationDesigner();
     exerciseNativeDecimalClipboard();
+    exerciseExactCurrencyGrid();
     exercisePhysicalFormIdentity();
     exerciseNativeWarnings();
     const auto first=temporary.filePath("first.linaccess"),second=temporary.filePath("second.linaccess");

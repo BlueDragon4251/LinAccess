@@ -21,10 +21,10 @@
 namespace linaccess {
 namespace {
 bool floatingDisplay(const QString& type) { return type!="CURRENCY_REAL" && (type.contains("REAL",Qt::CaseInsensitive) || type.contains("FLOA",Qt::CaseInsensitive) || type.contains("DOUB",Qt::CaseInsensitive)); }
-bool checkedDisplay(const QString& type) { return type=="DECIMAL_EXACT" || type=="CURRENCY_REAL" || type=="INTEGER1" || type=="INTEGER2" || type=="INTEGER4" || floatingDisplay(type); }
+bool checkedDisplay(const QString& type) { return type=="DECIMAL_EXACT" || type=="CURRENCY_TICKS" || type=="CURRENCY_REAL" || type=="INTEGER1" || type=="INTEGER2" || type=="INTEGER4" || floatingDisplay(type); }
 QVariant checkedInput(const QString& type,const QVariant& input) {
     const bool emptyNumeric=input.metaType().id()==QMetaType::QString && input.toString().isEmpty()
-        && (type=="CURRENCY_REAL" || type.contains("INT",Qt::CaseInsensitive) || type.contains("REAL",Qt::CaseInsensitive) || type.contains("DATE",Qt::CaseInsensitive));
+        && (type=="CURRENCY_REAL" || type=="CURRENCY_TICKS" || type.contains("INT",Qt::CaseInsensitive) || type.contains("REAL",Qt::CaseInsensitive) || type.contains("DATE",Qt::CaseInsensitive));
     const auto scalar=emptyNumeric ? VbaValue{} : qtFieldValue(input,(type.contains("BOOL",Qt::CaseInsensitive) || type.contains("DATE",Qt::CaseInsensitive))?type:QString{});
     return sqlFieldValue(scalar,type);
 }
@@ -57,7 +57,13 @@ bool AccessTableModel::refreshTypes() {
     catch(const VbaRuntimeError& error) { metadataError_=error.number; return reject(error.number); }
 }
 QVariant AccessTableModel::checkedColumnInput(int column,const QVariant& input) const {
-    const auto type=columnType(column);if(type!="DECIMAL_EXACT") return checkedInput(type,input);
+    const auto type=columnType(column);
+    if(type=="CURRENCY_TICKS") {
+        if(input.metaType()==QMetaType::fromType<NativeGridCurrency>()) return sqlFieldValue(VbaValue::currency(input.value<NativeGridCurrency>().units),type);
+        if(replayingHistory_ && (input.metaType().id()==QMetaType::LongLong || input.metaType().id()==QMetaType::Int)) return sqlFieldValue(qtFieldValue(input,type),type);
+        return checkedInput(type,input);
+    }
+    if(type!="DECIMAL_EXACT") return checkedInput(type,input);
     const auto shape=decimalTypes_.constFind(record().fieldName(column).toCaseFolded());if(shape==decimalTypes_.cend()) throw VbaRuntimeError(3251,"Decimal column write context is not proven");
     VbaValue value;
     if(input.isNull() || (input.metaType().id()==QMetaType::QString && input.toString().isEmpty())) value=VbaValue{};
@@ -454,7 +460,7 @@ QVariant AccessTableModel::data(const QModelIndex& index,int role) const {
     // A null QString selects the text editor without losing SQL NULL identity.
     if(role==Qt::EditRole && raw.isNull() && !type.contains("BOOL",Qt::CaseInsensitive) && !type.contains("BLOB",Qt::CaseInsensitive))
         return QVariant(QMetaType::fromType<QString>());
-    if(!checkedDisplay(type) || raw.isNull() || (role==Qt::EditRole && type!="DECIMAL_EXACT" && type!="CURRENCY_REAL" && !floatingDisplay(type))) return raw;
+    if(!checkedDisplay(type) || raw.isNull() || (role==Qt::EditRole && type!="DECIMAL_EXACT" && type!="CURRENCY_REAL" && type!="CURRENCY_TICKS" && !floatingDisplay(type))) return raw;
     try {
         const auto value=qtFieldValue(raw,type);
         if(floatingDisplay(type) && value.kind==VbaValue::Kind::Number)
@@ -623,7 +629,7 @@ bool AccessTableModel::applyDataBlock(int firstRow,int firstColumn,const QVector
                 } else if(!isPasteColumn(targetColumn,typed)) return reject(2448);
                 const auto input=values[row][column];QVariant converted;
                 if(typed && input.isNull()) converted={};
-                else if(type=="DECIMAL_EXACT") converted=checkedColumnInput(targetColumn,input);
+                else if(type=="DECIMAL_EXACT" || type=="CURRENCY_TICKS") converted=checkedColumnInput(targetColumn,input);
                 else if(typed && input.metaType()==QMetaType::fromType<NativeGridCurrency>()) {
                     const auto exact=VbaValue::currency(input.value<NativeGridCurrency>().units);
                     if(nativeFindTextType(type) || type=="CURRENCY_REAL") converted=sqlFieldValue(exact,type);
@@ -787,7 +793,7 @@ bool AccessTableModel::redoBlock() {
 }
 bool AccessTableModel::changeDecimalRow(int row,const QSqlRecord* values) {
     // Qt captures original records through our textual EditRole. Bind raw query
-    // values so that stored Decimal keys never become strings in WHERE.
+    // values so that stored Decimal keys or Currency ticks never become strings in WHERE.
     if(readOnly_) return reject(2448);if(metadataError_) return reject(metadataError_);
     const auto original=primaryValues(row);if(original.isEmpty()) return reject(3251);
     const auto* driver=database().driver();const auto table=driver->escapeIdentifier(tableName(),QSqlDriver::TableName);
@@ -810,11 +816,11 @@ bool AccessTableModel::changeDecimalRow(int row,const QSqlRecord* values) {
     if(query.numRowsAffected()!=1) return reject(3251);return true;
 }
 bool AccessTableModel::updateRowInTable(int row,const QSqlRecord& values) {
-    if(!types_.values().contains("DECIMAL_EXACT")) return QSqlTableModel::updateRowInTable(row,values);
+    if(!types_.values().contains("DECIMAL_EXACT") && !types_.values().contains("CURRENCY_TICKS")) return QSqlTableModel::updateRowInTable(row,values);
     auto changed=values;emit beforeUpdate(row,changed);return changeDecimalRow(row,&changed);
 }
 bool AccessTableModel::deleteRowFromTable(int row) {
-    if(!types_.values().contains("DECIMAL_EXACT")) return QSqlTableModel::deleteRowFromTable(row);
+    if(!types_.values().contains("DECIMAL_EXACT") && !types_.values().contains("CURRENCY_TICKS")) return QSqlTableModel::deleteRowFromTable(row);
     emit beforeDelete(row);return changeDecimalRow(row,nullptr);
 }
 bool AccessTableModel::insertRowIntoTable(const QSqlRecord& row) {
