@@ -675,6 +675,32 @@ void currencyTicksAdd(sqlite3_context* c,int,sqlite3_value** a) noexcept {curren
 void currencyTicksSubtract(sqlite3_context* c,int,sqlite3_value** a) noexcept {currencyTicksArithmetic(c,a,"-");}
 void currencyTicksMultiply(sqlite3_context* c,int,sqlite3_value** a) noexcept {currencyTicksArithmetic(c,a,"*");}
 
+template<bool Between> void decimalPredicate(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
+    auto& native=api();try {
+        if(count<3 || count>129 || native.type(args[0])!=SQLITE_TEXT) throw VbaRuntimeError(450,"Decimal predicate operand count invalid");
+        const auto types=scalarText(args[0]).split(',');
+        if(types.size()!=count-1 || !types.contains("DECIMAL_EXACT") || (Between && count!=4)) throw VbaRuntimeError(450,"Decimal predicate type descriptor invalid");
+        static const QSet<QString> numeric{"DECIMAL_EXACT","INTEGER1","INTEGER2","INTEGER4","SINGLE_REAL","DOUBLE","BOOL","BOOLEAN","CURRENCY_REAL","CURRENCY_TICKS"};
+        std::vector<VbaValue> values;values.reserve(count-1);bool null=false;
+        for(int at=1;at<count;++at) {
+            if(native.type(args[at])==SQLITE_NULL) {values.emplace_back();null=true;continue;}
+            const auto type=types[at-1];if(!numeric.contains(type)) throw VbaRuntimeError(3251,"Decimal predicate requires proven numeric operands");
+            values.push_back(qtFieldValue(boundSqlStorage(args[at],type=="DECIMAL_EXACT"),type));
+        }
+        if(values[0].kind==VbaValue::Kind::Empty || (Between && null)) {native.nullResult(context);return;}
+        ScalarStringHost host;bool result=false;
+        if constexpr(Between) {
+            if(compareVbaValues(">",values[1],values[2],host,VbaCompareMode::Binary).truthy()) throw VbaRuntimeError(3251,"Reversed Decimal BETWEEN bounds require an Access reference");
+            result=compareVbaValues(">=",values[0],values[1],host,VbaCompareMode::Binary).truthy() && compareVbaValues("<=",values[0],values[2],host,VbaCompareMode::Binary).truthy();
+        } else {
+            for(std::size_t at=1;at<values.size();++at) if(values[at].kind!=VbaValue::Kind::Empty && compareVbaValues("=",values[0],values[at],host,VbaCompareMode::Binary).truthy()) {result=true;break;}
+            if(!result && null) {native.nullResult(context);return;}
+        }
+        native.integerResult(context,result ? -1 : 0);
+    } catch(const VbaRuntimeError& failure) {functionError(context,failure);}
+      catch(...) {functionError(context,VbaRuntimeError(7,"Decimal predicate failed"));}
+}
+
 // Fixed-size encoded state needs no placement construction or per-group heap owner.
 struct DecimalSumState { unsigned char encoded[24]; int error; bool seen; };
 void decimalSumStep(sqlite3_context* context,int,sqlite3_value** args) noexcept {
@@ -1278,6 +1304,8 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_ccur",-1,&currencyNumber,nullptr,nullptr);
     ensure("linaccess_jet_currency_store",1,&currencyStore,nullptr,nullptr);
     ensure("linaccess_jet_field_store",2,&fieldStore,nullptr,nullptr);
+    ensure("linaccess_jet_decimal_in",-1,&decimalPredicate<false>,nullptr,nullptr);
+    ensure("linaccess_jet_decimal_between",-1,&decimalPredicate<true>,nullptr,nullptr);
     ensure("linaccess_jet_decimal_sum",1,nullptr,&decimalSumStep,&decimalSumFinal);
     ensure("linaccess_jet_currency_sum",1,nullptr,&currencySumStep,&currencySumFinal);
     ensure("linaccess_jet_currency_add",2,&currencyAdd,nullptr,nullptr);

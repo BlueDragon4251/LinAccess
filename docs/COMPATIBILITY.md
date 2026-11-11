@@ -7796,3 +7796,31 @@ Typ-Promotion-/physischeDecimal-Parität. F014/F041/F067/F068 bleiben offen;
 feste456/386/70 unverändert. Vorstand2f786060/Baum
 f308a7cc1c63e0591dfe1bd14f5aad6b71a1dfba privat/exakt veröffentlicht.
 Direkt weiterentwickeln, kein Zwischen-/Gesamtabschluss.
+
+
+Aktueller kombinierter Decimal-Paket-/Originalbeleg (2026-11-11): Quellcommit
+f1f145cd10d6784012649a1037c40b8a22d73393, Baum
+503e49c2ae585d00b255067cf0a81499db2b0255. Integrationsbau/DEB/Paketprüfung
+bestanden; bestehendes Inventar und Originalziel2/2 in182,16s bestanden
+(54,59s/127,56s); alle7 geschützten Hashes unverändert. Enthält exakte native
+SQL-Decimal-Ergebnisse und Summen. Bekannte Original-Makrogrenze unverändert;
+kein neuer Windows-Access- oder initialisierter Geschäftsablaufnachweis.
+Paket: /workspace/work/decimal-package/package/linaccess-0.7.0-Linux.deb.
+Die anschließenden Decimal-IN/BETWEEN-Erweiterungen sind darin noch nicht enthalten.
+Feste456/386/70 unverändert.
+
+
+Native exakte Decimal-IN/BETWEEN-Prädikate (2026-11-11):
+EXACT_DECIMAL_SQL_PREDICATES.md. Belegte numerische Operanden einmal dekodieren
+und durch vorhandenen nativen Vergleichskern prüfen, keineSQLite-BLOB-Vergleiche.
+IN-Treffer trotzNullkandidat wahr, keinTreffer+Null unbekannt; NOT erhältNull.
+BETWEEN inklusiv, jedeNull unbekannt; umgekehrte Grenzen3251 bisReferenz.
+Unbelegte Text-/Datumsmischung3251, maximal128Operanden. Decimal-LIKE auch bei
+Projektionsaliasen ohneTextkonvertierung verweigert. App gebaut; bestehendes
+DAO/Querymodell gemeinsam2/2 in6,50s bestanden (6,02s/0,47s), keine neueCTest-ID.
+GroßeWerte>2^53, Grenzen/Negation/Null, WHERE/AS undSchutzgrenzen gemeinsam.
+Öffentliche Microsoft-BETWEEN-Dokumentation, keine neueWindows-Ausführung.
+F014/F041/F067/F068/F071 offen; feste456/386/70 unverändert.
+Vorstandf1f145cd/Baum503e49c2ae585d00b255067cf0a81499db2b0255 privat/exakt
+veröffentlicht; dessen Gesamtpaket-/Originalbeleg182,16s/7Hashes gleich liegt vor
+dieser Prädikaterweiterung. Direkt weiterentwickeln, kein Zwischenabschluss.

@@ -16,7 +16,7 @@ transport; numerical exactness does not establish Access formatting identity.
 
 Supported SELECT projection aliases retain their proven types. Unknown functions,
 unsupported aggregates, nested SELECT/UNION, action/make-table queries
-and unproven Decimal predicates refuse instead of executing SQLite blob arithmetic.
+and unproven Decimal predicate contexts refuse instead of executing SQLite blob arithmetic.
 Physical Jet Decimal creation, import, precision/scale properties, writable Decimal
 fields and lossless MDB round trips remain open. Derived DAO Filter/Sort snapshots
 and textual Find also refuse when Decimal lineage cannot be retained. Field.Size
@@ -41,3 +41,6 @@ DISTINCT Decimal sums and broader average/variance semantics remain unproven.
 
 Sum validation: app built; existing query model0.42s and final affected
 DAO1/1 in5.72s passed.
+
+Bounded numeric IN/BETWEEN and alias LIKE safeguards are documented in
+[Exact Decimal SQL predicates](EXACT_DECIMAL_SQL_PREDICATES.md).
