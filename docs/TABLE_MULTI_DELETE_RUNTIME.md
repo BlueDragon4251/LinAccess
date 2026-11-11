@@ -5,12 +5,13 @@ fully selected stored rows, including noncontiguous rows. Whole-row selection
 is required; additional partial-cell areas are refused rather than interpreted
 as requests to delete other records. Existing single-record behavior remains.
 
-The bounded multi-record path requires a clean manual-submit model, a stable
-keyed table source and non-NULL saved primary keys. Existing drafts refuse the
-action and are not discarded. Persistent row anchors preserve the selected
+The bounded multi-record path requires a bounded manual-submit model, a stable
+keyed table source and non-NULL saved primary keys. Existing updates, insert
+default state and unrelated deletions are captured before staging and preserved.
+Selected new/already-deleted records are refused. Persistent row anchors preserve the selected
 records through validation. Reentrant deletion and disappeared/replaced views
-are rejected. Rows are staged in descending order. A staging failure undoes
-only this action's pending deletions.
+are rejected. Rows are staged in descending order. A staging failure restores
+the captured pre-action cache.
 
 Deletion follows the existing table Save workflow: it is first marked pending;
 Speichern submits the pending set in the model's existing transaction. A later
@@ -32,6 +33,6 @@ DeleteRecord now stages the real selection and can be discarded. Target1/1
 SQLite3.54.1 and four original hashes pass. Core runtime unchanged from fresh
 GUI-free payment-components1/1 (1.79 s). No new target/ID; fixed456/384/72.
 
-Pending multi-record Undo/Redo is now implemented within the bounded clean keyed
-path; TABLE_DELETE_HISTORY.md supersedes that earlier limitation. Full Access
+Pending multi-record Undo/Redo is now implemented within the bounded keyed
+path, including preserved drafts; TABLE_DELETE_HISTORY.md supersedes that earlier limitation. Full Access
 confirmation/event/selection and committed-deletion undo remain unproved.

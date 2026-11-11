@@ -4623,3 +4623,19 @@ F340/F168 bleiben offen; feste456 IDs,386 bestätigte Teilumfänge/70 offene
 Vollanforderungen unverändert. Vorstand15f842fc88d595e1c05dafc0bd0f65e15391458c
 privat/exakt nachgelesen. Gültiger Gesamtpaketbeleg weiterhincf9d6933,184,68s/
 7Hashes unverändert; aktuelle Bereichserweiterungen liegen danach.
+
+
+Gestufte gespeicherte Datensatzlöschung über Entwürfen (2026-11-11):
+TABLE_MULTI_DELETE_RUNTIME.md/TABLE_DELETE_HISTORY.md. Einzel-/Mehrfachlöschung
+erfasst den begrenzten vorhandenen Cache vor Mutation; fremde Updates/Inserts/
+Defaults/Löschmarker bleiben erhalten. Undo rekonstruiert genau den Vorzustand,
+Redo markiert dieselben gespeicherten Zeilen; bereits gelöschte/neue ausgewählte
+Zeilen bleiben verweigert, neue/keylose Einzelzeilen behalten bisherigen Pfad.
+SQL erst mit normalem Save, keine zusätzlichen automatischen Saves. App gebaut;
+bestehendes UI/Feld-Bündel2/2 in16,21s (15,56/0,64s) bestanden. Tatsächliche
+Mehrfach-/Einzellöschung mit gemischten Entwürfen, Binärwert, Undo/Redo,
+Doppelverweigerung, unverändertes SQL vor Save und erhaltene Insertdefaults
+geprüft. Keine neue CTest-ID/Windows-Ereignisbehauptung; F168/F340/F148 bleiben
+offen, feste456 IDs/386 bestätigte Teilumfänge/70 offene Vollanforderungen.
+Vorstandf8998d375f20f1d768d50a8ce253921cf5bfac24/Baum121f335b044eff366da329d4dc6066870723b021
+privat/exakt veröffentlicht; gültiger Gesamtpaketbeleg weiterhincf9d6933.

@@ -468,6 +468,30 @@ End Function
     }
 
     {
+        assert(sql.exec("CREATE TABLE delete_draft_scope(id INTEGER PRIMARY KEY AUTOINCREMENT,note TEXT UNIQUE,payload BLOB,extra TEXT DEFAULT 'kept')"));
+        assert(sql.exec("INSERT INTO delete_draft_scope(note,payload) VALUES('a',x'01'),('b',x'02'),('c',x'03'),('d',x'04')"));sql.finish();
+        linaccess::AccessTableModel cells(nullptr,db);cells.setTable("delete_draft_scope");cells.setEditStrategy(QSqlTableModel::OnManualSubmit);assert(cells.select());
+        linaccess::AccessTableView sheet;sheet.setModel(&cells);sheet.show();
+        assert(cells.setDataBlock(0,1,{{"changed"}}) && cells.setDataBlock(4,1,{{"appended"}}));
+        assert(cells.removeRow(3) && cells.isPendingRecordDeleted(3));
+        sheet.setCurrentIndex(cells.index(0,1));sheet.selectionModel()->select(cells.index(0,0),QItemSelectionModel::ClearAndSelect|QItemSelectionModel::Rows);
+        sheet.selectionModel()->select(cells.index(2,0),QItemSelectionModel::Select|QItemSelectionModel::Rows);
+        assert(sheet.deleteCurrentRecord() && cells.isPendingRecordDeleted(0) && cells.isPendingRecordDeleted(2) && cells.isPendingRecordDeleted(3));
+        assert(!cells.stageRecordDeletions({0}) && cells.canUndoBlock());
+        assert(cells.undoBlock() && !cells.isPendingRecordDeleted(0) && !cells.isPendingRecordDeleted(2) && cells.isPendingRecordDeleted(3));
+        assert(cells.clipboardText(cells.index(0,1))=="changed" && cells.clipboardText(cells.index(4,1))=="appended" && cells.QSqlTableModel::data(cells.index(2,2),Qt::EditRole).toByteArray()==QByteArray::fromHex("03"));
+        assert(cells.redoBlock() && cells.isPendingRecordDeleted(0) && cells.isPendingRecordDeleted(2));
+        assert(cells.undoBlock());
+        sheet.setCurrentIndex(cells.index(0,1));sheet.selectionModel()->clearSelection();assert(sheet.deleteCurrentRecord());
+        assert(cells.undoBlock() && cells.clipboardText(cells.index(0,1))=="changed" && cells.isPendingRecordDeleted(3));
+        assert(cells.redoBlock());
+        assert(sql.exec("SELECT COUNT(*) FROM delete_draft_scope") && sql.next() && sql.value(0).toInt()==4);sql.finish();
+        assert(cells.submitTransactionally());
+        assert(sql.exec("SELECT note,extra FROM delete_draft_scope ORDER BY id") && sql.next() && sql.value(0).toString()=="b");
+        assert(sql.next() && sql.value(0).toString()=="c" && sql.next() && sql.value(0).toString()=="appended" && sql.value(1).toString()=="kept" && !sql.next());sql.finish();
+    }
+
+    {
         assert(sql.exec("CREATE TABLE current_save(id INTEGER PRIMARY KEY AUTOINCREMENT,n INTEGER CHECK(n>=0),note TEXT,payload BLOB)"));
         assert(sql.exec("INSERT INTO current_save VALUES(1,10,NULL,x''),(2,20,'original',x'01'),(3,30,NULL,NULL)"));
         linaccess::AccessTableModel current(nullptr,db);current.setTable("current_save");current.setEditStrategy(QSqlTableModel::OnManualSubmit);assert(current.select());

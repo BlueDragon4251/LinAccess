@@ -334,7 +334,7 @@ public:
                 if(index.row()!=currentIndex().row()) return refuse(3251,"Zum Löschen mehrerer Datensätze vollständige Zeilen auswählen.");
             if(!finishEditing() || !self || !typed || model()!=typed || !currentIndex().isValid()) return false;
             const auto row=currentIndex().row(),column=currentIndex().column();
-            bool useHistory=!typed->isDirty() && typed->editStrategy()==QSqlTableModel::OnManualSubmit && !typed->primaryKey().isEmpty();
+            bool useHistory=typed->isStoredRecord(row) && !typed->isPendingRecordDeleted(row) && typed->editStrategy()==QSqlTableModel::OnManualSubmit && !typed->primaryKey().isEmpty();
             if(useHistory) {
                 const auto values=typed->record(row);const auto key=typed->primaryKey();
                 for(int field=0;field<key.count();++field) if(values.value(key.fieldName(field)).isNull()) useHistory=false;
@@ -358,7 +358,6 @@ public:
             if(!rows.contains(index.row())) return refuse(3251,"Zum Löschen vollständige Zeilen ohne zusätzliche Zellbereiche auswählen.");
         if(!finishEditing() || !self || !typed) return false;
         if(model()!=typed || typed->tableName()!=source) return refuse(2501,"Die Datenquelle wurde während der Validierung geändert.");
-        if(typed->isDirty()) return refuse(2501,"Vor der Mehrfachlöschung bestehende Änderungen speichern oder verwerfen.");
         for(const auto& anchor:anchors) if(!anchor.isValid() || anchor.model()!=typed) return refuse(2501,"Die Datensatzauswahl wurde während der Validierung geändert.");
         std::sort(anchors.begin(),anchors.end(),[](const auto& left,const auto& right) { return left.row()>right.row(); });
         const int column=currentIndex().column(),first=anchors.back().row();

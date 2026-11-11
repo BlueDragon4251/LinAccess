@@ -1,13 +1,13 @@
 # Pending multi-record deletion history
 
-The clean keyed table single-record and multi-selection paths stage selected stored rows as
+The bounded keyed table stored single-record and multi-selection paths stage selected stored rows as
 one model history action. Ctrl+Z restores exactly those pending deletions in the
-existing cache; Ctrl+Y stages the same rows again. Neither action executes SQL,
-reselects the source, evaluates insert defaults or manufactures replacement rows.
+existing cache; Ctrl+Y stages the same rows again. Neither action executes SQL or reselects the source. Dirty pre-action caches
+use the existing raw snapshot restoration, including pending inserted row/default
+state and unrelated deletions.
 The existing selection and non-NULL primary-key validation remain in force.
-Duplicate/out-of-range row requests, existing drafts, read-only sources and
-reentrant mutation are refused before staging. A failed stage reverts only the
-rows staged by that action.
+Duplicate/out-of-range/new/already-deleted row requests, oversized caches, read-only sources and
+reentrant mutation are refused before staging. A failed stage restores the pre-action cache.
 
 A transactional Save failure retains the deletion action, so Undo/Redo remains
 available after a later foreign-key rejection. A successful Save retires history
@@ -19,8 +19,7 @@ actions and a conservative 256 MiB combined payload estimate); see
 can be undone first, followed by the deletion. Ordinary edits still invalidate
 the stacks. This does not provide an unlimited Access undo stack.
 
-This scope does not undo committed SQL deletion, add dirty-cache single-record
-history, restore the original selection/focus/event sequence, or implement all
+This scope does not undo committed SQL deletion, restore the original selection/focus/event sequence, or implement all
 Access confirmation and deletion events. F168, F148 and F340 remain open; the
 456 catalog IDs and 386/70 partial/full counts are unchanged.
 
@@ -30,7 +29,10 @@ exact pending rows after Redo; then forces a late foreign-key Save failure and
 checks Undo/Redo before the existing successful transactional deletion. Existing
 currency_field_documents covers the shared paste history. No new CTest target.
 
-Clean saved single-record deletion uses the same history action. Dirty-cache and
-keyless single-row paths retain their existing behavior. Existing GUI coverage
+Saved single-record deletion uses the same history action even with other drafts.
+New and keyless single-row paths retain their existing behavior. Existing GUI coverage
 checks singleton Undo/Redo, invalidation by subsequent cell edits, duplicate and
 out-of-range requests and read-only refusal without modifying saved data.
+
+The draft-preserving deletion extension passed the existing UI/field bundle2/2
+in16.21s (15.56/0.64s); no new CTest target or Windows observation.

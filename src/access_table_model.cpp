@@ -131,17 +131,17 @@ bool AccessTableModel::stageRecordDeletions(const QVector<int>& rows) {
     if(saving_ || changing_) return reject(2501);
     if(readOnly_) return reject(2448);
     if(editStrategy()!=OnManualSubmit || primaryKey().isEmpty() || rows.isEmpty() || rows.size()>1000000) return reject(3251);
-    if(isDirty()) return reject(2501);
+    if(!canPasteOverUpdates()) return reject(3251);
     auto ordered=rows;std::sort(ordered.begin(),ordered.end(),std::greater<int>());
     for(int i=0;i<ordered.size();++i) {
         const int row=ordered[i];
-        if(row<0 || row>=rowCount() || (i && ordered[i-1]==row) || !indexInQuery(index(row,0)).isValid()) return reject(3251);
+        if(row<0 || row>=rowCount() || (i && ordered[i-1]==row) || !isStoredRecord(row) || deletedRows_.contains(row)) return reject(3251);
         const auto values=record(row);const auto key=primaryKey();
         for(int field=0;field<key.count();++field) if(values.value(key.fieldName(field)).isNull()) return reject(3251);
     }
     BlockHistory history;history.originalRows=rowCount();history.applied=true;history.deletions=ordered;
     QVector<BlockHistory> nextHistory;
-    try {if(!replayingHistory_) nextHistory=prepareBlockHistory(history);}
+    try {history.before=captureUpdates();if(!replayingHistory_) nextHistory=prepareBlockHistory(history);}
     catch(const VbaRuntimeError& error) {return rejectEdit(error.number,QString::fromUtf8(error.what()));}
     catch(const std::bad_alloc&) {return reject(7);}
     const QScopedValueRollback<bool> mutation(blockMutation_,true);
@@ -149,7 +149,8 @@ bool AccessTableModel::stageRecordDeletions(const QVector<int>& rows) {
     for(const int row:ordered) {
         if(!removeRows(row,1)) {
             const auto problem=lastError();
-            for(const int undone:staged) revertRow(undone);
+            if(history.before.isEmpty()) {for(const int undone:staged) revertRow(undone);}
+            else if(!restoreUpdates(history.before,history.originalRows)) {clearBlockHistory();return reject(3251);}
             setLastError(problem);return false;
         }
         staged.push_back(row);
@@ -741,7 +742,7 @@ bool AccessTableModel::undoBlock() {
         const auto history=undoHistory_.back();auto nextUndo=undoHistory_,nextRedo=redoHistory_;
         nextUndo.removeLast();nextRedo.append(history);const auto generation=historyGeneration_;
         const QScopedValueRollback<bool> changing(changing_,true),blockMutation(blockMutation_,true);
-        if(!history.deletions.isEmpty()) {
+        if(!history.deletions.isEmpty() && history.before.isEmpty()) {
             for(const int row:history.deletions) {QSqlTableModel::revertRow(row);dirtyRows_.remove(row);deletedRows_.remove(row);}
         } else if(!restoreUpdates(history.before,history.originalRows)) {clearBlockHistory();return reject(3251);}
         if(generation!=historyGeneration_) return reject(2501);
