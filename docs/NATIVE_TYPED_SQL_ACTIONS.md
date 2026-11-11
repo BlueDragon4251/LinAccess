@@ -8,8 +8,9 @@ fields remain in place. Source typing requires an unshadowed physical main table
 
 This prevents stored Boolean/Date/etc. values from silently acquiring SQLite's
 scalar kind while evaluating VarType, arithmetic or conditions in an action.
-It does not introduce Decimal target coercion, joined/delete queries, additional
-subquery grammar or original-format writes. Existing action transactions and
+Bounded Decimal targets are documented in NATIVE_DECIMAL_SQL_ACTIONS.md.
+Joined/delete queries, additional
+subquery grammar and original-format writes remain open. Existing action transactions and
 rollback remain responsible for atomicity. NULL semantics are unchanged. Mixed Date/non-Date action comparisons refuse3251
 unless explicitly converted: the targeted DELETE exposed an untyped SQLite
 text/number fallback. Date/Date and Date/NULL retain their existing paths. This

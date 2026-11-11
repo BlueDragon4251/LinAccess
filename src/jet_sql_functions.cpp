@@ -702,6 +702,21 @@ template<bool Between,bool RequireDecimal=true> void typedNumericPredicate(sqlit
       catch(...) {functionError(context,VbaRuntimeError(7,"Decimal predicate failed"));}
 }
 
+void decimalFieldStore(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
+    auto& native=api();try {
+        if(count!=4 || native.type(args[0])!=SQLITE_TEXT || native.type(args[2])!=SQLITE_INTEGER || native.type(args[3])!=SQLITE_INTEGER) throw VbaRuntimeError(450,"Decimal store requires input kind, value and precision/scale");
+        const auto kind=scalarText(args[0]);const auto precision=native.integer(args[2]),scale=native.integer(args[3]);
+        static const QSet<QString> supported{"","DECIMAL_EXACT","DATETIME","BOOL","BOOLEAN","SINGLE_REAL","CURRENCY_REAL","CURRENCY_TICKS","INTEGER1","INTEGER2","INTEGER4","DOUBLE","TEXT"};
+        if(!supported.contains(kind)) throw VbaRuntimeError(3251,"Decimal store input kind is not proven");
+        if(precision<1 || precision>28 || scale<0 || scale>precision) throw VbaRuntimeError(3251,"Decimal store precision/scale invalid");
+        const auto value=qtFieldValue(boundSqlStorage(args[1],kind=="DECIMAL_EXACT"),kind);
+        const auto stored=sqlDecimalFieldValue(value,static_cast<int>(precision),static_cast<int>(scale));
+        if(stored.isNull()) {native.nullResult(context);return;}
+        const auto bytes=stored.toByteArray();sqlite3_result_blob(context,bytes.constData(),bytes.size(),SQLITE_TRANSIENT);
+    } catch(const VbaRuntimeError& failure) {functionError(context,failure);}
+      catch(...) {functionError(context,VbaRuntimeError(7,"Decimal field conversion failed"));}
+}
+
 void decimalFieldValid(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
     auto& native=api();try {
         if(count!=3 || native.type(args[1])!=SQLITE_INTEGER || native.type(args[2])!=SQLITE_INTEGER) throw VbaRuntimeError(450,"Decimal field constraint requires precision/scale");
@@ -1323,6 +1338,7 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_decimal_in",-1,&typedNumericPredicate<false>,nullptr,nullptr);
     ensure("linaccess_jet_decimal_between",-1,&typedNumericPredicate<true>,nullptr,nullptr);
     ensure("linaccess_jet_decimal_field_valid",3,&decimalFieldValid,nullptr,nullptr);
+    ensure("linaccess_jet_decimal_store",4,&decimalFieldStore,nullptr,nullptr);
     ensure("linaccess_jet_decimal_sum",1,nullptr,&decimalSumStep,&decimalSumFinal);
     ensure("linaccess_jet_currency_sum",1,nullptr,&currencySumStep,&currencySumFinal);
     ensure("linaccess_jet_currency_add",2,&currencyAdd,nullptr,nullptr);

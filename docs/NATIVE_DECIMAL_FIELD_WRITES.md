@@ -33,7 +33,8 @@ and pending-edit retention apply. Other table types retain their prior
 path. This does not claim full Access append ordering, external concurrency,
 trigger/rekey behavior or arbitrary row identity.
 
-Bound physical form writes are documented in NATIVE_DECIMAL_FORM_WRITES.md.
+Bound physical form writes are documented in NATIVE_DECIMAL_FORM_WRITES.md;
+bounded physical SQL actions in NATIVE_DECIMAL_SQL_ACTIONS.md.
 Native Decimal field creation, arbitrary SQL action conversion, non-NULL source defaults, complete DAO properties, regional coercions,
 rounding-at-scale behavior and original-format write/round trips remain open.
 F014/F017/F055/F067/F068/F340 remain open; fixed456/386/70 unchanged.

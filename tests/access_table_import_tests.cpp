@@ -487,6 +487,19 @@ void verifyJetDecimalReference(const QString& path) {
     editable->member("Edit",{});editable->assignItem("small",VbaValue{});editable->member("Update",{});assert(editable->item("small").kind==VbaValue::Kind::Null);
     editable->member("MoveFirst",{});const auto copied=editable->member("GetRows",{VbaValue::longInteger(1)});assert(copied.kind==VbaValue::Kind::Array && vbaArrayLinearElement(copied,1).kind==VbaValue::Kind::Decimal);
     editable->member("AddNew",{});editable->assignItem("id",VbaValue::longInteger(6));editable->assignItem("large",decimalLiteral("-1.25"));editable->assignItem("small",decimalLiteral("0.0000000000000000000000000001"));editable->member("Update",{});editable->assign("Bookmark",editable->member("LastModified",{}));assert(editable->item("id").asNumber()==6 && editable->item("large").text=="-1.25");editable->member("Close",{});
+    const auto database=makeDaoDatabase(db);const auto execute=[&](const char* command) {database->member("Execute",{VbaValue::string(command)});};
+    execute("UPDATE decimal_probe SET large=large+CDec('0.0001') WHERE id=3");
+    auto changed=database->member("OpenRecordset",{VbaValue::string("SELECT large FROM decimal_probe WHERE id=3")}).object;assert(changed->item("large").text=="9007199254740993.0002");changed->member("Close",{});
+    execute("INSERT INTO decimal_probe(id,large,small) VALUES(7,CDec('9007199254740993.0001'),CDec('0.0000000000000000000000000001'))");
+    execute("INSERT INTO decimal_probe(id,large,small) SELECT id+10,large,small FROM decimal_probe WHERE id=7");
+    changed=database->member("OpenRecordset",{VbaValue::string("SELECT large,small FROM decimal_probe WHERE id=17")}).object;assert(changed->item("large").text=="9007199254740993.0001" && changed->item("small").text=="0.0000000000000000000000000001");changed->member("Close",{});
+    assert(query.exec("CREATE TABLE decimal_binary_input(id INTEGER4,raw BLOB)"));assert(query.prepare("INSERT INTO decimal_binary_input VALUES(8,?)"));query.addBindValue(QByteArray(24,0));assert(query.exec());query.finish();
+    for(const auto& rejected:std::vector<std::pair<const char*,int>>{{"UPDATE decimal_probe SET large=CDec('1.00001') WHERE id=7",6},{"INSERT INTO decimal_probe(id,large) SELECT id,raw FROM decimal_binary_input",13},{"INSERT INTO decimal_probe(id,large) VALUES(8,CDec('1000000000000000000000000'))",6},{"SELECT large INTO decimal_action_make_table FROM decimal_probe",3251},{"DELETE FROM decimal_probe WHERE CDec('1')",3251}}) {
+        int error=0;try {execute(rejected.first);}catch(const VbaRuntimeError& failure) {error=failure.number;}assert(error==rejected.second);
+    }
+    changed=database->member("OpenRecordset",{VbaValue::string("SELECT large FROM decimal_probe WHERE id=7")}).object;assert(changed->item("large").text=="9007199254740993.0001");changed->member("Close",{});assert(!db.tables().contains("decimal_action_make_table"));
+    execute("UPDATE decimal_probe SET small=NULL WHERE id=7");execute("DELETE FROM decimal_probe WHERE id=17 AND large=CDec('9007199254740993.0001')");
+    assert(query.exec("SELECT small FROM decimal_probe WHERE id=7") && query.next() && query.value(0).isNull());query.finish();assert(query.exec("SELECT COUNT(*) FROM decimal_probe WHERE id=17 OR id=8") && query.next() && query.value(0).toInt()==0);query.finish();
     const auto computed=makeDaoDatabase(db)->member("OpenRecordset",{VbaValue::string("SELECT CDec('1') AS calculated")}).object;assert(!computed->member("Updatable",{}).truthy() && !computed->member("Fields",{VbaValue::string("calculated")}).object->member("DataUpdatable",{}).truthy());computed->member("Close",{});
     assert(accessSourceDigest(path)==before);std::cout<<"Independent technical Jet4/ACE2010 Numeric raw bytes, exact values, precision/scale, NULL, ordering, CSV mismatch refusal and unchanged source hash verified\n";
 }

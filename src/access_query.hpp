@@ -45,6 +45,7 @@ struct AccessQueryPlan {
     QString compiledSql;
     bool currencyContextResolved{};
     QVector<AccessCounterDeclaration> counters;
+    bool deferredDecimalAction{}; // Must pass a proven physical action adapter before execution.
     int daoQueryType{-1}; // Native DAO source kind, unknown until classified by the compiler.
 };
 struct AccessQueryResult {

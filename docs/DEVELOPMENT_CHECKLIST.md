@@ -6248,3 +6248,23 @@ Integrationsbau/DEB/Paketprüfung bestanden, Inventar/Original2/2 in187,30s
 ausführbar,22 offen; bekannte Original-Makrogrenze bleibt, kein initialisierter
 Geschäftsablauf/volleAccess-Parität behauptet. Paket liegt vor ACE-Erweiterung:
 /workspace/work/decimal-forms-actions-package/package/linaccess-0.7.0-Linux.deb.
+
+
+Exakte physische Decimal-SQL-Aktionen und DELETE-Stern (2026-11-11):
+NATIVE_DECIMAL_SQL_ACTIONS.md / SQL_DELETE_STAR.md. INSERT VALUES, ein expliziter
+physischer INSERT SELECT und direktes UPDATE konvertieren mit belegtem p/s und
+tatsächlichem CHECK. Ausdruckstyp wird mitgeführt; nur belegtes Decimal darf
+internen BLOB-Schlüssel liefern. Binärquellen13, Skalen-/Präzisionsüberschreitung6,
+Null exakt. CDec-Aktionssyntax wird bis zum belegten physischen Adapter aufgeschoben;
+kein ungeprüfter Fallback. MakeTable ohne Ziel-p/s und bareDecimal-Kriterien3251;
+explizite Bool-Konvertierung möglich. DELETE * FROM wird für einzelne Tabellen
+normalisiert und durch denselben typisierten Alias-/Kriterienweg geführt.
+App/Helper/DAO/Modell/Import gebaut; bestehendes Bündel3/3 in6,86s (5,96/0,43/0,46)
+mit echterJet-Datei bestanden; identische Import-/Aktionsprüfung für echteACE2010-
+Datei0,36s bestanden. Exakte >2^53-/1e-28-Werte, arithmetisches UPDATE, VALUES/
+SELECT-Anfügen,Null, typisiertesDelete, Typ-/Skalen-/Präzisions-/MakeTable-Abweisung
+und unveränderteWerte. Alle7 geschützten Hashwerte gleich. Keine neueCTest-ID oder
+Windows-Referenz; keineRundungs-/Join-/Subquery-/Gesamtparität.456/386/70fest.
+Vorstandeb0b2771/Baumef90bc148d38ee58399926164a091d5a56559353 privat/exakt
+veröffentlicht. Letzter Gesamtpaket-/Originalbeleg234057bb/187,30s vorACE/SQL-
+Erweiterung; nächster gemeinsamer Beleg folgt. Direkt weiterentwickeln.

@@ -150,6 +150,7 @@ qlonglong executeAction(QSqlDatabase db,const AccessQueryPlan& plan,const QMap<Q
                 const auto select=accessMakeTableSource(db,plan);
                 QVector<QString> types;
                 const auto columns=accessQueryColumns(db,select,&types);
+                if(types.contains("DECIMAL_EXACT")) throw VbaRuntimeError(3251,"Decimal make-table precision/scale is not implemented");
                 if(types.contains("CURRENCY_REAL") || types.contains("DATETIME") || types.contains("DATE")) {
                     if(select.hiddenRank || select.topLimit || select.daoQueryType!=0 || !select.rightJoinSql.isEmpty())
                         throw VbaRuntimeError(3251,"Complex typed make-table source unsupported");
