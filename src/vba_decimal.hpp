@@ -11,6 +11,8 @@ VbaValue decimalUnary(std::string_view op,const VbaValue& value);
 VbaValue decimalRound(const VbaValue& value,int places);
 std::vector<unsigned char> decimalSqlKey(const VbaValue& value);
 VbaValue decimalFromSqlKey(const std::vector<unsigned char>& bytes);
+bool decimalFitsField(const VbaValue& value,int precision,int scale);
+VbaValue decimalFromJetNumeric(const std::vector<unsigned char>& bytes,int precision,int scale);
 int decimalCompare(const VbaValue& left,const VbaValue& right);
 std::int64_t decimalInteger(const VbaValue& value,std::int64_t minimum,std::int64_t maximum);
 }

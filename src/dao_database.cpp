@@ -405,11 +405,12 @@ QVector<TableSchemaColumn> readTableSchemaColumns(QSqlDatabase db,const QString&
                     throw VbaRuntimeError(3251,"DAO source field capacity invalid");
                 const int code=!object.contains("source_type") ? 0 : (source=="BOOLEAN" || source=="BIT") ? 1 : source=="TINYINT" ? 2 : source=="SMALLINT" ? 3 : source=="INT" ? 4
                     : source=="CURRENCY" ? 5 : source=="SINGLE" ? 6 : source=="DOUBLE" ? 7 : (source=="DATE" || source=="DATETIME") ? 8
-                    : source=="VARCHAR" ? 10 : source=="BLOB" ? 11 : (source=="MEMO" || (source=="TEXT" && origin=="MDBTOOLS_MYSQL")) ? 12 : source=="GUID" ? 15 : -1;
+                    : (source=="DECIMAL" || source=="NUMERIC") ? 20 : source=="VARCHAR" ? 10 : source=="BLOB" ? 11 : (source=="MEMO" || (source=="TEXT" && origin=="MDBTOOLS_MYSQL")) ? 12 : source=="GUID" ? 15 : -1;
                 bool found=false;
                 if(size>0 && (code!=10 || (origin!="MDBTOOLS_MYSQL" && origin!="DAO_NATIVE"))) throw VbaRuntimeError(3251,"DAO source field capacity provenance unavailable");
                 for(auto& column:columns) if(column.name.toCaseFolded()==name) {
                     column.sourceType=code;column.sourceSize=static_cast<int>(size);
+                    if(code==20) {const auto precision=object.value("source_precision"),scale=object.value("source_scale");const auto p=precision.toDouble(-1),s=scale.toDouble(-1);if(column.type!="DECIMAL_EXACT" || !precision.isDouble() || !scale.isDouble() || p<1 || p>28 || std::floor(p)!=p || s<0 || s>p || std::floor(s)!=s) throw VbaRuntimeError(3251,"DAO: Decimal source precision/scale is not proven");}
                     if(origin=="DAO_NATIVE" && object.contains("native_required")) {
                         const auto required=object.value("native_required");
                         if(!required.isBool() || (required.toBool() && !notNull.value(name))) throw VbaRuntimeError(3251,"DAO native Required definition is not enforced");
@@ -931,8 +932,8 @@ public:
         return VbaValue::integer(static_cast<std::int16_t>(code));
     }
     VbaValue fieldDataUpdatable(const QString& name) const {
-        (void)fieldType(name);
-        return VbaValue::logical(!readOnly_ && !frozen_ && connectionUpdatable(db_));
+        const auto declaration=fieldType(name);
+        return VbaValue::logical(declaration!="DECIMAL_EXACT" && !readOnly_ && !frozen_ && connectionUpdatable(db_));
     }
     VbaValue fieldAttributes(const QString& name) const {
         (void)fieldType(name);
@@ -1213,7 +1214,7 @@ private:
                 if(field.required) data_->requiredFields.insert(key,*field.required);if(field.allowZeroLength) data_->allowZeroLengthFields.insert(key,*field.allowZeroLength);
                 const auto code=field.sourceType ? field.sourceType : provenDaoFieldType(field.type);
                 data_->daoTypes.insert(key,code);
-                const auto size=code<=0 ? -1 : code==10 ? (field.sourceSize>0 ? field.sourceSize : -1)
+                const auto size=(code<=0 || code==20) ? -1 : code==10 ? (field.sourceSize>0 ? field.sourceSize : -1)
                     : static_cast<int>(fixedDaoFieldSize(code).number);
                 data_->definitionSizes.insert(key,size);
                 if(const auto expression=nativeFieldDefaultExpression(field)) data_->defaultExpressions.insert(key,*expression);

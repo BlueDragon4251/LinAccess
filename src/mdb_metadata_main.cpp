@@ -36,7 +36,8 @@ int main(int argc,char** argv) {
     if(argc==2 && app.arguments()[1]=="--version") { printf("LinAccess MDB metadata1; MDBTools%s\n",mdb_get_version()); return 0; }
     const bool singles=argc==4 && app.arguments()[1]=="--single-values";
     const bool doubles=argc==4 && app.arguments()[1]=="--double-values";
-    const bool floating=singles || doubles;
+    const bool decimals=argc==4 && app.arguments()[1]=="--decimal-values";
+    const bool floating=singles || doubles || decimals;
     if(argc!=3 && !floating) return 2;
     try {
         const auto args=app.arguments(); const int filePosition=floating ? 2 : 1,tablePosition=floating ? 3 : 2;
@@ -53,7 +54,7 @@ int main(int argc,char** argv) {
         mdb_read_indices(table.get());
         if(!table->indices || table->indices->len!=table->num_idxs) throw 1;
         const bool displaySupported=!floating && mdb->f->jet_version==MDB_VER_JET4;
-        QJsonArray columns,indexes,singleColumns,doubleColumns,counterColumns,fieldProperties; QVector<const MdbColumn*> singleFields,doubleFields; QSet<QString> columnNames,indexNames;
+        QJsonArray columns,indexes,singleColumns,doubleColumns,decimalColumns,decimalNames,counterColumns,fieldProperties; QVector<const MdbColumn*> singleFields,doubleFields,decimalFields; QSet<QString> columnNames,indexNames;
         for(unsigned i=0;i<table->columns->len;++i) {
             const auto* column=static_cast<MdbColumn*>(g_ptr_array_index(table->columns,i)); if(!column) throw 1;
             const auto name=checkedName(column->name,sizeof(column->name));
@@ -65,10 +66,18 @@ int main(int argc,char** argv) {
             }fieldProperties.append(properties);}
             if(column->col_type==MDB_FLOAT) { singleColumns.append(name); singleFields.append(column); }
             if(column->col_type==MDB_DOUBLE) { doubleColumns.append(name); doubleFields.append(column); }
+            if(column->col_type==MDB_NUMERIC) {
+                // MDBTools numeric(p,s) export exposes precision as col_scale and
+                // fractional scale as col_prec (also its numeric(p,s) export).
+                // The asymmetric independent Jet fixture verifies these roles.
+                const auto precision=column->col_scale,scale=column->col_prec;
+                if(mdb->f->jet_version!=MDB_VER_JET4 || column->col_size!=17 || precision<1 || precision>28 || scale<0 || scale>precision) throw 1;
+                decimalNames.append(name);decimalFields.append(column);decimalColumns.append(QJsonObject{{"name",name},{"precision",precision},{"scale",scale}});
+            }
         }
         if(floating) {
-            const auto& selected=doubles ? doubleFields : singleFields;
-            const int width=doubles ? 8 : 4;
+            const auto& selected=decimals ? decimalFields : doubles ? doubleFields : singleFields;
+            const int width=decimals ? 17 : doubles ? 8 : 4;
             static_assert(sizeof(float)==4 && std::numeric_limits<float>::is_iec559);
             QJsonArray rows; qsizetype cells=0; mdb_rewind_table(table.get());
             if(!selected.isEmpty()) while(mdb_fetch_row(table.get())) {
@@ -76,7 +85,8 @@ int main(int argc,char** argv) {
                 for(const auto* column:selected) {
                     if(!column->cur_value_len) { values.append(QJsonValue::Null); continue; }
                     if(column->cur_value_len!=width || column->cur_value_start<0 || column->cur_value_start>mdb->fmt->pg_size-width) throw 1;
-                    if(doubles) {
+                    if(decimals) {values.append(QString::fromLatin1(QByteArray(reinterpret_cast<const char*>(mdb->pg_buf)+column->cur_value_start,17).toHex()));}
+                    else if(doubles) {
                         const auto value=mdb_get_double(mdb->pg_buf,column->cur_value_start);
                         values.append(QString("%1").arg(std::bit_cast<quint64>(value),16,16,QChar('0')));
                     } else {
@@ -88,7 +98,7 @@ int main(int argc,char** argv) {
             }
             if(digest(args[filePosition])!=before) throw 1;
             output({{"version",1},{"source_table",args[tablePosition]},{"source_sha256",QString::fromLatin1(before)},
-                {"columns",doubles ? doubleColumns : singleColumns},{"rows",rows}},16*1024*1024);
+                {"columns",decimals ? decimalNames : doubles ? doubleColumns : singleColumns},{"decimal_columns",decimalColumns},{"rows",rows}},16*1024*1024);
             return 0;
         }
         // Jet3/4 table-definition state stores the last allocated Long,
@@ -123,7 +133,7 @@ int main(int argc,char** argv) {
             }
             indexes.append(QJsonObject{{"name",name},{"kind",index->index_type},{"flags",index->flags},{"fields",fields}});
         }
-        QJsonObject root{{"version",1},{"source_table",args[tablePosition]},{"library",QString::fromUtf8(mdb_get_version())},{"columns",columns},{"indexes",indexes},{"single_columns",singleColumns},{"double_columns",doubleColumns},{"counter_columns",counterColumns},{"source_sha256",QString::fromLatin1(before)}};
+        QJsonObject root{{"version",1},{"source_table",args[tablePosition]},{"library",QString::fromUtf8(mdb_get_version())},{"columns",columns},{"indexes",indexes},{"single_columns",singleColumns},{"double_columns",doubleColumns},{"decimal_columns",decimalColumns},{"counter_columns",counterColumns},{"source_sha256",QString::fromLatin1(before)}};
         if(displaySupported) {root.insert("field_properties",fieldProperties);root.insert("field_properties_format","JET4");}
         if(digest(args[filePosition])!=before) throw 1;
         output(root,1024*1024);

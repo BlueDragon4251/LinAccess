@@ -1,4 +1,5 @@
 #include "access_floating_metadata.hpp"
+#include "vba_decimal.hpp"
 #include <QCryptographicHash>
 #include <QFile>
 #include <QJsonArray>
@@ -15,6 +16,40 @@
 #include <locale>
 #include <QRegularExpression>
 namespace linaccess {
+QMap<QString,QPair<int,int>> checkedAccessDecimalColumnTypes(const QByteArray& json,const QStringList& names) {
+    const auto fail=[] {throw std::runtime_error("Decimal-Quelltypen sind unvollständig oder widersprüchlich");};
+    const auto root=QJsonDocument::fromJson(json).object();QMap<QString,QPair<int,int>> result;
+    if(!root.contains("decimal_columns")) return result;
+    if(root.value("version").toDouble(-1)!=1 || !root.value("decimal_columns").isArray() || !root.value("columns").isArray()) fail();
+    const auto columns=root.value("columns").toArray();if(columns.size()!=names.size()) fail();
+    QSet<QString> actual;for(qsizetype i=0;i<names.size();++i) {if(columns[i].toString()!=names[i] || names[i].isEmpty() || actual.contains(names[i].toCaseFolded())) fail();actual.insert(names[i].toCaseFolded());}
+    for(const auto& item:root.value("decimal_columns").toArray()) {
+        if(!item.isObject()) fail();const auto object=item.toObject();const auto name=object.value("name").toString().toCaseFolded();
+        const auto precision=object.value("precision").toDouble(-1),scale=object.value("scale").toDouble(-1);
+        if(!actual.contains(name) || result.contains(name) || !object.value("precision").isDouble() || !object.value("scale").isDouble() || precision<1 || precision>28 || std::floor(precision)!=precision || scale<0 || scale>precision || std::floor(scale)!=scale) fail();
+        result.insert(name,{static_cast<int>(precision),static_cast<int>(scale)});
+    }
+    return result;
+}
+AccessDecimalValues checkedAccessDecimalValues(const QByteArray& json,const QStringList& names,const QString& sourceTable,const QMap<QString,QPair<int,int>>& expected) {
+    const auto fail=[] {throw std::runtime_error("Exakte Decimal-Quelldaten sind unvollständig oder widersprüchlich");};
+    if(json.isEmpty() || json.size()>16*1024*1024 || names.isEmpty()) fail();const auto root=QJsonDocument::fromJson(json).object();
+    if(root.value("source_table").toString()!=sourceTable || !root.value("rows").isArray()) fail();
+    const auto types=checkedAccessDecimalColumnTypes(json,names);if(types!=expected) fail();
+    const auto digest=root.value("source_sha256").toString();if(!QRegularExpression("^[0-9a-fA-F]{64}$").match(digest).hasMatch()) fail();
+    const auto rows=root.value("rows").toArray();if(rows.size()>1000000/names.size()) fail();AccessDecimalValues result;result.rowCount=rows.size();result.sourceDigest=digest.toLatin1().toLower();
+    for(const auto& name:names) result.columns.insert(name.toCaseFolded(),{});
+    for(const auto& row:rows) {
+        if(!row.isArray() || row.toArray().size()!=names.size()) fail();const auto values=row.toArray();
+        for(qsizetype i=0;i<names.size();++i) {
+            auto& target=result.columns[names[i].toCaseFolded()];if(values[i].isNull()) {target.append(std::nullopt);continue;}
+            const auto raw=values[i].toString();if(!values[i].isString() || !QRegularExpression("^[0-9a-fA-F]{34}$").match(raw).hasMatch()) fail();const auto bytes=QByteArray::fromHex(raw.toLatin1());const auto type=types.value(names[i].toCaseFolded());
+            target.append(QString::fromStdString(decimalFromJetNumeric(std::vector<unsigned char>(bytes.cbegin(),bytes.cend()),type.first,type.second).text));
+        }
+    }
+    return result;
+}
+
 QByteArray accessSourceDigest(const QString& path) {
     QFile source(path); if(!source.open(QIODevice::ReadOnly)) throw std::runtime_error("Single-Quelle kann nicht gelesen werden");
     QCryptographicHash hash(QCryptographicHash::Sha256); if(!hash.addData(&source)) throw std::runtime_error("Single-Quellhash konnte nicht geprüft werden");

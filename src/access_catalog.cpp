@@ -191,6 +191,12 @@ QByteArray AccessCatalog::doubleValues(const QString& name) const {
     return values;
 }
 
+QByteArray AccessCatalog::decimalValues(const QString& name) const {
+    const auto values=tool("linaccess-mdb-metadata",{"--decimal-values",file_,name});
+    if(values.isEmpty() || values.size()>16*1024*1024 || !QJsonDocument::fromJson(values).isObject()) throw std::runtime_error("Exakte Decimal-Quelldaten sind nicht verfügbar");
+    return values;
+}
+
 QString AccessCatalog::tableSchema(const QString& name) const {
     auto schema = QString::fromUtf8(tool("mdb-schema", {"--default-values", "-T", name, file_, "sqlite"}));
     // MDBTools 1.0.0's SQLite backend omits all keys and indexes. Its MySQL

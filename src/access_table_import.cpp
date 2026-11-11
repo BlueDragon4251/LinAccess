@@ -3,6 +3,7 @@
 #include "access_index_metadata.hpp"
 #include "access_floating_metadata.hpp"
 #include "access_autonumber.hpp"
+#include "vba_decimal.hpp"
 #include "jet_sql_functions.hpp"
 #include <QMap>
 #include <QFile>
@@ -155,8 +156,8 @@ AccessTableSchema parseMdbSchema(const QString& schema) {
         QString type;
         if (native == "INTEGER" || native == "INT" || native == "SMALLINT"
             || native == "TINYINT" || native == "BIT") type = "INTEGER";
-        else if (native == "REAL" || native == "FLOAT" || native == "DOUBLE"
-                 || native == "NUMERIC" || native == "DECIMAL") type = "REAL";
+        else if (native == "REAL" || native == "FLOAT" || native == "DOUBLE") type = "REAL";
+        else if(native=="NUMERIC" || native=="DECIMAL") type="DECIMAL_EXACT";
         else if (native == "VARCHAR" || native == "TEXT" || native == "CHAR"
                  || native == "DATETIME" || native == "DATE" || native == "TIME"
                  || native == "MEMO") type = "TEXT";
@@ -173,6 +174,10 @@ AccessTableSchema parseMdbSchema(const QString& schema) {
         if (generated && type!="INTEGER") return {};
         result.columns.append({match.captured(1).replace("``", "`"), type, native,
             QRegularExpression("\\bNOT\\s+NULL\\b",QRegularExpression::CaseInsensitiveOption).match(modifiers).hasMatch(), 0,generated});
+        if(type=="DECIMAL_EXACT") {
+            const auto shape=QRegularExpression(R"(^\s*\(\s*([0-9]+)\s*(?:,\s*([0-9]+)\s*)?\))").match(rawModifiers);
+            if(shape.hasMatch()) {bool p=false,q=true;const auto precision=shape.captured(1).toInt(&p),scale=shape.captured(2).isEmpty() ? 0 : shape.captured(2).toInt(&q);if(!p || !q || precision<1 || precision>28 || scale<0 || scale>precision) return {};result.columns.last().sourcePrecision=precision;result.columns.last().sourceScale=scale;}
+        }
         const auto defaultTag=QRegularExpression("\\bDEFAULT\\b",QRegularExpression::CaseInsensitiveOption).match(modifiers);
         if(defaultTag.hasMatch()) {
             auto token=rawModifiers.mid(defaultTag.capturedEnd()).trimmed();
@@ -189,9 +194,18 @@ AccessTableSchema parseMdbSchema(const QString& schema) {
         }
         if (!found) return {};
     }
+    QStringList nativeNames;for(const auto& column:result.columns) nativeNames.append(column.name);
+    QMap<QString,QPair<int,int>> decimals;
+    try {if(!result.sourceIndexMetadata.isEmpty()) decimals=checkedAccessDecimalColumnTypes(result.sourceIndexMetadata,nativeNames);}catch(const std::exception&) {return {};}
     for (auto& column : result.columns) {
         if (sourceTypes.contains(column.name)) column.sourceType = sourceTypes.value(column.name);
         column.sourceOrigin=sourceOrigins.take(column.name);
+        if(column.sourceType=="DECIMAL" || column.sourceType=="NUMERIC") column.sqliteType="DECIMAL_EXACT";
+        if(decimals.contains(column.name.toCaseFolded())) {
+            const auto shape=decimals.take(column.name.toCaseFolded());
+            if(column.sourcePrecision && (column.sourcePrecision!=shape.first || column.sourceScale!=shape.second)) return {};
+            column.sourcePrecision=shape.first;column.sourceScale=shape.second;column.sourceType="DECIMAL";column.sqliteType="DECIMAL_EXACT";
+        }
         if(!column.sourceOrigin.isEmpty() && !sourceTypes.contains(column.name)) return {};
         if(sourceSizes.contains(column.name)) {
             if(column.sourceType!="VARCHAR" || column.sourceOrigin!="MDBTOOLS_MYSQL") return {};
@@ -204,7 +218,7 @@ AccessTableSchema parseMdbSchema(const QString& schema) {
         if (column.autoNumber) column.required=true;
     }
     if (!counters.isEmpty()) return {};
-    if(!sourceOrigins.isEmpty() || !sourceSizes.isEmpty()) return {};
+    if(!sourceOrigins.isEmpty() || !sourceSizes.isEmpty() || !decimals.isEmpty()) return {};
     if(!result.sourceIndexMetadata.isEmpty()) {
         try {
             QStringList columnNames,primary; for(const auto& column:result.columns) columnNames.append(column.name);
@@ -256,6 +270,7 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
     const auto sourceIndexes=schema.sourceIndexMetadata.isEmpty() ? QVector<AccessSourceIndex>{} : checkedAccessSourceIndexes(schema.sourceIndexMetadata,actualNames);
     std::optional<AccessSingleValues> exactSingles;
     std::optional<AccessDoubleValues> exactDoubles;
+    std::optional<AccessDecimalValues> exactDecimals;
     const auto& floatingReadPath=sourceReadPath.isEmpty() ? sourceFile : sourceReadPath;
     if(floatingSource==AccessFloatingSource::NativeMdbBits && schema.sourceIndexMetadata.isEmpty())
         for(const auto& column:columns) if(column.sourceType=="SINGLE" || column.sourceType=="DOUBLE") throw fail("Originale Gleitkomma-Quellmetadaten fehlen");
@@ -290,6 +305,14 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
                 if(accessSourceDigest(floatingReadPath)!=exactDoubles->sourceDigest) throw fail("Double-Quelle wurde während des Lesens verändert");
             }
         } else if(doubleNames.isArray() && !doubleNames.toArray().isEmpty()) throw fail("Double-Quelltypen sind nicht nachgewiesen");
+    }
+    if(floatingSource==AccessFloatingSource::NativeMdbBits) {
+        QStringList decimalNames;QMap<QString,QPair<int,int>> declared;
+        for(const auto& column:columns) if(column.sqliteType=="DECIMAL_EXACT") {decimalNames.append(column.name);declared.insert(column.name.toCaseFolded(),{column.sourcePrecision,column.sourceScale});}
+        if(!decimalNames.isEmpty()) {
+            if(schema.sourceIndexMetadata.isEmpty() || checkedAccessDecimalColumnTypes(schema.sourceIndexMetadata,actualNames)!=declared) throw fail("Decimal-Quellpräzision/-skala fehlt oder widerspricht dem Schema");
+            if(insertOnly || rows.size()>1) {const auto table=QJsonDocument::fromJson(schema.sourceIndexMetadata).object().value("source_table").toString();exactDecimals=checkedAccessDecimalValues(AccessCatalog(floatingReadPath).decimalValues(table),decimalNames,table,declared);if(exactDecimals->rowCount!=static_cast<qsizetype>(rows.size()-1) || accessSourceDigest(floatingReadPath)!=exactDecimals->sourceDigest) throw fail("Decimal-Quelle/CSV-Zeilen oder Quellhash widersprechen sich");}
+        }
     }
     QMap<QString,qint32> sourceCounterStates;
     QByteArray counterDigest;
@@ -340,11 +363,15 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
         if (column.name.isEmpty() || seen.contains(column.name.toCaseFolded())
             || rows[0][i].value != column.name.toUtf8().toStdString()
             || (column.sqliteType != "TEXT" && column.sqliteType != "INTEGER"
-                && column.sqliteType != "REAL" && column.sqliteType != "BLOB")
+                && column.sqliteType != "REAL" && column.sqliteType != "BLOB" && column.sqliteType!="DECIMAL_EXACT")
             || (column.autoNumber && column.sqliteType!="INTEGER")
             || column.sourceSize<0 || column.sourceSize>255
             || (column.sourceSize>0 && (column.sourceType!="VARCHAR" || column.sourceOrigin!="MDBTOOLS_MYSQL")))
             throw fail("Spaltenname/-typ stimmt nicht mit MDBTools überein");
+        if(column.sqliteType=="DECIMAL_EXACT") {
+            if(column.sourcePrecision<1 || column.sourcePrecision>28 || column.sourceScale<0 || column.sourceScale>column.sourcePrecision || (column.sourceType!="DECIMAL" && column.sourceType!="NUMERIC")) throw fail("Decimal benötigt belegte Präzision/Skala und Quelltyp");
+            if(column.hasDefault && column.sqlDefault.compare("NULL",Qt::CaseInsensitive)!=0) throw fail("Nicht-NULL-Decimal-Standardwerte sind noch nicht nachgewiesen");
+        } else if(column.sourcePrecision || column.sourceScale) throw fail("Decimal-Präzision/Skala auf anderem Spaltentyp");
         if(column.hasDefault) {
             const auto literal=nativeDefaultLiteral(column.sourceDefault);
             if(!literal || *literal!=column.sqlDefault) throw fail("Nicht unterstützter oder widersprüchlicher Standardwert");
@@ -358,6 +385,7 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
             + (nativeCounter(column) ? " PRIMARY KEY AUTOINCREMENT" : descendingSinglePrimary && column.primaryKeyOrder ? " PRIMARY KEY DESC" : QString{})
             + (!nativeCounter(column) && column.autoNumber ? " DEFAULT ("+accessCounterDefault(tableName,column.name)+")" : QString{})
             + (!column.autoNumber && column.hasDefault ? " DEFAULT "+column.sqlDefault : QString{})
+            + (column.sqliteType=="DECIMAL_EXACT" ? " CHECK (linaccess_jet_decimal_field_valid("+sqlQuote(column.name)+","+QString::number(column.sourcePrecision)+","+QString::number(column.sourceScale)+"))" : QString{})
             + (column.required || properties.required.value_or(false) || column.primaryKeyOrder || column.autoNumber ? " NOT NULL" : "")
             + (properties.allowZeroLength && !*properties.allowZeroLength ? " CHECK (linaccess_jet_nonempty_text("+sqlQuote(column.name)+"))" : QString{})
             + (column.sourceSize>0 ? " CHECK (linaccess_jet_text_capacity("+sqlQuote(column.name)+","+QString::number(column.sourceSize)+"))" : QString{});
@@ -409,10 +437,16 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
                 const bool csvNull=!cell.quoted && cell.value=="\x1e";
                 if(hasSingleProof && ((*proof)[static_cast<qsizetype>(r-1)].has_value()==csvNull)) throw fail("Single-NULL-Quelle und CSV widersprechen sich");
                 if(hasDoubleProof && ((*doubleProof)[static_cast<qsizetype>(r-1)].has_value()==csvNull)) throw fail("Double-NULL-Quelle und CSV widersprechen sich");
+                std::optional<QString> decimalSource;
+                if(exactDecimals && columns[c].sqliteType=="DECIMAL_EXACT") {const auto found=exactDecimals->columns.constFind(columns[c].name.toCaseFolded());if(found==exactDecimals->columns.cend()) throw fail("Decimal-Quellspalte fehlt");decimalSource=found.value()[static_cast<qsizetype>(r-1)];if(decimalSource.has_value()==csvNull) throw fail("Decimal-NULL-Quelle und CSV widersprechen sich");}
                 // ASCII 0x1E is supplied by `mdb-export -0`: only unquoted
                 // single-character markers mean NULL, not quoted literal text.
                 if (!cell.quoted && cell.value == "\x1e") {
                     converted = QVariant();
+                } else if(columns[c].sqliteType=="DECIMAL_EXACT") {
+                    const auto decimal=decimalLiteral(value.toStdString());if(!decimalFitsField(decimal,columns[c].sourcePrecision,columns[c].sourceScale)) throw fail("Decimal-Wert überschreitet Präzision/Skala");
+                    const auto bytes=decimalSqlKey(decimal);if(decimalSource && bytes!=decimalSqlKey(decimalLiteral(decimalSource->toStdString()))) throw fail("Decimal-Rohwert und CSV-Snapshot widersprechen sich");
+                    converted=QByteArray(reinterpret_cast<const char*>(bytes.data()),bytes.size());
                 } else if (columns[c].sourceType == "BOOLEAN" || columns[c].sourceType == "BIT") {
                     if (value == "1" || value == "-1" || value.compare("TRUE",Qt::CaseInsensitive) == 0) converted = qlonglong(-1);
                     else if (value == "0" || value.compare("FALSE",Qt::CaseInsensitive) == 0) converted = qlonglong(0);
@@ -472,6 +506,7 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
                 {"required", col.required}, {"primary_key_order", col.primaryKeyOrder},
                 {"auto_number", col.autoNumber}, {"auto_number_native", col.autoNumber},
                 {"source_origin", col.sourceOrigin}, {"source_size", col.sourceSize},
+                {"source_precision",col.sourcePrecision},{"source_scale",col.sourceScale},
                 {"has_default", col.hasDefault}, {"source_default", col.sourceDefault}, {"default_sql", col.sqlDefault},
                 {"default_native", col.hasDefault && !col.autoNumber}};
                 if(sourceDisplay) {entry.insert("source_display_properties_proven",true);const auto properties=sourceDisplay->value(col.name.toCaseFolded());if(properties.formatProven) entry.insert("source_format_properties_proven",true);if(properties.format) {entry.insert("source_format",*properties.format);entry.insert("source_format_id",QUuid::createUuid().toString(QUuid::WithoutBraces));}if(properties.required) entry.insert("source_required",*properties.required);if(properties.allowZeroLength) entry.insert("source_allow_zero_length",*properties.allowZeroLength);if(properties.caption) {entry.insert("source_caption",*properties.caption);entry.insert("source_caption_id",QUuid::createUuid().toString(QUuid::WithoutBraces));}if(properties.description) {entry.insert("source_description",*properties.description);entry.insert("source_description_id",QUuid::createUuid().toString(QUuid::WithoutBraces));}}metadata.append(entry);}

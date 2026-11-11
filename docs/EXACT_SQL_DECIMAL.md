@@ -17,7 +17,7 @@ transport; numerical exactness does not establish Access formatting identity.
 Supported SELECT projection aliases retain their proven types. Unknown functions,
 unsupported aggregates, nested SELECT/UNION, action/make-table queries
 and unproven Decimal predicate contexts refuse instead of executing SQLite blob arithmetic.
-Physical Jet Decimal creation, import, precision/scale properties, writable Decimal
+Bounded exact Jet Numeric import is documented in [Native Jet Decimal import](NATIVE_JET_DECIMAL_IMPORT.md). Physical Jet Decimal creation, complete precision/scale properties, writable Decimal
 fields and lossless MDB round trips remain open. Derived DAO Filter/Sort snapshots
 now retain proven result types through the trusted wrapper described in
 [Native typed query snapshots](NATIVE_TYPED_QUERY_SNAPSHOTS.md). Native typed Find is now

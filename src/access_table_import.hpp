@@ -23,6 +23,7 @@ struct AccessColumn {
     int sourceSize{};
     bool hasDefault{};
     QString sourceDefault,sqlDefault;
+    int sourcePrecision{},sourceScale{};
 };
 
 struct AccessIndex {

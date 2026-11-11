@@ -55,6 +55,20 @@ VbaValue decimalFromSqlKey(const std::vector<unsigned char>& bytes) {
     if(decimalSqlKey(result)!=bytes) throw VbaRuntimeError(13,"Decimal SQL encoding is not an exact96-bit value");
     return result;
 }
+bool decimalFitsField(const VbaValue& input,int precision,int scale) {
+    if(precision<1 || precision>28 || scale<0 || scale>precision) throw VbaRuntimeError(5,"Decimal field precision/scale invalid");
+    const auto value=parts(decimalFromSqlKey(decimalSqlKey(input)));
+    if(value.scale>scale) return false;
+    return value.magnitude*power(scale-value.scale)<power(precision);
+}
+VbaValue decimalFromJetNumeric(const std::vector<unsigned char>& bytes,int precision,int scale) {
+    if(bytes.size()!=17 || (bytes[0]!=0 && bytes[0]!=128) || precision<1 || precision>28 || scale<0 || scale>precision) throw VbaRuntimeError(13,"Jet Numeric encoding/precision/scale invalid");
+    cpp_int magnitude=0;
+    // Jet4 stores four high-to-low 32-bit words, each word little-endian.
+    for(int word=0;word<4;++word) for(int byte=3;byte>=0;--byte) {magnitude<<=8;magnitude+=bytes[1+4*word+byte];}
+    if(magnitude>=power(precision)) throw VbaRuntimeError(6,"Jet Numeric coefficient exceeds declared precision");
+    return store({magnitude,scale,bytes[0]!=0},true);
+}
 VbaValue convertDecimal(const VbaValue& input) {
     const auto value=scalarVbaValue(input);if(value.kind==VbaValue::Kind::Decimal) return value;
     if(value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"Invalid Null Decimal conversion");

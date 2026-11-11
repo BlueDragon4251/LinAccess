@@ -702,6 +702,19 @@ template<bool Between,bool RequireDecimal=true> void typedNumericPredicate(sqlit
       catch(...) {functionError(context,VbaRuntimeError(7,"Decimal predicate failed"));}
 }
 
+void decimalFieldValid(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
+    auto& native=api();try {
+        if(count!=3 || native.type(args[1])!=SQLITE_INTEGER || native.type(args[2])!=SQLITE_INTEGER) throw VbaRuntimeError(450,"Decimal field constraint requires precision/scale");
+        const auto precision=native.integer(args[1]),scale=native.integer(args[2]);
+        if(precision<1 || precision>28 || scale<0 || scale>precision) throw VbaRuntimeError(5,"Decimal field constraint precision/scale invalid");
+        if(native.type(args[0])==SQLITE_NULL) {native.integerResult(context,1);return;}
+        if(native.type(args[0])!=SQLITE_BLOB) {native.integerResult(context,0);return;}
+        const auto value=qtFieldValue(boundSqlStorage(args[0],true),"DECIMAL_EXACT");
+        native.integerResult(context,decimalFitsField(value,static_cast<int>(precision),static_cast<int>(scale)) ? 1 : 0);
+    } catch(const VbaRuntimeError& failure) {functionError(context,failure);}
+      catch(...) {functionError(context,VbaRuntimeError(7,"Decimal field constraint failed"));}
+}
+
 // Fixed-size encoded state needs no placement construction or per-group heap owner.
 struct DecimalSumState { unsigned char encoded[24]; int error; bool seen; };
 void decimalSumStep(sqlite3_context* context,int,sqlite3_value** args) noexcept {
@@ -1309,6 +1322,7 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_bound_between",-1,&typedNumericPredicate<true,false>,nullptr,nullptr);
     ensure("linaccess_jet_decimal_in",-1,&typedNumericPredicate<false>,nullptr,nullptr);
     ensure("linaccess_jet_decimal_between",-1,&typedNumericPredicate<true>,nullptr,nullptr);
+    ensure("linaccess_jet_decimal_field_valid",3,&decimalFieldValid,nullptr,nullptr);
     ensure("linaccess_jet_decimal_sum",1,nullptr,&decimalSumStep,&decimalSumFinal);
     ensure("linaccess_jet_currency_sum",1,nullptr,&currencySumStep,&currencySumFinal);
     ensure("linaccess_jet_currency_add",2,&currencyAdd,nullptr,nullptr);

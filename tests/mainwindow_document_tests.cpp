@@ -3294,6 +3294,19 @@ End Sub
 
 }
 
+static void exerciseNativeDecimalClipboard() {
+    using namespace linaccess;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","decimal-grid-clipboard");db.setDatabaseName(":memory:");assert(db.open());QSqlQuery sql(db);assert(sql.exec("CREATE TABLE _la_import_log(source_file,kind,name,status,details)"));sql.finish();
+    const auto schema=parseMdbSchema("CREATE TABLE `decimal_copy_probe`\n(\n`v` NUMERIC(28,4)\n);\n");importAccessTable(db,"technical-decimal","decimal_copy_probe",schema,parseCsvDetailed("v\n9007199254740993.0001\n"));
+    assert(sql.exec("CREATE TABLE decimal_text_destination(value TEXT)"));assert(sql.exec("INSERT INTO decimal_text_destination VALUES('')"));sql.finish();
+    {
+        AccessTableModel source(nullptr,db);source.setEditStrategy(QSqlTableModel::OnManualSubmit);source.setTable("decimal_copy_probe");assert(source.select());AccessTableView sourceView;sourceView.setModel(&source);sourceView.setCurrentIndex(source.index(0,0));sourceView.selectionModel()->select(source.index(0,0),QItemSelectionModel::ClearAndSelect);assert(!(source.flags(source.index(0,0))&Qt::ItemIsEditable) && sourceView.copySelection() && QApplication::clipboard()->text()=="9007199254740993.0001");
+        AccessTableModel target(nullptr,db);target.setEditStrategy(QSqlTableModel::OnManualSubmit);target.setTable("decimal_text_destination");assert(target.select());AccessTableView targetView;targetView.setModel(&target);targetView.setCurrentIndex(target.index(0,0));assert(targetView.pasteSelection() && target.index(0,0).data().toString()=="9007199254740993.0001" && target.submitAll());
+        assert(sql.exec("SELECT value,typeof(value) FROM decimal_text_destination") && sql.next() && sql.value(0).toString()=="9007199254740993.0001" && sql.value(1).toString()=="text");sql.finish();
+    }
+    QApplication::clipboard()->clear();sql.clear();db.close();
+}
+
 int main(int argc,char** argv) {
     QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
     QApplication app(argc,argv); app.setQuitOnLastWindowClosed(false); app.setApplicationName("LinAccessSyntheticGuiTest"); app.setOrganizationName("LinAccessSyntheticTests");
@@ -3310,6 +3323,7 @@ int main(int argc,char** argv) {
     QSettings::setDefaultFormat(QSettings::IniFormat);
     QSettings::setPath(QSettings::IniFormat,QSettings::UserScope,temporary.path());
     exerciseNativeRelationDesigner();
+    exerciseNativeDecimalClipboard();
     const auto first=temporary.filePath("first.linaccess"),second=temporary.filePath("second.linaccess");
     auto seed=QSqlDatabase::addDatabase("QSQLITE","mainwindow-seed"); seed.setDatabaseName(first); assert(seed.open());
     QSqlQuery initial(seed); assert(initial.exec("CREATE TABLE records(id INTEGER PRIMARY KEY,value TEXT)"));

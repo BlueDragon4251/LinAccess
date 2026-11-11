@@ -7252,3 +7252,41 @@ offen, feste456/386/70 unverändert. Vorstand01f7172e/Baum
 695e8b6e64116ab78e26b6098c964fefc9cddadf privat/exakt veröffentlicht.
 Gesamtpaket-/Originalbeleg6c7cfa15 mit181,97s/7Hashesgleich liegt vorFind und
 Snapshot-Erweiterung. Direkt weiterentwickeln, keinZwischen-/Gesamtabschluss.
+
+
+Aktueller kombinierterDAO-Paket-/Originalbeleg (2026-11-11): Quelle
+93592236c316cbd4d786ce6f47e5e9c678438581, Baum
+0a86830d516404a90a935cf5f2403f55f9967654, privat/exakt veröffentlicht.
+Integrationsbau/DEB/Paketprüfung bestanden; Inventar/Original2/2 in183,40s
+bestanden (54,54s/128,85s), alle7 geschütztenHashwerte unverändert. Enthält
+typisierteDAO-Find-Kriterien sowie exakteDecimal-/typisierteFilter-Snapshots.
+BekannteOriginal-Makrogrenze bleibt unverändert; keine vollständigeAccess-
+Parität undkein initialisierterOriginal-Geschäftsablauf behauptet. Paket:
+/workspace/work/typed-dao-package/package/linaccess-0.7.0-Linux.deb.
+Der nachfolgendeJet-Numeric-Import ist darin noch nicht enthalten.
+Feste456/386/70 unverändert; unmittelbar weiterentwickeln.
+
+
+Exakter nativerJet-Numeric-Import (2026-11-11): NATIVE_JET_DECIMAL_IMPORT.md.
+Unabhängige echteJet4-Datei mitJackcess5.0.4 erzeugt/wiedergeöffnet (p28,s4/28,
+positive/negative28stelligeWerte,>2^53,1e-28,Null). MDBTools-SQLite deklariert
+Numeric alsINTEGER; NativeMetadaten und17-Byte-Rohwerte sind maßgeblich. Neues
+begrenztes --decimal-values imbestehendenReadOnly-Prozess prüftHash/Spalten/
+Zeilen/Null; MDBTools1.0.1 nutzt col_scale alsPräzision,col_prec alsSkala, gegen
+asymmetrischeDatei undUpstreambackend bestätigt.96-Bit-Integerdekodierung/
+CSV-Rohwertabgleich, Decimal-Fit(p,s),24-Byte-Schlüssel undSQLiteCHECK ohneDouble.
+p/s inQuellmetadaten erhalten. DAO-Typ20/ValueDecimal/DataUpdatableFalse und
+belegteSQL-Quelltypzuordnung ergänzt, keineField.Size erfunden. Datenblatt zeigt/
+kopiert exaktenText, typisierteMIME nutztText stattinternerSchlüssel; tatsächliches
+Kopieren/Einfügen inTextspalte exakt. Decimal-Zellen weiterreadonly, NichtNULL-
+QuellDefaults/NativeErstellung/volleProperty-/Locale-/MDB-Roundtripparität offen.
+BestehendeImportprüfung enthieltveralteteAddNew-Erwartung: gespeicherte94 korrekt,
+vorherigerSatz12 bleibt gemäßDAO_ADDNEW_CURRENT aktuell; Prüfung navigiert nun
+explizitüberLastModified, keinZähler-/Cursorcode dafürgeändert. App/Helper gebaut;
+abschließendes bestehendesGUI/Import-Bündel2/2 in17,43s bestanden (17,08/0,35),
+inklusiveunabhängigemMDB,Constraints/CSV-Mismatch/Rollback/Quellhash; alle7
+geschütztenHashwerte danacherneutgleich. Keine neueCTest-ID/Windows-Access-
+Ausführung oderneueKatalogpunkte. F014/F017/F055/F067/F068 offen,456/386/70fest.
+Vorstand93592236/Baum0a86830d516404a90a935cf5f2403f55f9967654 privat/exakt
+veröffentlicht; dessenGesamtpaket-/Originalbeleg183,40s liegt vordieserErweiterung.
+Direkt weiterentwickeln, keinZwischen-/Gesamtabschluss.

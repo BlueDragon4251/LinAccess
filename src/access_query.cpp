@@ -1953,16 +1953,20 @@ QMap<QString,QString> numericSourceFields(QSqlDatabase db,const QString& table,c
     if(previous!=cache->entries.cend() && previous->definition==definition && previous->physical==physical) return previous->fields;
     if(definition.size()>4*1024*1024) throw VbaRuntimeError(3251,"Numeric field declaration exceeds supported size");
     const auto document=QJsonDocument::fromJson(definition);if(!document.isArray() || document.array().size()>255) throw VbaRuntimeError(3251,"Numeric field declaration invalid");
-    static const QMap<QString,QString> types{{"BOOLEAN","BOOLEAN"},{"BIT","BOOLEAN"},{"TINYINT","INTEGER1"},{"SMALLINT","INTEGER2"},{"INT","INTEGER4"},{"SINGLE","SINGLE_REAL"},{"DOUBLE","DOUBLE"}};
-    static const QSet<QString> storage{"INTEGER","INT","BIGINT","INTEGER1","INTEGER2","INTEGER4","BOOL","BOOLEAN","SINGLE_REAL","REAL","DOUBLE","FLOAT","FLOAT8"};
+    static const QMap<QString,QString> types{{"DECIMAL","DECIMAL_EXACT"},{"NUMERIC","DECIMAL_EXACT"},{"BOOLEAN","BOOLEAN"},{"BIT","BOOLEAN"},{"TINYINT","INTEGER1"},{"SMALLINT","INTEGER2"},{"INT","INTEGER4"},{"SINGLE","SINGLE_REAL"},{"DOUBLE","DOUBLE"}};
+    static const QSet<QString> storage{"DECIMAL_EXACT","INTEGER","INT","BIGINT","INTEGER1","INTEGER2","INTEGER4","BOOL","BOOLEAN","SINGLE_REAL","REAL","DOUBLE","FLOAT","FLOAT8"};
     QMap<QString,QString> result;QSet<QString> seen;
     for(const auto& entry:document.array()) {
         const auto value=entry.toObject();if(!value.value("name").isString() || (value.contains("source_type") && !value.value("source_type").isString())) throw VbaRuntimeError(3251,"Numeric field declaration invalid");
         const auto name=value.value("name").toString().toCaseFolded();if(seen.contains(name)) throw VbaRuntimeError(5,"Numeric field declaration ambiguous");seen.insert(name);
         const auto type=types.value(value.value("source_type").toString().toUpper()),stored=physical.value(name);
+        if(type=="DECIMAL_EXACT") {
+            const auto precision=value.value("source_precision"),scale=value.value("source_scale");const auto p=precision.toDouble(-1),s=scale.toDouble(-1);
+            if(stored!="DECIMAL_EXACT" || !precision.isDouble() || !scale.isDouble() || p<1 || p>28 || std::floor(p)!=p || s<0 || s>p || std::floor(s)!=s) throw VbaRuntimeError(3251,"Exact Decimal source declaration/backing is not proven");
+        }
         if(type.isEmpty() || !storage.contains(stored)) continue;
         const auto canonical=stored=="BOOL" ? QString("BOOLEAN") : stored;
-        if(QSet<QString>{"INTEGER1","INTEGER2","INTEGER4","BOOLEAN","SINGLE_REAL","DOUBLE"}.contains(canonical) && canonical!=type) continue;
+        if(QSet<QString>{"DECIMAL_EXACT","INTEGER1","INTEGER2","INTEGER4","BOOLEAN","SINGLE_REAL","DOUBLE"}.contains(canonical) && canonical!=type) continue;
         result.insert(name,type);
     }
     if(cache->entries.size()>=128) cache->entries.clear();cache->entries.insert(key,{definition,physical,result});return result;

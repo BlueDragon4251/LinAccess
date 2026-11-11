@@ -3,6 +3,8 @@
 #include "access_catalog.hpp"
 #include "access_index_metadata.hpp"
 #include "access_floating_metadata.hpp"
+#include "vba_decimal.hpp"
+#include "vba_qt_value.hpp"
 #include <bit>
 #include <limits>
 #include "access_autonumber.hpp"
@@ -448,6 +450,33 @@ void verifyJetIndexCatalogReference(const QString& path) {
     std::cout<<"Actual Jet index catalog: original primary/secondary names, flags, mixed primary directions, persistence, refusal and source hash verified\n";
 }
 
+void verifyDecimalCsvContract() {
+    using namespace linaccess;
+    const auto schema=parseMdbSchema("CREATE TABLE `decimal_csv`\n(\n`v` NUMERIC(28,4)\n);\n");
+    assert(schema.columns.size()==1 && schema.columns[0].sqliteType=="DECIMAL_EXACT" && schema.columns[0].sourcePrecision==28 && schema.columns[0].sourceScale==4);
+    auto db=QSqlDatabase::addDatabase("QSQLITE","decimal-csv-contract");db.setDatabaseName(":memory:");assert(db.open());QSqlQuery query(db);assert(query.exec("CREATE TABLE _la_import_log(source_file,kind,name,status,details)"));query.finish();
+    const auto rows=parseCsvDetailed("v\n9007199254740993.0001\n");importAccessTable(db,"technical-decimal","decimal_csv",schema,rows);
+    assert(query.exec("SELECT v,typeof(v),length(v) FROM decimal_csv") && query.next() && query.value(1).toString()=="blob" && query.value(2).toInt()==24 && qtFieldValue(query.value(0),"DECIMAL_EXACT").text=="9007199254740993.0001");query.finish();
+    {AccessTableModel model(nullptr,db);model.setTable("decimal_csv");assert(model.select() && model.rowCount()==1 && model.data(model.index(0,0)).toString()=="9007199254740993.0001" && !(model.flags(model.index(0,0))&Qt::ItemIsEditable));assert(model.clipboardText(model.index(0,0))=="9007199254740993.0001" && model.formattedText(model.index(0,0))=="9007199254740993.0001");assert(!model.setData(model.index(0,0),QString("1.2")));}
+    assert(!query.exec("INSERT INTO decimal_csv VALUES(1.25)"));query.finish();const auto invalid=decimalSqlKey(decimalLiteral("1.00001"));assert(query.prepare("INSERT INTO decimal_csv VALUES(?)"));query.addBindValue(QByteArray(reinterpret_cast<const char*>(invalid.data()),invalid.size()));assert(!query.exec());query.finish();
+    auto badRows=rows;badRows[1][0].value="1.00001";bool refused=false;try{importAccessTable(db,"technical-decimal","decimal_bad_scale",schema,badRows);}catch(const std::exception&){refused=true;}assert(refused && !db.tables().contains("decimal_bad_scale"));
+    auto unknown=schema;unknown.columns[0].sourcePrecision=0;refused=false;try{importAccessTable(db,"technical-decimal","decimal_unknown_precision",unknown,rows);}catch(const std::exception&){refused=true;}assert(refused && !db.tables().contains("decimal_unknown_precision"));
+    assert(query.exec("SELECT COUNT(*) FROM decimal_csv") && query.next() && query.value(0).toInt()==1);query.finish();
+}
+void verifyJetDecimalReference(const QString& path) {
+    using namespace linaccess;const auto before=accessSourceDigest(path);AccessCatalog catalog(path);const auto schema=parseMdbSchema(catalog.tableSchema("decimal_probe"));assert(schema.columns.size()==3);
+    assert(schema.columns[1].sqliteType=="DECIMAL_EXACT" && schema.columns[1].sourcePrecision==28 && schema.columns[1].sourceScale==4 && schema.columns[2].sourceScale==28);
+    const QStringList names{"large","small"};const QMap<QString,QPair<int,int>> types{{"large",{28,4}},{"small",{28,28}}};const auto raw=checkedAccessDecimalValues(catalog.decimalValues("decimal_probe"),names,"decimal_probe",types);assert(raw.rowCount==5 && raw.sourceDigest==before && raw.columns.value("large")[0]==QString("999999999999999999999999.9999") && raw.columns.value("small")[0]==QString("0.0000000000000000000000000001"));
+    auto db=QSqlDatabase::addDatabase("QSQLITE","jet-decimal-reference");db.setDatabaseName(":memory:");assert(db.open());QSqlQuery query(db);assert(query.exec("CREATE TABLE _la_import_log(source_file,kind,name,status,details)"));query.finish();assert(importAccessDatabase(db,path)==1);
+    const char* expectedLarge[]={"999999999999999999999999.9999","-999999999999999999999999.9999","9007199254740993.0001","0",nullptr};const char* expectedSmall[]={"0.0000000000000000000000000001","-0.0000000000000000000000000001","0.1234567890123456789012345678","0",nullptr};
+    const auto records=makeDaoDatabase(db)->member("OpenRecordset",{VbaValue::string("SELECT id,large,small FROM decimal_probe ORDER BY id")}).object;
+    for(int row=0;row<5;++row) {assert(!records->member("EOF",{}).truthy() && records->item("id").asNumber()==row+1);for(int field=0;field<2;++field) {const auto name=field ? "small" : "large";const auto value=records->item(name);const auto expected=field ? expectedSmall[row] : expectedLarge[row];assert(records->member("Fields",{VbaValue::string(name)}).object->member("Type",{}).asNumber()==20);assert(!records->member("Fields",{VbaValue::string(name)}).object->member("DataUpdatable",{}).truthy());if(expected) assert(value.kind==VbaValue::Kind::Decimal && value.text==expected);else assert(value.kind==VbaValue::Kind::Null);}records->member("MoveNext",{});}assert(records->member("EOF",{}).truthy());records->member("Close",{});
+    assert(query.exec("SELECT id FROM decimal_probe ORDER BY large"));for(int id:{5,2,4,3,1}) assert(query.next() && query.value(0).toInt()==id);query.finish();
+    auto rows=parseCsvDetailed(AccessCatalog::exportTable(path,"decimal_probe",true).toStdString());rows[1][1].value="1";bool refused=false;try{importAccessTable(db,path,"decimal_tampered_csv",schema,rows,AccessBinaryEncoding::MdbToolsHex,AccessFloatingSource::NativeMdbBits);}catch(const std::exception&){refused=true;}assert(refused && !db.tables().contains("decimal_tampered_csv"));
+    assert(query.exec("SELECT definition FROM _la_table_schema WHERE table_name='decimal_probe'") && query.next());const auto metadata=QJsonDocument::fromJson(query.value(0).toByteArray()).array();assert(metadata[1].toObject().value("source_precision").toInt()==28 && metadata[1].toObject().value("source_scale").toInt()==4 && metadata[2].toObject().value("source_scale").toInt()==28);query.finish();
+    assert(accessSourceDigest(path)==before);std::cout<<"Independent technical Jet Numeric raw bytes, exact values, precision/scale, NULL, ordering, CSV mismatch refusal and unchanged source hash verified\n";
+}
+
 void verifyJetSingleReference(const QString& path) {
     using namespace linaccess;
     QFile input(path); assert(input.open(QIODevice::ReadOnly));
@@ -712,8 +741,8 @@ CREATE INDEX `label` ON `source` (`a``b`);
     write.clear(); file.close(); assert(file.open()); installJetSqlFunctions(file); write=QSqlQuery(file);
     assert(write.exec("INSERT INTO persistent(label)VALUES('reopen')") && idFor("reopen")==93);
     auto database=makeDaoDatabase(file); auto recordset=database->member("OpenRecordset",{VbaValue::string("persistent")}).object;
-    recordset->member("AddNew",{}); recordset->assignItem("label",VbaValue::string("dao")); recordset->member("Update",{}); assert(recordset->item("id").asNumber()==94);
-    recordset->member("AddNew",{}); recordset->assignItem("id",VbaValue{}); recordset->assignItem("label",VbaValue::string("dao null")); recordset->member("Update",{}); assert(recordset->item("id").asNumber()==95);
+    recordset->member("AddNew",{}); recordset->assignItem("label",VbaValue::string("dao")); recordset->member("Update",{});assert(recordset->item("id").asNumber()==12);recordset->assign("Bookmark",recordset->member("LastModified",{}));assert(recordset->item("id").asNumber()==94);
+    recordset->member("AddNew",{}); recordset->assignItem("id",VbaValue{}); recordset->assignItem("label",VbaValue::string("dao null")); recordset->member("Update",{});assert(recordset->item("id").asNumber()==94);recordset->assign("Bookmark",recordset->member("LastModified",{}));assert(recordset->item("id").asNumber()==95);
     recordset->member("AddNew",{}); recordset->assignItem("label",VbaValue::string("seed"));
     int duplicate=0; try { recordset->member("Update",{}); } catch (const VbaRuntimeError& error) { duplicate=error.number; }
     assert(duplicate==3022); recordset->member("Close",{});
@@ -790,6 +819,8 @@ CREATE INDEX `label` ON `source` (`a``b`);
     for(const auto* malformed:{"0","0x00","GG","00 1","00\n00"}) {
         bool rejected=false; try { (void)decodeMdbBinaryHex(malformed); } catch(const std::exception&) { rejected=true; } assert(rejected);
     }
+    verifyDecimalCsvContract();
+    const auto decimalReference=qEnvironmentVariable("LINACCESS_JET_DECIMAL_REFERENCE");if(!decimalReference.isEmpty()) verifyJetDecimalReference(decimalReference);
     const auto fieldFormatReference=qEnvironmentVariable("LINACCESS_JET_FIELD_FORMAT_REFERENCE");if(!fieldFormatReference.isEmpty()) verifyJetFieldFormatReference(fieldFormatReference);
     const auto fieldConstraintReference=qEnvironmentVariable("LINACCESS_JET_FIELD_CONSTRAINT_REFERENCE");if(!fieldConstraintReference.isEmpty()) verifyJetFieldConstraintReference(fieldConstraintReference);
     const auto fieldDisplayReference=qEnvironmentVariable("LINACCESS_JET_FIELD_DISPLAY_REFERENCE");if(!fieldDisplayReference.isEmpty()) verifyJetFieldDisplayReference(fieldDisplayReference);

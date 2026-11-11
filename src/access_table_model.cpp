@@ -21,7 +21,7 @@
 namespace linaccess {
 namespace {
 bool floatingDisplay(const QString& type) { return type!="CURRENCY_REAL" && (type.contains("REAL",Qt::CaseInsensitive) || type.contains("FLOA",Qt::CaseInsensitive) || type.contains("DOUB",Qt::CaseInsensitive)); }
-bool checkedDisplay(const QString& type) { return type=="CURRENCY_REAL" || type=="INTEGER1" || type=="INTEGER2" || type=="INTEGER4" || floatingDisplay(type); }
+bool checkedDisplay(const QString& type) { return type=="DECIMAL_EXACT" || type=="CURRENCY_REAL" || type=="INTEGER1" || type=="INTEGER2" || type=="INTEGER4" || floatingDisplay(type); }
 QVariant checkedInput(const QString& type,const QVariant& input) {
     const bool emptyNumeric=input.metaType().id()==QMetaType::QString && input.toString().isEmpty()
         && (type=="CURRENCY_REAL" || type.contains("INT",Qt::CaseInsensitive) || type.contains("REAL",Qt::CaseInsensitive) || type.contains("DATE",Qt::CaseInsensitive));
@@ -439,7 +439,7 @@ QVariant AccessTableModel::data(const QModelIndex& index,int role) const {
     // A null QString selects the text editor without losing SQL NULL identity.
     if(role==Qt::EditRole && raw.isNull() && !type.contains("BOOL",Qt::CaseInsensitive) && !type.contains("BLOB",Qt::CaseInsensitive))
         return QVariant(QMetaType::fromType<QString>());
-    if(!checkedDisplay(type) || raw.isNull() || (role==Qt::EditRole && type!="CURRENCY_REAL" && !floatingDisplay(type))) return raw;
+    if(!checkedDisplay(type) || raw.isNull() || (role==Qt::EditRole && type!="DECIMAL_EXACT" && type!="CURRENCY_REAL" && !floatingDisplay(type))) return raw;
     try {
         const auto value=qtFieldValue(raw,type);
         if(floatingDisplay(type) && value.kind==VbaValue::Kind::Number)
@@ -454,7 +454,7 @@ QString AccessTableModel::formattedText(const QModelIndex& index) const {
     const auto mask=formats_.value(record().fieldName(index.column()).toCaseFolded());
     const auto raw=QSqlTableModel::data(index,Qt::EditRole);
     if(mask.isEmpty() || raw.isNull() || columnType(index.column()).contains("BOOL",Qt::CaseInsensitive)) return clipboardText(index);
-    if(raw.metaType().id()==QMetaType::QByteArray || columnType(index.column()).contains("BLOB",Qt::CaseInsensitive)) throw VbaRuntimeError(3251,"Binary cells have no text format");
+    if((raw.metaType().id()==QMetaType::QByteArray && columnType(index.column())!="DECIMAL_EXACT") || columnType(index.column()).contains("BLOB",Qt::CaseInsensitive)) throw VbaRuntimeError(3251,"Binary cells have no text format");
     return QString::fromStdString(formatAccessValue(qtFieldValue(raw,columnType(index.column())),mask.toUtf8().toStdString(),true).asText());
 }
 QString AccessTableModel::clipboardText(const QModelIndex& index) const {
@@ -463,7 +463,7 @@ QString AccessTableModel::clipboardText(const QModelIndex& index) const {
     const auto raw=QSqlTableModel::data(index,Qt::EditRole);
     if(raw.isNull()) return {};
     const auto type=columnType(index.column());
-    if(raw.metaType().id()==QMetaType::QByteArray || type.contains("BLOB",Qt::CaseInsensitive)) throw VbaRuntimeError(3251,"Binary cells cannot be copied as text");
+    if((raw.metaType().id()==QMetaType::QByteArray && type!="DECIMAL_EXACT") || type.contains("BLOB",Qt::CaseInsensitive)) throw VbaRuntimeError(3251,"Binary cells cannot be copied as text");
     const auto value=qtFieldValue(raw,type);
     if(value.kind==VbaValue::Kind::Number)
         return QString::number(value.number,'g',std::numeric_limits<double>::max_digits10);
@@ -473,7 +473,7 @@ Qt::ItemFlags AccessTableModel::flags(const QModelIndex& index) const {
     auto result=QSqlTableModel::flags(index); if(!index.isValid()) return result;
     if(readOnly_) return result & ~(Qt::ItemIsEditable|Qt::ItemIsUserCheckable);
     const auto type=columnType(index.column());
-    if(metadataError_ || generated_.contains(record().fieldName(index.column()).toCaseFolded()) || (type.contains("BLOB",Qt::CaseInsensitive) && !binaryWriting_)) return result & ~Qt::ItemIsEditable;
+    if(type=="DECIMAL_EXACT" || metadataError_ || generated_.contains(record().fieldName(index.column()).toCaseFolded()) || (type.contains("BLOB",Qt::CaseInsensitive) && !binaryWriting_)) return result & ~Qt::ItemIsEditable;
     if(type.contains("BOOL",Qt::CaseInsensitive)) result |= Qt::ItemIsUserCheckable;
     if(checkedDisplay(type)) {
         try { (void)qtFieldValue(QSqlTableModel::data(index,Qt::EditRole),type); }

@@ -515,9 +515,12 @@ public:
                 if(previous>=0 && previous!=index.row()) {rows.append(cells);cells={};}
                 if(rows.isEmpty() && (previous<0 || previous==index.row())) fields.append(typed->record().fieldName(index.column()));
                 previous=index.row();const auto raw=typed->QSqlTableModel::data(index,Qt::EditRole);
+                const auto type=typed->fieldSqlType(index.column());
+                if(type=="DECIMAL_EXACT") {
+                    const auto text=typed->clipboardText(index);cells.append(nativeGridEncode(raw.isNull() ? QVariant{} : QVariant(text)));return text;
+                }
                 cells.append(nativeGridEncode(raw));
                 if(raw.metaType().id()==QMetaType::QByteArray) return QStringLiteral("0x")+QString::fromLatin1(raw.toByteArray().toHex());
-                const auto type=typed->fieldSqlType(index.column());
                 if(raw.metaType().id()==QMetaType::LongLong && (type=="INTEGER" || type=="INT" || type=="BIGINT")) return QString::number(raw.toLongLong());
                 return typed->clipboardText(index);
             });
