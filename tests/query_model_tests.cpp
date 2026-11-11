@@ -452,6 +452,9 @@ int main(int argc, char** argv) {
         model.execute(db,"SELECT amount+divisor AS total,amount-divisor AS difference,amount*divisor AS product,amount/divisor AS ratio,n/d AS integer_ratio,byte_value/short_value AS small_ratio,amount/single_value AS mixed,flag/divisor AS flag_ratio FROM native_arithmetic");
         const QVector<double> expected{10,2,24,1.5,0.75,2.0/3,1.5,-0.25};
         for(int column=0;column<expected.size();++column) assert(model.fieldSqlType(column)=="DOUBLE" && qAbs(model.index(0,column).data().toDouble()-expected[column])<1e-12);
+        model.execute(db,"SELECT Min(amount) AS low,Max(single_value) AS high,First(short_value) AS first_short,Last(flag) AS last_flag,Min(DISTINCT byte_value) AS smallest_byte FROM native_arithmetic");
+        assert(model.rowCount()==1 && model.fieldSqlType(0)=="DOUBLE" && model.fieldSqlType(1)=="SINGLE_REAL" && model.fieldSqlType(2)=="INTEGER2" && model.fieldSqlType(3)=="BOOLEAN" && model.fieldSqlType(4)=="INTEGER1");
+        assert(model.index(0,0).data(Qt::EditRole).toDouble()==6 && model.index(0,1).data(Qt::EditRole).toDouble()==4 && model.index(0,2).data(Qt::EditRole).toInt()==3 && model.index(0,3).data(Qt::EditRole).toInt()==-1 && model.index(0,4).data(Qt::EditRole).toInt()==2);
         model.execute(db,"SELECT id FROM native_arithmetic WHERE amount/divisor>1");assert(model.rowCount()==1 && model.index(0,0).data().toInt()==1);
         model.execute(db,"SELECT [amount] FROM native_arithmetic");assert(model.fieldSqlType(0)=="DOUBLE" && model.headerData(0,Qt::Horizontal).toString()=="amount");
         model.execute(db,"SELECT * FROM native_arithmetic");assert(model.fieldSqlType(1)=="DOUBLE" && model.fieldSqlType(2)=="DOUBLE");

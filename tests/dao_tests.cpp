@@ -2397,6 +2397,31 @@ FROM calendar_inputs WHERE marker=1)SQL");
             int actual=0;try{(void)database->member("OpenRecordset",{linaccess::VbaValue::string(failure.first)});}catch(const linaccess::VbaRuntimeError& error){actual=error.number;}
             if(actual!=failure.second) std::cerr<<"SQL conditional error actual="<<actual<<" expected="<<failure.second<<"\n";assert(actual==failure.second);
         }
+        calendarPhase="typed selector aggregate family";
+        const auto selectorSource=QStringLiteral("SELECT Min(stamp) AS earliest,Max(stamp) AS latest,First(stamp) AS initial_stamp,Last(stamp) AS final_stamp,Min(amount) AS small_money,Max(amount) AS big_money,Min(elapsed) AS low_single,Max(marker) AS high_integer,Min(enabled) AS low_flag,Max(enabled) AS high_flag,VarType(Min(stamp)) AS date_kind,TypeName(Max(amount)) AS money_kind,Min(DISTINCT marker) AS unique_marker FROM calendar_inputs");
+        const auto selectors=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery(selectorSource),{});
+        assert(selectors.rows.size()==1 && selectors.columnTypes==QVector<QString>({"DATETIME","DATETIME","DATETIME","DATETIME","CURRENCY_REAL","CURRENCY_REAL","SINGLE_REAL","INTEGER2","BOOLEAN","BOOLEAN","INTEGER2","TEXT","INTEGER2"}));
+        for(int column:{0,1,2}) assert(selectors.rows[0][column].toString()=="2024-02-28 12:34:56");
+        assert(selectors.rows[0][3].isNull() && selectors.rows[0][4].toDouble()==1.5 && selectors.rows[0][5].toDouble()==1.5 && selectors.rows[0][6].toDouble()==16777216 && selectors.rows[0][7].toInt()==2);
+        assert(selectors.rows[0][8].toInt()==-1 && selectors.rows[0][9].toInt()==-1 && selectors.rows[0][10].toInt()==7 && selectors.rows[0][11].toString()=="Currency" && selectors.rows[0][12].toInt()==1);
+        const auto selectorFields=database->member("OpenRecordset",{linaccess::VbaValue::string(selectorSource.toStdString())}).object;
+        for(const auto& field:std::vector<std::pair<std::string,int>>{{"earliest",8},{"latest",8},{"initial_stamp",8},{"final_stamp",8},{"small_money",5},{"big_money",5},{"low_single",6},{"high_integer",3},{"low_flag",1},{"high_flag",1}})
+            assert(selectorFields->member("Fields",{linaccess::VbaValue::string(field.first)}).object->member("Type",{}).asNumber()==field.second);
+        assert(selectorFields->item("earliest").kind==linaccess::VbaValue::Kind::Date && selectorFields->item("small_money").kind==linaccess::VbaValue::Kind::Currency && selectorFields->item("low_single").numericType==linaccess::VbaValue::NumericType::Single && selectorFields->item("final_stamp").kind==linaccess::VbaValue::Kind::Null);selectorFields->member("Close",{});
+        const auto emptySelectors=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT Min(stamp),Max(amount),First(enabled),Last(elapsed) FROM calendar_inputs WHERE marker<0"),{});
+        assert(emptySelectors.rows.size()==1 && emptySelectors.columnTypes==QVector<QString>({"DATETIME","CURRENCY_REAL","BOOLEAN","SINGLE_REAL"}));
+        for(const auto& value:emptySelectors.rows[0]) assert(value.isNull());
+        const auto selectorGroups=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT IsNull(stamp) AS missing,Max(stamp) AS stamp_value,Min(amount) AS amount_value FROM calendar_inputs GROUP BY IsNull(stamp) ORDER BY IsNull(stamp)"),{});
+        assert(selectorGroups.rows.size()==2 && selectorGroups.columnTypes==QVector<QString>({"BOOLEAN","DATETIME","CURRENCY_REAL"}) && selectorGroups.rows[0][1].isNull() && selectorGroups.rows[1][1].toString()=="2024-02-28 12:34:56");
+        const auto exactUntypedSelector=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT Min(v),Max(v),First(v),Last(v) FROM (SELECT 9007199254740993 AS v UNION ALL SELECT 9007199254740995 AS v)"),{});
+        assert(exactUntypedSelector.rows[0][0].toLongLong()==9007199254740993LL && exactUntypedSelector.rows[0][1].toLongLong()==9007199254740995LL && exactUntypedSelector.rows[0][2].toLongLong()==9007199254740993LL && exactUntypedSelector.rows[0][3].toLongLong()==9007199254740995LL);
+        assert(sql.exec("CREATE TABLE selector_order_probe(flag BOOLEAN,stamp DATETIME,sample SINGLE_REAL)"));
+        assert(sql.exec("INSERT INTO selector_order_probe VALUES(1,'1899-12-29 06:00:00',16777217),(0,'1899-12-29 18:00:00',16777218)"));sql.finish();
+        const auto orderedSelectors=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT Min(flag),Max(flag),Min(stamp),Max(stamp),Min(sample),Max(sample) FROM selector_order_probe"),{});
+        assert(orderedSelectors.rows.size()==1 && orderedSelectors.rows[0][0].toInt()==-1 && orderedSelectors.rows[0][1].toInt()==0);
+        assert(orderedSelectors.rows[0][2].toString()=="1899-12-29 18:00:00" && orderedSelectors.rows[0][3].toString()=="1899-12-29 06:00:00" && orderedSelectors.rows[0][4].toDouble()==16777216 && orderedSelectors.rows[0][5].toDouble()==16777218);
+        const auto scalarSelectors=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT Max(CDbl(flag),0),Min(CDbl(flag),0) FROM selector_order_probe WHERE flag=1"),{});
+        assert(scalarSelectors.rows.size()==1 && scalarSelectors.rows[0][0].toDouble()==0 && scalarSelectors.rows[0][1].toDouble()==-1);
         calendarPhase="DAO fields";
         const auto calendarFields=database->member("OpenRecordset",{linaccess::VbaValue::string(calendarSource.toStdString())}).object;
         assert(calendarFields->member("Fields",{linaccess::VbaValue::string("shifted")}).object->member("Type",{}).asNumber()==8);

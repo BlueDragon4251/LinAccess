@@ -7596,3 +7596,22 @@ Aktionen Undo/Redo, Save/Default/Generated-Schlüssel und leere neue Zeile.
 Keine neue CTest-ID/Windows-Parität; F168/F340 bleiben offen,456/386/70 gleich.
 Vorstandb3a279cfea3876c394dc1707f600719c29304ba4/Baum9c5c7b33c0c83fc1fc8273d92e4fb9afc470f7df
 privat/exakt nach verzögerter Ref-Lesebestätigung adoptiert.
+
+
+Native typisierte Auswahlaggregate (2026-11-11): TYPED_SELECTOR_AGGREGATES.md.
+Min/Max/First/Last behalten belegte Quelltypen in Plan/DAO/Querymodell. Nach
+erstem gezieltem Fehler tatsächliche Auswahl korrigiert: relevante Werte über
+gemeinsame Felddekodierung in native Scalars überführen, Min/Max nativ vergleichen
+(Boolean-1/0, Single-Rundung, signierte Date-Serials), typisiert zurückgeben.
+Ein Wert pro Gruppe, Fehler-/NULL-Finalisierung; First/Last behält ausgewähltes
+NULL. Unbekannte Quellen behalten rohe Aggregate/exakte SQLiteInt64, keine
+probengestützte Typerfindung. MIN/MAX DISTINCT bleibt für Extrema äquivalent;
+mehrargumentige SQLite-Scalarfälle behalten allgemeine innere Typbindung.
+App gebaut. Bestehendes DAO/Querymodell-Bündel2/2 in5,54s (5,04/0,50); nach
+letztem Scalar-MIN/MAX-Fix betroffenes DAO1/1 in5,38s. Tatsächliche Typen/Werte,
+Grouping/DISTINCT/leere Gruppen, negative Datumswerte, Boolean-Roh1/0, Single,
+Currency, NULL und untypisierte>2^53 geprüft. Kein neuer CTest/Windows-Oracle.
+F067/F068/F107/F014 bleiben offen;456 IDs/386 Teilumfänge/70 Vollanforderungen.
+Vorstand31d10e557d8426600705104de8a09dd384a0d4bb/Baum4286400bdc9d32a93e42558b4284307f25beb135
+privat/exakt veröffentlicht. Gemeinsamer aktualisierter Paket-/Originalbeleg
+folgt; bis dahin positiver Gesamtpaketbeleg weiterhincf9d6933.

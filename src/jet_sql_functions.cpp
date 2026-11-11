@@ -262,6 +262,37 @@ void double_subtract(sqlite3_context* context,int count,sqlite3_value** args) no
 void double_multiply(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"*",2,2,0,true);}
 void double_divide(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"/",2,2,0,true);}
 void numericPower(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"^",2,2,0,true);}
+QVariant boundSqlStorage(sqlite3_value* argument) {
+    auto& native=api();QVariant storage;
+    switch(native.type(argument)) {
+    case SQLITE_NULL: break;
+    case SQLITE_INTEGER: storage=QVariant::fromValue<qlonglong>(native.integer(argument));break;
+    case SQLITE_FLOAT: storage=native.number(argument);break;
+    case SQLITE_TEXT: {
+        const auto* bytes=native.text(argument);const auto size=native.bytes(argument);
+        if(!bytes && size) throw VbaRuntimeError(7,"Scalar SQL text unavailable");
+        const QByteArray input(bytes ? reinterpret_cast<const char*>(bytes) : "",size);
+        if(!input.isValidUtf8()) throw VbaRuntimeError(13,"Scalar SQL text is not valid UTF-8");
+        storage=QString::fromUtf8(input);break;
+    }
+    default: throw VbaRuntimeError(13,"Scalar SQL binary input is unsupported");
+    }
+    return storage;
+}
+void returnBoundSqlValue(sqlite3_context* context,const VbaValue& result) {
+    auto& native=api();
+    if(result.kind==VbaValue::Kind::Null) native.nullResult(context);
+    else if(result.kind==VbaValue::Kind::Boolean) native.integerResult(context,result.boolean ? -1 : 0);
+    else if(result.kind==VbaValue::Kind::Number && (result.numericType==VbaValue::NumericType::Double || result.numericType==VbaValue::NumericType::Single)) {
+        if(!std::isfinite(result.number)) throw VbaRuntimeError(6,"Nonfinite bound scalar SQL result");
+        native.numberResult(context,result.number);
+    }
+    else if(result.kind==VbaValue::Kind::Currency) native.numberResult(context,currencyToRealStorage(result));
+    else if(result.kind==VbaValue::Kind::Date) returnText(context,sqlFieldValue(result,"DATETIME").toString());
+    else if(result.kind==VbaValue::Kind::Text) returnText(context,QString::fromUtf8(result.text.data(),static_cast<qsizetype>(result.text.size())));
+    else if(result.kind==VbaValue::Kind::Number && (result.numericType==VbaValue::NumericType::Integer || result.numericType==VbaValue::NumericType::Long || result.numericType==VbaValue::NumericType::Byte)) native.integerResult(context,static_cast<qlonglong>(result.number));
+    else throw VbaRuntimeError(13,"Scalar SQL result type mismatch");
+}
 void boundScalarSqlFunction(sqlite3_context* context,int count,sqlite3_value** args,std::string_view builtin,int minimum,int maximum,bool typed,bool dateComparison=false,bool booleanOperator=false) noexcept {
     auto& native=api();
     try {
@@ -286,20 +317,7 @@ void boundScalarSqlFunction(sqlite3_context* context,int count,sqlite3_value** a
         const bool infix=dateComparison || booleanOperator;
         VbaVariables values;std::string expression=infix ? std::string{} : std::string(builtin)+"(";
         for(int index=0;index<arguments;++index) {
-            auto* argument=args[index+offset];QVariant storage;
-            switch(native.type(argument)) {
-            case SQLITE_NULL: break;
-            case SQLITE_INTEGER: storage=QVariant::fromValue<qlonglong>(native.integer(argument));break;
-            case SQLITE_FLOAT: storage=native.number(argument);break;
-            case SQLITE_TEXT: {
-                const auto* bytes=native.text(argument);const auto size=native.bytes(argument);
-                if(!bytes && size) throw VbaRuntimeError(7,"Scalar SQL text unavailable");
-                const QByteArray input(bytes ? reinterpret_cast<const char*>(bytes) : "",size);
-                if(!input.isValidUtf8()) throw VbaRuntimeError(13,"Scalar SQL text is not valid UTF-8");
-                storage=QString::fromUtf8(input);break;
-            }
-            default: throw VbaRuntimeError(13,"Scalar SQL binary input is unsupported");
-            }
+            auto* argument=args[index+offset];const auto storage=boundSqlStorage(argument);
             const auto name="_la_arg"+std::to_string(index);
             // Formatting already preserves unproven SQLite int64 input exactly.
             // A proven source declaration still goes through checked field decoding.
@@ -313,17 +331,7 @@ void boundScalarSqlFunction(sqlite3_context* context,int count,sqlite3_value** a
         if(booleanOperator && arguments==1) expression=std::string(builtin)+" "+expression;
         if(!infix) expression+=')';ScalarStringHost host;
         const auto result=evaluateVbaExpression(expression,host,values);
-        if(result.kind==VbaValue::Kind::Null) native.nullResult(context);
-        else if(result.kind==VbaValue::Kind::Boolean) native.integerResult(context,result.boolean ? -1 : 0);
-        else if(result.kind==VbaValue::Kind::Number && (result.numericType==VbaValue::NumericType::Double || result.numericType==VbaValue::NumericType::Single)) {
-            if(!std::isfinite(result.number)) throw VbaRuntimeError(6,"Nonfinite bound scalar SQL result");
-            native.numberResult(context,result.number);
-        }
-        else if(result.kind==VbaValue::Kind::Currency) native.numberResult(context,currencyToRealStorage(result));
-        else if(result.kind==VbaValue::Kind::Date) returnText(context,sqlFieldValue(result,"DATETIME").toString());
-        else if(result.kind==VbaValue::Kind::Text) returnText(context,QString::fromUtf8(result.text.data(),static_cast<qsizetype>(result.text.size())));
-        else if(result.kind==VbaValue::Kind::Number && (result.numericType==VbaValue::NumericType::Integer || result.numericType==VbaValue::NumericType::Long || result.numericType==VbaValue::NumericType::Byte)) native.integerResult(context,static_cast<qlonglong>(result.number));
-        else throw VbaRuntimeError(13,"Scalar SQL result type mismatch");
+        returnBoundSqlValue(context,result);
     } catch(const VbaRuntimeError& failure) { functionError(context,failure); }
       catch(...) { native.error(context,"SQL bound scalar evaluation failed",-1); }
 }
@@ -822,6 +830,36 @@ void aggregateStep(sqlite3_context* context,sqlite3_value* value,bool first) noe
     if (state->value) native.freeValue(state->value);
     state->value = copied;
 }
+// Proven scalar selectors compare decoded values rather than SQLite storage.
+// One owned native value per group also preserves First/Last NULL selection.
+struct TypedSelectorState {VbaValue* value;int error;};
+template<int Selector> void typedSelectorStep(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
+    auto& native=api();auto* state=static_cast<TypedSelectorState*>(native.aggregate(context,sizeof(TypedSelectorState)));
+    if(!state) {native.error(context,"LinAccess SQL function error 7",-1);return;}
+    if(state->error || (Selector==2 && state->value)) return;
+    try {
+        if(count!=2 || native.type(args[0])!=SQLITE_TEXT) throw VbaRuntimeError(450,"Typed selector requires a source type and value");
+        const auto type=scalarText(args[0]);
+        static const QSet<QString> supported{"DATETIME","CURRENCY_REAL","SINGLE_REAL","INTEGER1","INTEGER2","INTEGER4","DOUBLE","BOOL","BOOLEAN"};
+        if(!supported.contains(type)) throw VbaRuntimeError(3251,"Selector source type is not proven");
+        auto value=qtFieldValue(boundSqlStorage(args[1]),type);
+        if constexpr(Selector<2) {
+            if(value.kind==VbaValue::Kind::Null) return;
+            if(state->value) {ScalarStringHost host;if(!compareVbaValues(Selector==0 ? "<" : ">",value,*state->value,host,VbaCompareMode::Binary).truthy()) return;}
+        }
+        auto selected=std::make_unique<VbaValue>(std::move(value));delete state->value;state->value=selected.release();
+    } catch(const VbaRuntimeError& failure) {state->error=failure.number;functionError(context,failure);}
+      catch(...) {state->error=7;native.error(context,"LinAccess SQL function error 7",-1);}
+}
+void typedSelectorFinal(sqlite3_context* context) noexcept {
+    auto& native=api();auto* state=static_cast<TypedSelectorState*>(native.aggregate(context,0));
+    std::unique_ptr<VbaValue> selected(state ? state->value : nullptr);if(state) state->value=nullptr;
+    try {
+        if(state && state->error) throw VbaRuntimeError(state->error,"Typed selector failed");
+        if(selected) returnBoundSqlValue(context,*selected);else native.nullResult(context);
+    } catch(const VbaRuntimeError& failure) {functionError(context,failure);}
+      catch(...) {native.error(context,"LinAccess SQL function error 7",-1);}
+}
 void firstStep(sqlite3_context* context,int,sqlite3_value** args) noexcept { aggregateStep(context,args[0],true); }
 void lastStep(sqlite3_context* context,int,sqlite3_value** args) noexcept { aggregateStep(context,args[0],false); }
 // SQLite owns only the small pointer/error slot; the C++ accumulator has its
@@ -1192,6 +1230,10 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_stdev",1,nullptr,&statisticalStep<true>,&statisticalFinal);
     ensure("linaccess_jet_varp",1,nullptr,&statisticalStep<false,true>,&statisticalFinal);
     ensure("linaccess_jet_stdevp",1,nullptr,&statisticalStep<true,true>,&statisticalFinal);
+    ensure("linaccess_jet_min_typed",2,nullptr,&typedSelectorStep<0>,&typedSelectorFinal);
+    ensure("linaccess_jet_max_typed",2,nullptr,&typedSelectorStep<1>,&typedSelectorFinal);
+    ensure("linaccess_jet_first_typed",2,nullptr,&typedSelectorStep<2>,&typedSelectorFinal);
+    ensure("linaccess_jet_last_typed",2,nullptr,&typedSelectorStep<3>,&typedSelectorFinal);
     ensure("linaccess_jet_first",1,nullptr,&firstStep,&aggregateFinal);
     ensure("linaccess_jet_last",1,nullptr,&lastStep,&aggregateFinal);
     ensure("linaccess_jet_update_value",1,nullptr,&singleStep,&singleFinal);
