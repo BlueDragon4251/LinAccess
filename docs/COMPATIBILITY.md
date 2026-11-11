@@ -7447,3 +7447,15 @@ ein bestehendes Bündel2/2 in5,15s (4,75/0,39) bestanden. Keine neuen IDs;
 Baum3e2c56be109c5eebc94ff9ead0087f108d17c47a privat/exakt veröffentlicht.
 Letzter Paketbeleg9f73a8c5,167,90s/7Hashes gleich; spätere SQL-/UI-Inkremente
 darin nicht enthalten. Ohne Zwischenabschluss weiterimplementieren.
+
+
+Native SQL-Wertzustandsfunktionen (2026-11-11): NATIVE_TYPED_LOGIC.md.
+IsNull/IsEmpty/IsError als echte native SQL-Callbacks mit vorhandener Quell-
+Typbindung, Boolean-Ergebnissen und tatsächlichem DAO dbBoolean. SQL-Null/
+leerer String/gewöhnliche Werte, native Typabfragen, Filter/Gruppierung/Sortierung
+und Arity450 geprüft. IsError ist kein SQL-Exceptionfänger: vorheriger1/0-Fehler
+bleibt11. Keine zusätzliche Object/Array/Error-SQL-Kodierung oder Windows-Oracle-
+Behauptung. App/DAO/Modell gebaut, ein bestehendes Bündel2/2 in5,03s (4,70/0,33)
+bestanden. Keine neuen IDs;456/386/70 unverändert. Vorstand549adc3944b32c476de3d80206c7c00f882641a5/
+Baum3982b798dc42fa3e8333560a6fd7cae3d5986c42 privat/exakt veröffentlicht.
+Letzter Paketbeleg9f73a8c5 (167,90s/7Hashes gleich) liegt vor späteren SQL-Blöcken.

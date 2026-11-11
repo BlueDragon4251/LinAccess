@@ -2326,6 +2326,25 @@ FROM calendar_inputs WHERE marker=1)SQL");
         assert(primitiveGroups.rows.size()==1 && primitiveGroups.rows[0][0].toInt()==-1 && primitiveGroups.rows[0][1].toInt()==2 && primitiveGroups.columnTypes[0]=="BOOLEAN");
         const auto primitiveFields=database->member("OpenRecordset",{linaccess::VbaValue::string("SELECT stamp Is Not Null AS present,marker Between 1 And 2 AS bounded FROM calendar_inputs WHERE marker=1")}).object;
         assert(primitiveFields->member("Fields",{linaccess::VbaValue::string("present")}).object->member("Type",{}).asNumber()==1 && primitiveFields->item("bounded").kind==linaccess::VbaValue::Kind::Boolean && primitiveFields->item("bounded").boolean);primitiveFields->member("Close",{});
+        calendarPhase="native SQL value state predicates";
+        const auto stateSource=QStringLiteral("SELECT IsNull(stamp) AS missing,IsNull(enabled) AS logical_missing,IsEmpty(stamp) AS date_empty,IsEmpty(enabled) AS logical_empty,IsError(stamp) AS date_error,IsError(enabled) AS logical_error,IsNull(Null) AS literal_missing,IsEmpty(Null) AS null_empty,IsError(Null) AS null_error,IsEmpty('') AS text_empty,VarType(IsNull(stamp)) AS state_type,TypeName(IsError(amount)) AS state_name FROM calendar_inputs WHERE marker=1");
+        const auto states=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery(stateSource),{});
+        auto stateTypes=QVector<QString>(12,"BOOLEAN");stateTypes[10]="INTEGER2";stateTypes[11]="TEXT";
+        assert(states.rows.size()==1 && states.columnTypes==stateTypes);
+        for(int index=0;index<10;++index) assert(states.rows[0][index].toInt()==(index==6 ? -1 : 0));
+        assert(states.rows[0][10].toInt()==11 && states.rows[0][11].toString()=="Boolean");
+        const auto stateNull=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT IsNull(stamp),IsNull(enabled),IsEmpty(stamp),IsError(stamp) FROM calendar_inputs WHERE marker=2"),{});
+        assert(stateNull.rows.size()==1 && stateNull.rows[0][0].toInt()==-1 && stateNull.rows[0][1].toInt()==-1 && stateNull.rows[0][2].toInt()==0 && stateNull.rows[0][3].toInt()==0);
+        const auto stateFilter=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT marker FROM calendar_inputs WHERE IsNull(stamp) And Not IsEmpty(stamp)"),{});
+        assert(stateFilter.rows.size()==1 && stateFilter.rows[0][0].toInt()==2);
+        const auto stateGroups=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT IsNull(stamp) AS missing,Count(*) AS tally FROM calendar_inputs GROUP BY IsNull(stamp) ORDER BY IsNull(stamp)"),{});
+        assert(stateGroups.rows.size()==2 && stateGroups.rows[0][0].toInt()==-1 && stateGroups.rows[1][0].toInt()==0 && stateGroups.rows[0][1].toInt()==1 && stateGroups.rows[1][1].toInt()==1);
+        const auto stateFields=database->member("OpenRecordset",{linaccess::VbaValue::string(stateSource.toStdString())}).object;
+        assert(stateFields->member("Fields",{linaccess::VbaValue::string("missing")}).object->member("Type",{}).asNumber()==1 && stateFields->item("date_error").kind==linaccess::VbaValue::Kind::Boolean && !stateFields->item("date_error").boolean);stateFields->member("Close",{});
+        for(const auto& failure:std::vector<std::pair<std::string,int>>{{"SELECT IsNull()",450},{"SELECT IsEmpty(1,2)",450},{"SELECT IsError()",450},{"SELECT IsError(1/0)",11}}) {
+            int actual=0;try{(void)database->member("OpenRecordset",{linaccess::VbaValue::string(failure.first)});}catch(const linaccess::VbaRuntimeError& error){actual=error.number;}
+            if(actual!=failure.second) std::cerr<<"SQL value-state error actual="<<actual<<" expected="<<failure.second<<"\n";assert(actual==failure.second);
+        }
         calendarPhase="DAO fields";
         const auto calendarFields=database->member("OpenRecordset",{linaccess::VbaValue::string(calendarSource.toStdString())}).object;
         assert(calendarFields->member("Fields",{linaccess::VbaValue::string("shifted")}).object->member("Type",{}).asNumber()==8);

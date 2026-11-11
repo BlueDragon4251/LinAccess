@@ -362,6 +362,12 @@ void boolean_less(sqlite3_context* context,int count,sqlite3_value** args) noexc
 void boolean_less_equal(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"<=",2,2,true,false,true);}
 void boolean_greater(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,">",2,2,true,false,true);}
 void boolean_greater_equal(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,">=",2,2,true,false,true);}
+void state_isnull(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"IsNull",1,1,false);}
+void state_isnull_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"IsNull",1,1,true);}
+void state_isempty(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"IsEmpty",1,1,false);}
+void state_isempty_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"IsEmpty",1,1,true);}
+void state_iserror(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"IsError",1,1,false);}
+void state_iserror_typed(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"IsError",1,1,true);}
 void stringCStr(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"CStr",1,1,false);}
 void stringCStrTyped(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"CStr",1,1,true);}
 void stringStr(sqlite3_context* context,int count,sqlite3_value** args) noexcept {boundScalarSqlFunction(context,count,args,"Str",1,1,false);}
@@ -929,6 +935,13 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_next_counter",2,&nextAccessCounter,nullptr,nullptr);
     ensure("linaccess_jet_iif",3,&iif,nullptr,nullptr);
     ensure("linaccess_jet_rgb",-1,&rgbColor,nullptr,nullptr);
+    ensure("linaccess_jet_isnull",-1,&state_isnull,nullptr,nullptr);
+    ensure("linaccess_jet_isnull_typed",-1,&state_isnull_typed,nullptr,nullptr);
+    ensure("linaccess_jet_isempty",-1,&state_isempty,nullptr,nullptr);
+    ensure("linaccess_jet_isempty_typed",-1,&state_isempty_typed,nullptr,nullptr);
+    ensure("linaccess_jet_iserror",-1,&state_iserror,nullptr,nullptr);
+    ensure("linaccess_jet_iserror_typed",-1,&state_iserror_typed,nullptr,nullptr);
+
     ensure("linaccess_jet_boolean_result",-1,&booleanResult,nullptr,nullptr);
     ensure("linaccess_jet_bool_equal",-1,&boolean_equal,nullptr,nullptr);
     ensure("linaccess_jet_bool_not_equal",-1,&boolean_not_equal,nullptr,nullptr);

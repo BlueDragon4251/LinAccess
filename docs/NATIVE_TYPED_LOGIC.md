@@ -91,3 +91,15 @@ binding, preventing the incorrect transformation into Is Not(Null).
 This is not full Jet pattern/collation coercion, arbitrary CASE/subquery grammar,
 Boolean membership normalization or Date/Currency BETWEEN equivalence. No
 business fixture, Access observation or catalog/CTest ID is invented.
+
+
+Native SQL value-state predicates (2026-11-11)
+-------------------------------------------
+IsNull/IsEmpty/IsError use the existing native runtime through registered SQL
+callbacks. Proven scalar source types and nested expression kinds are preserved;
+results carry BOOLEAN and actual DAO dbBoolean values. SQL NULL is Null rather
+than Empty: IsNull(NULL) is True, IsEmpty(NULL) and IsError(NULL) are False;
+zero-length String is not Empty. Supported SQL scalar transport does not add
+Object/array/Error-value encodings. In particular IsError does not intercept an
+SQL evaluation exception raised before its argument can be delivered. Existing
+arity and transport guards remain; no new Access oracle is claimed.
