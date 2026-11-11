@@ -451,7 +451,7 @@ keine Tests oder Teilpunkte allein zur Erhöhung einer Fortschrittszahl anlegen.
 - [x] **F033** — Native late-bound DoCmd.Close for active/named forms and reports, validated record saving, Unload cancellation and recursion protection; original Kassa Close button executes unchanged. See CLOSE_COMMAND_RUNTIME.md.
 - [ ] **F050** — Complete Forms/Reports object model, properties, lifetime and subform semantics.
 - [ ] **F057** — Open/Load/Current/Dirty/BeforeUpdate/AfterUpdate/Close/Unload ordering and Cancel.
-- [ ] **F059** — Access SetWarnings/dialog semantics without additional per-SQL consent prompts.
+- [ ] **F059** — Native DoCmd/macro warnings state and record confirmation: [scope](NATIVE_SETWARNINGS.md). Access SetWarnings/dialog semantics without additional per-SQL consent prompts.
 - [ ] **F081** — Fonts/colors/geometry/default control properties and Access 2003 layout parity.
 - [x] **F084** — Bound Report_Open/Close/NoData, cancellation and read-only sources; all 9 original report sources classified, six bind 54 actual non-NULL controls.
 - [x] **F086** — Native current-layout single-page print/PDF preview and CommandBars adapter; three original Report_Open procedures executed explicitly.

@@ -1,6 +1,7 @@
 #include "native_project_gui_extensions.hpp"
 #include "native_macro_storage.hpp"
 #include "native_access_cursor.hpp"
+#include "native_access_warnings.hpp"
 #include <QStatusBar>
 #include <QProgressBar>
 #include "native_standard_module_host.hpp"
@@ -3348,6 +3349,27 @@ static void exercisePhysicalFormIdentity() {
     assert(sql.exec("SELECT COUNT(*) FROM form_identity_probe") && sql.next() && sql.value(0).toInt()==2);sql.finish();sql.clear();db.close();
 }
 
+static void exerciseNativeWarnings() {
+    using namespace linaccess;assert(nativeWarningsEnabled());const auto restore=qScopeGuard([] {restoreNativeWarnings();});
+    auto db=QSqlDatabase::addDatabase("QSQLITE","native-warning-state");db.setDatabaseName(":memory:");assert(db.open());QSqlQuery sql(db);
+    assert(sql.exec("CREATE TABLE _la_objects(kind TEXT NOT NULL,name TEXT NOT NULL,definition TEXT NOT NULL,PRIMARY KEY(kind,name))"));
+    assert(sql.exec("CREATE TABLE warnings_rows(id INTEGER PRIMARY KEY,v TEXT)"));assert(sql.exec("INSERT INTO warnings_rows VALUES(1,'one'),(2,'two'),(3,'three')"));sql.finish();
+    const QByteArray layout("Begin Form\nRecordSource =\"warnings_rows\"\nWidth =2400\nBegin Section\nHeight =600\nBegin TextBox\nName =\"Value\"\nControlSource =\"v\"\nWidth =1800\nHeight =300\nEnd\nEnd\nEnd");
+    {
+        AccessFormPreview form("WarningsForm",layout,{},db);form.show();QApplication::processEvents();assert(form.hasDataSource());NativeStandardModuleHost host(&form,db,[] {});auto commands=host.applicationObject()->member("DoCmd",{}).object;auto formCommands=makePreviewApplicationObject(form)->member("DoCmd",{}).object;
+        const auto failure=executeVbaProcedure("Sub DisableWarningsAndFail()\nDoCmd.SetWarnings WarningsOn:=False\nErr.Raise 5\nEnd Sub","DisableWarningsAndFail",host);assert(failure.status==VbaExecutionStatus::Error && failure.errorNumber==5 && !nativeWarningsEnabled());
+        for(const auto& rejected:std::vector<std::pair<std::vector<VbaValue>,int>>{{{},450},{{VbaValue{}},94}}) {int error=0;try {commands->member("SetWarnings",rejected.first);}catch(const VbaRuntimeError& failure) {error=failure.number;}assert(error==rejected.second && !nativeWarningsEnabled());}
+        formCommands->member("RunCommand",{VbaValue::integer(223)});assert(sql.exec("SELECT COUNT(*) FROM warnings_rows WHERE id=1") && sql.next() && sql.value(0).toInt()==0);sql.finish();formCommands->member("SetWarnings",{VbaValue::logical(true)});assert(nativeWarningsEnabled());
+        const auto action=[](QString name,QJsonArray arguments=QJsonArray{}) {return QJsonObject{{"action",name},{"arguments",arguments}};};const auto store=[&](QString name,QJsonArray actions) {(void)storeNativeMacro(db,name,{{"version",1},{"actions",actions}});};
+        store("WarningsSilentDelete",{action("SetWarnings",{false}),action("RunCommand",{223})});commands->member("RunMacro",{VbaValue::string("WarningsSilentDelete")});assert(nativeWarningsEnabled() && sql.exec("SELECT COUNT(*) FROM warnings_rows") && sql.next() && sql.value(0).toInt()==1);sql.finish();
+        store("WarningsStop",{action("SetWarnings",{false}),action("StopAllMacros")});formCommands->member("RunMacro",{VbaValue::string("WarningsStop")});assert(nativeWarningsEnabled() && !nativeMacroStopAllPending());
+        store("WarningsError",{action("SetWarnings",{false}),action("RunSQL",{"UPDATE missing_warning_source SET n=1"})});int error=0;try {commands->member("RunMacro",{VbaValue::string("WarningsError")});}catch(const VbaRuntimeError& failure) {error=failure.number;}assert(error==3078 && nativeWarningsEnabled());
+        commands->member("RunSQL",{VbaValue::string("UPDATE warnings_rows SET v='updated' WHERE id=3")});assert(sql.exec("SELECT v FROM warnings_rows WHERE id=3") && sql.next() && sql.value(0).toString()=="updated");sql.finish();
+        commands->member("SetWarnings",{VbaValue::logical(false)});bool explicitMessage=false;QTimer::singleShot(0,[&] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(box && box->text()=="Explicit warnings probe");explicitMessage=true;box->done(QMessageBox::Ok);});const auto message=executeVbaProcedure("Sub ExplicitMessage()\nMsgBox \"Explicit warnings probe\"\nEnd Sub","ExplicitMessage",host);assert(message.status==VbaExecutionStatus::Completed && explicitMessage && !nativeWarningsEnabled());formCommands->member("SetWarnings",{VbaValue::logical(true)});assert(form.close());
+    }
+    sql.clear();db.close();
+}
+
 int main(int argc,char** argv) {
     QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
     QApplication app(argc,argv); app.setQuitOnLastWindowClosed(false); app.setApplicationName("LinAccessSyntheticGuiTest"); app.setOrganizationName("LinAccessSyntheticTests");
@@ -3366,6 +3388,7 @@ int main(int argc,char** argv) {
     exerciseNativeRelationDesigner();
     exerciseNativeDecimalClipboard();
     exercisePhysicalFormIdentity();
+    exerciseNativeWarnings();
     const auto first=temporary.filePath("first.linaccess"),second=temporary.filePath("second.linaccess");
     auto seed=QSqlDatabase::addDatabase("QSQLITE","mainwindow-seed"); seed.setDatabaseName(first); assert(seed.open());
     QSqlQuery initial(seed); assert(initial.exec("CREATE TABLE records(id INTEGER PRIMARY KEY,value TEXT)"));

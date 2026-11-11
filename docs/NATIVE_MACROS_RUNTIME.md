@@ -320,8 +320,9 @@ remain open. No application-Quit/global VBA cancellation is fabricated.
 Echo actions and the standalone DoCmd/Application Echo members use the existing
 real GUI update suppression/status surface. StopAllMacros restores that Echo state,
 preserving previously disabled surfaces. The public contract also mentions
-SetWarnings restoration; full native SetWarnings state is not implemented and no
-such restoration/equivalence is claimed here.
+SetWarnings restoration. Bounded native DoCmd/macro state and record confirmation
+are now implemented in [NATIVE_SETWARNINGS.md](NATIVE_SETWARNINGS.md). Complete
+Windows/system-dialog and nested invocation equivalence remain open.
 
 Contract consulted: Microsoft Learn,
 https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/stopallmacros-macro-action .

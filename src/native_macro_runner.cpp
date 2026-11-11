@@ -1,6 +1,7 @@
 #include "vba_condition.hpp"
 #include "artifact_execution_observer.hpp"
 #include "native_macro_runner.hpp"
+#include "native_access_warnings.hpp"
 namespace linaccess {
 QVector<NativeMacroFrame>& nativeMacroFrames() {static thread_local QVector<NativeMacroFrame> frames;return frames;}
 bool nativeProjectMacrosActive(QSqlDatabase db) {
@@ -30,6 +31,7 @@ void runNativeMacro(QSqlDatabase db,const std::vector<VbaValue>& args,
     if(!depth) {visited=0;nativeMacroStopAllPending()=false;}++depth;const auto budget=qScopeGuard([] {if(--depth==0) {visited=0;nativeMacroStopAllPending()=false;}});
     check();try {QSqlQuery query(db);query.prepare("SELECT definition FROM main._la_objects WHERE kind='macro' AND name=? COLLATE NOCASE LIMIT 2");query.addBindValue(macroName.section('.',0,0));if(query.exec() && query.next()) {revision=query.value(0).toByteArray();if(query.next()) revision.clear();}}catch(...) {}
     const auto actions=loadNativeMacro(db,QString::fromStdString(macro.asText()));
+    bool warningsTouched=false;const auto warnings=qScopeGuard([&] {if(warningsTouched) restoreNativeWarnings();});
     nativeMacroFrames().push_back({db.connectionName(),db.databaseName(),QString::fromStdString(macro.asText()).section('.',0,0)});
     const auto frame=qScopeGuard([] {nativeMacroFrames().removeLast();});
     if(!expression && count*actions.size()>10000) throw VbaRuntimeError(3251,"Native macro action budget exceeded");
@@ -55,7 +57,7 @@ void runNativeMacro(QSqlDatabase db,const std::vector<VbaValue>& args,
             } else blockCondition.reset();
             if(action.name=="StopAllMacros") {observedStatus="stopped";nativeMacroStopAllPending()=true;if(restoreUi) restoreUi();return;}
             if(action.name=="StopMacro") {observedStatus="stopped";return;}
-            dispatch(action);
+            dispatch(action);if(action.name=="SetWarnings") warningsTouched=true;
         }catch(const VbaRuntimeError& error) {throw VbaRuntimeError(error.number,"Makro "+macro.asText()+", Aktion "+std::to_string(index+1)+" ("+action.name.toStdString()+"): "+error.what(),error.source,error.helpFile,error.helpContext);}
         }
     }

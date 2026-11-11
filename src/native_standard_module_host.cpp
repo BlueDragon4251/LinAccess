@@ -12,6 +12,7 @@
 #include "native_input_box.hpp"
 #include "native_access_file_dialog.hpp"
 #include "native_access_echo.hpp"
+#include "native_access_warnings.hpp"
 #include "native_access_cursor.hpp"
 #include <QScopeGuard>
 #include "native_public_procedure_run.hpp"
@@ -99,6 +100,7 @@ public:
         const auto key=QString::fromUtf8(name.data(),name.size()).toCaseFolded();
         if(key=="gotocontrol") return VbaArgumentSignature{{"ControlName"},1};
         if(key=="hourglass") return VbaArgumentSignature{{"HourglassOn"},1};
+        if(key=="setwarnings") return VbaArgumentSignature{{"WarningsOn"},1};
         if(key=="echo") return VbaArgumentSignature{{"EchoOn","StatusBarText"},1};
         if(key=="selectobject") return VbaArgumentSignature{{"ObjectType","ObjectName","InDatabaseWindow"},1};
         if(key=="close") return VbaArgumentSignature{{"ObjectType","ObjectName","Save"},0};
@@ -135,6 +137,7 @@ public:
                 }else (void)member(action.name.toStdString(),action.arguments);
             },[] {restoreNativeEcho();});return VbaValue::empty();
         }
+        if(key=="setwarnings") return nativeSetWarnings(args,[&] {host.check();});
         if(key=="echo") {auto result=nativeEcho(*owner_,args);host.check();return result;}
         std::vector<VbaValue> values;for(const auto& argument:args) {values.push_back(scalarVbaValue(argument));host.check();}
         const auto number=[&](std::size_t index,int fallback) {return index>=values.size() || values[index].kind==VbaValue::Kind::Missing ? fallback : static_cast<int>(coerceVbaModuleValue(values[index],"long").number);};

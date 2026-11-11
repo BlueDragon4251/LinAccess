@@ -29,6 +29,7 @@
 #include "native_access_status.hpp"
 #include "native_access_cursor.hpp"
 #include "native_access_echo.hpp"
+#include "native_access_warnings.hpp"
 #include <QApplication>
 #include <QAbstractButton>
 #include <QPushButton>
@@ -1625,6 +1626,7 @@ public:
         using Signature=linaccess::VbaArgumentSignature;
         if(key=="echo") return Signature{{"EchoOn","StatusBarText"},1};
         if(key=="hourglass") return Signature{{"HourglassOn"},1};
+        if(key=="setwarnings") return Signature{{"WarningsOn"},1};
         if(key=="opentable") return Signature{{"TableName","View","DataMode"},1};
         if(key=="openmodule") return Signature{{"ModuleName","ProcedureName"},0};
         if(key=="openquery") return Signature{{"QueryName","View","DataMode"},1};
@@ -1669,6 +1671,7 @@ public:
             return {};
         }
 
+        if(key=="setwarnings") return linaccess::nativeSetWarnings(args,[&] {(void)checked();});
         if(key=="echo") return linaccess::nativeEcho(preview,args);
         if(key=="hourglass") {
             if(args.size()!=1 || args[0].kind==linaccess::VbaValue::Kind::Missing) throw linaccess::VbaRuntimeError(450,"Hourglass requires one Boolean argument");

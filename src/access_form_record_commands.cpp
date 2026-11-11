@@ -1,6 +1,7 @@
 #include "access_form_preview.hpp"
 #include "dao_database.hpp"
 #include "vba_qt_value.hpp"
+#include "native_access_warnings.hpp"
 #include "sqlite_execution.hpp"
 #include <QComboBox>
 #include <QMessageBox>
@@ -89,7 +90,7 @@ void AccessFormPreview::deleteCurrentRecord() {
         if (before[1].kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"Invalid Null confirmation response");
         const auto response=linaccess::sqlFieldValue(before[1],"INTEGER").toLongLong();
         if (response!=0 && response!=1) throw VbaRuntimeError(5,"Invalid delete confirmation response");
-        if (response==1) {
+        if (response==1 && linaccess::nativeWarningsEnabled()) {
             QMessageBox confirmation(QMessageBox::Question,"LinAccess","Diesen Datensatz löschen?",QMessageBox::Yes|QMessageBox::No,this);
             confirmation.setObjectName("access-delete-confirm"); confirmation.setTextFormat(Qt::PlainText);
             confirmation.setDefaultButton(QMessageBox::No);

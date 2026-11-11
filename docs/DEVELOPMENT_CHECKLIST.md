@@ -6268,3 +6268,26 @@ Windows-Referenz; keineRundungs-/Join-/Subquery-/Gesamtparität.456/386/70fest.
 Vorstandeb0b2771/Baumef90bc148d38ee58399926164a091d5a56559353 privat/exakt
 veröffentlicht. Letzter Gesamtpaket-/Originalbeleg234057bb/187,30s vorACE/SQL-
 Erweiterung; nächster gemeinsamer Beleg folgt. Direkt weiterentwickeln.
+
+
+Native SetWarnings-Zustände (2026-11-11): NATIVE_SETWARNINGS.md. Tatsächliche
+Modul-/Formular-DoCmd-Member mit WarningsOn-Namensbindung und einmaliger Boolean-
+Konvertierung/Owner-Nachprüfung vor Mutation; appweiter Zustand standardmäßigOn.
+VBA-Zustand bleibt über Fehler bestehen; native Makroaktion stellt nach eigenem
+Aufruf/Stop/Fehler On wieder her. Datensatz-Löschbestätigung nutzt Zustand bei
+bestehenden Events/Cancel/Transaktionen. Explizite MsgBox/InputBox/Fehler behalten
+bestehenden Pfad; keine zusätzlichen SQL-Zustimmungsdialoge. Öffentliche Microsoft-
+Verträge zu persistentemVBA und automatischemMakroende vollständig herangezogen,
+keine Windows2003-/beliebigeNested-/alleSystemdialog-Parität behauptet.
+App/Helper/Core/GUI gebaut; bestehendes Bündel2/2 in19,11s (0,52/18,58) bestanden,
+inklusive realem VBA-Err.Raise, benannterBindung, unverändertem Zustand nach
+ungültigen Argumenten, tatsächlichemDelete, MakroStop/Error und expliziterMsgBox.
+Alle7 geschützten Hashwerte gleich. Keine neueCTest-ID; F059 offen,456/386/70fest.
+Aktueller gemeinsamer Paket-/Originalbeleg: Quellstand
+a4f8ef4d4754a98511f303f5d11b82c15c54e83c,
+Baume1907968dd6cde178da5080241aa5b04414f2844, privat/exakt veröffentlicht.
+Integrationsbau/DEB/Paketprüfung bestanden, Inventar/Original2/2 in185,44s
+(54,91/130,53),7Hashesgleich; Inventar unverändert78/100 ausführbar,22offen.
+Bekannte Original-Makrogrenze unverändert; kein initialisierterGeschäftsablauf.
+Paket /workspace/work/decimal-actions-package/package/linaccess-0.7.0-Linux.deb
+enthält ACE/Decimal-SQL/DELETE-Stern, liegt vor SetWarnings. Direkt weiterarbeiten.
