@@ -197,6 +197,13 @@ QByteArray AccessCatalog::decimalValues(const QString& name) const {
     return values;
 }
 
+QByteArray AccessCatalog::currencyValues(const QString& name) const {
+    const auto values=tool("linaccess-mdb-metadata",{"--currency-values",file_,name});
+    if(values.isEmpty() || values.size()>16*1024*1024 || !QJsonDocument::fromJson(values).isObject())
+        throw std::runtime_error("Exakte Currency-Quelldaten sind nicht verfügbar");
+    return values;
+}
+
 QString AccessCatalog::tableSchema(const QString& name) const {
     auto schema = QString::fromUtf8(tool("mdb-schema", {"--default-values", "-T", name, file_, "sqlite"}));
     // MDBTools 1.0.0's SQLite backend omits all keys and indexes. Its MySQL
@@ -247,9 +254,11 @@ QString AccessCatalog::tableSchema(const QString& name) const {
     if(indexes.isEmpty() || indexes.size()>1024*1024 || !QJsonDocument::fromJson(indexes).isObject())
         throw std::runtime_error("Originale Indexmetadaten konnten nicht gelesen werden");
     schema+="\n-- LINACCESS_INDEX_METADATA "+QString::fromLatin1(indexes.toHex())+"\n";
-    const auto singleColumns=QJsonDocument::fromJson(indexes).object().value("single_columns");
+    const auto catalog=QJsonDocument::fromJson(indexes).object();
+    const auto singleColumns=catalog.value("single_columns");
     if(!singleColumns.isArray()) throw std::runtime_error("Single-Quellmetadaten sind nicht verfügbar");
-    if(!QJsonDocument::fromJson(indexes).object().value("double_columns").isArray()) throw std::runtime_error("Double-Quellmetadaten sind nicht verfügbar");
+    if(!catalog.value("double_columns").isArray()) throw std::runtime_error("Double-Quellmetadaten sind nicht verfügbar");
+    if(!catalog.value("currency_columns").isArray()) throw std::runtime_error("Currency-Quellmetadaten sind nicht verfügbar");
     return schema;
 }
 }

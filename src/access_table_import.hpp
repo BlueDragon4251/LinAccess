@@ -40,8 +40,8 @@ struct AccessForeignKey {
     bool cascadeDelete{};
 };
 enum class AccessBinaryEncoding { Unsupported, MdbToolsHex };
-// CSV is caller-owned data; NativeMdbBits requires actual source metadata/file
-// and verifies original bits. The sourceFile log identity never selects a mode.
+// CSV is caller-owned data. NativeMdbBits reads the original source and verifies
+// the selected numeric fields, including exact signed Currency ticks.
 enum class AccessFloatingSource { Csv, NativeMdbBits };
 // Strict unprefixed ASCII hex only; no guessing from arbitrary binary/text CSV.
 QByteArray decodeMdbBinaryHex(std::string_view encoded);

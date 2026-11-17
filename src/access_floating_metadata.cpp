@@ -6,6 +6,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSet>
+#include <QtEndian>
 #include <bit>
 #include <cmath>
 #include <limits>
@@ -51,18 +52,21 @@ AccessDecimalValues checkedAccessDecimalValues(const QByteArray& json,const QStr
 }
 
 QByteArray accessSourceDigest(const QString& path) {
-    QFile source(path); if(!source.open(QIODevice::ReadOnly)) throw std::runtime_error("Single-Quelle kann nicht gelesen werden");
-    QCryptographicHash hash(QCryptographicHash::Sha256); if(!hash.addData(&source)) throw std::runtime_error("Single-Quellhash konnte nicht geprüft werden");
+    QFile source(path); if(!source.open(QIODevice::ReadOnly)) throw std::runtime_error("Quelldatei kann nicht gelesen werden");
+    QCryptographicHash hash(QCryptographicHash::Sha256); if(!hash.addData(&source)) throw std::runtime_error("Quellhash konnte nicht geprüft werden");
     return hash.result().toHex();
 }
-template<class T> AccessFloatingValues<T> checkedFloatingValues(const QByteArray& json,const QStringList& names,const QString& sourceTable) {
-    static_assert((sizeof(T)==4 || sizeof(T)==8) && std::numeric_limits<T>::is_iec559);
-    using Bits=std::conditional_t<sizeof(T)==4,quint32,quint64>;
-    const auto fail=[] { throw std::runtime_error("Exakte Gleitkomma-Quelldaten sind unvollständig oder nicht unterstützt"); };
+template<class T> AccessRawValues<T> checkedRawValues(const QByteArray& json,const QStringList& names,const QString& sourceTable,const QString& expectedFormat={}) {
+    const auto fail=[] { throw std::runtime_error("Numerische Rohdaten sind unvollständig oder widersprüchlich"); };
     if(json.isEmpty() || json.size()>16*1024*1024 || names.isEmpty() || names.size()>32767 || sourceTable.isEmpty() || !sourceTable.isValidUtf16() || sourceTable.contains(QChar(0))) fail();
     const auto document=QJsonDocument::fromJson(json); if(!document.isObject()) fail(); const auto root=document.object();
     if(root.value("version").toDouble(-1)!=1 || !root.value("columns").isArray() || !root.value("rows").isArray()
         || !root.value("source_table").isString() || root.value("source_table").toString()!=sourceTable || !root.value("source_sha256").isString()) fail();
+    if constexpr(std::is_same_v<T,qint64>) {
+        const auto format=root.value("source_format").toString();
+        if((format!="JET4" && format!="ACE2010") || (!expectedFormat.isEmpty() && format!=expectedFormat)
+            || root.value("currency_encoding").toString()!="int64-le-1e4") fail();
+    } else if(root.contains("currency_encoding")) fail();
     const auto columns=root.value("columns").toArray(),rows=root.value("rows").toArray();
     if(columns.size()!=names.size() || rows.size()>1000000/names.size()) fail();
     const auto hex=[](const QString& value,qsizetype size) {
@@ -70,7 +74,7 @@ template<class T> AccessFloatingValues<T> checkedFloatingValues(const QByteArray
         for(const auto ch:value) if(!((ch>='0' && ch<='9') || (ch>='a' && ch<='f') || (ch>='A' && ch<='F'))) return false;
         return true;
     };
-    AccessFloatingValues<T> result; result.rowCount=rows.size();
+    AccessRawValues<T> result; result.rowCount=rows.size();
     const auto digest=root.value("source_sha256").toString(); if(!hex(digest,64)) fail(); result.sourceDigest=digest.toLatin1().toLower();
     QSet<QString> seen;
     for(int i=0;i<names.size();++i) {
@@ -84,16 +88,42 @@ template<class T> AccessFloatingValues<T> checkedFloatingValues(const QByteArray
             auto& values=result.columns[names[i].toCaseFolded()];
             if(cells[i].isNull()) { values.append(std::nullopt); continue; }
             if(!cells[i].isString() || !hex(cells[i].toString(),sizeof(T)*2)) fail();
-            bool valid=false; const auto bits=cells[i].toString().toULongLong(&valid,16); if(!valid) fail();
-            const auto number=std::bit_cast<T>(static_cast<Bits>(bits));
-            if(!std::isfinite(number) || (number==0 && std::signbit(number))) fail();
-            values.append(number);
+            if constexpr(std::is_same_v<T,qint64>) {
+                const auto bytes=QByteArray::fromHex(cells[i].toString().toLatin1());
+                values.append(qFromLittleEndian<qint64>(bytes.constData()));
+            } else {
+                static_assert((sizeof(T)==4 || sizeof(T)==8) && std::numeric_limits<T>::is_iec559);
+                using Bits=std::conditional_t<sizeof(T)==4,quint32,quint64>;
+                bool valid=false; const auto bits=cells[i].toString().toULongLong(&valid,16); if(!valid) fail();
+                const auto number=std::bit_cast<T>(static_cast<Bits>(bits));
+                if(!std::isfinite(number) || (number==0 && std::signbit(number))) fail();
+                values.append(number);
+            }
         }
     }
     return result;
 }
-AccessSingleValues checkedAccessSingleValues(const QByteArray& json,const QStringList& names,const QString& table) { return checkedFloatingValues<float>(json,names,table); }
-AccessDoubleValues checkedAccessDoubleValues(const QByteArray& json,const QStringList& names,const QString& table) { return checkedFloatingValues<double>(json,names,table); }
+AccessSingleValues checkedAccessSingleValues(const QByteArray& json,const QStringList& names,const QString& table) { return checkedRawValues<float>(json,names,table); }
+AccessDoubleValues checkedAccessDoubleValues(const QByteArray& json,const QStringList& names,const QString& table) { return checkedRawValues<double>(json,names,table); }
+AccessCurrencyValues checkedAccessCurrencyValues(const QByteArray& json,const QStringList& names,const QString& table,const QString& expectedFormat) {
+    return checkedRawValues<qint64>(json,names,table,expectedFormat);
+}
+
+std::optional<qint64> accessCurrencyLiteralTicks(const QString& text) {
+    if(text.isEmpty() || text.size()>128) return {};
+    static const QRegularExpression literal(R"(\A([+-]?)([0-9]*)(?:\.([0-9]{0,4}))?\z)");
+    const auto match=literal.match(text);
+    if(!match.hasMatch() || (match.capturedLength(2)==0 && match.capturedLength(3)<=0)) return {};
+    const auto digits=match.captured(1)+match.captured(2)+match.captured(3).leftJustified(4,'0');
+    bool valid=false;
+    const auto ticks=digits.toLongLong(&valid,10);
+    if(!valid) return {};
+    return ticks;
+}
+
+bool mdbCurrencyExportMatches(const QString& csv,qint64 ticks) {
+    return accessCurrencyLiteralTicks(csv)==ticks;
+}
 bool mdbFloatingExportMatches(const QString& csv,double value,int precision) {
     if(!std::isfinite(value) || (precision!=8 && precision!=16)) return false;
     const auto canonical=[](const QString& input)->std::optional<QString> {

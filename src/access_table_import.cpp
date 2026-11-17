@@ -36,6 +36,8 @@ std::optional<QString> nativeDefaultLiteral(const QString& token) {
     if(token.compare("TRUE",Qt::CaseInsensitive)==0) return QString("-1");
     if(token.compare("FALSE",Qt::CaseInsensitive)==0) return QString("0");
     if(QRegularExpression(R"(^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$)").match(token).hasMatch()) {
+        // A fixed-scale literal can be verified before the source type is known.
+        if(accessCurrencyLiteralTicks(token)) return token;
         bool valid=false; const auto number=token.toDouble(&valid);
         if(valid && std::isfinite(number)) return token;
         return {};
@@ -247,12 +249,15 @@ QByteArray decodeMdbBinaryHex(std::string_view encoded) {
     return QByteArray::fromHex(QByteArray(encoded.data(),static_cast<qsizetype>(encoded.size())));
 }
 
+enum class ImportPhase { Complete, CreateSchema, InsertRows };
+
 static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
                        const QString& tableName, const AccessTableSchema& schema,
-                       const std::vector<std::vector<CsvField>>& rows, bool insertOnly = false,
+                       const std::vector<std::vector<CsvField>>& rows, ImportPhase phase,
                        AccessBinaryEncoding binaryEncoding=AccessBinaryEncoding::Unsupported,
                        AccessFloatingSource floatingSource=AccessFloatingSource::Csv,const QString& sourceReadPath={}) {
-    const auto& columns = schema.columns;
+    auto columns = schema.columns;
+    const bool insertOnly=phase==ImportPhase::InsertRows;
     if (!db.isOpen() || columns.isEmpty() || rows.empty())
         throw fail("Datenbank, Schema oder CSV-Daten fehlen");
     if (tableName.startsWith("_la_", Qt::CaseInsensitive)
@@ -271,7 +276,37 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
     std::optional<AccessSingleValues> exactSingles;
     std::optional<AccessDoubleValues> exactDoubles;
     std::optional<AccessDecimalValues> exactDecimals;
+    std::optional<AccessCurrencyValues> exactCurrency;
+    QByteArray currencyDigest;
     const auto& floatingReadPath=sourceReadPath.isEmpty() ? sourceFile : sourceReadPath;
+    if(floatingSource==AccessFloatingSource::NativeMdbBits) {
+        QStringList names;
+        for(auto& column:columns) {
+            if(column.sourceType!="CURRENCY") continue;
+            if(column.sqliteType!="REAL" || column.sourceOrigin!="MDBTOOLS_ACCESS")
+                throw fail("Currency-Quelltyp und exportiertes Schema widersprechen sich");
+            names.append(column.name);
+            column.sqliteType="CURRENCY_TICKS";
+        }
+        const auto catalog=QJsonDocument::fromJson(schema.sourceIndexMetadata).object();
+        if(!names.isEmpty() || catalog.contains("currency_columns")) {
+            const auto fields=catalog.value("currency_columns");
+            if(!fields.isArray() || fields.toArray()!=QJsonArray::fromStringList(names))
+                throw fail("Currency-Quellspalten sind unvollständig oder widersprüchlich");
+        }
+        if(!names.isEmpty()) {
+            const auto format=catalog.value("source_format").toString();
+            currencyDigest=catalog.value("source_sha256").toString().toLatin1();
+            if((format!="JET4" && format!="ACE2010") || currencyDigest.size()!=64 || accessSourceDigest(floatingReadPath)!=currencyDigest)
+                throw fail("Currency-Quellformat oder Schemahash ist nicht nachgewiesen");
+            if(phase!=ImportPhase::CreateSchema) {
+                const auto table=catalog.value("source_table").toString();
+                exactCurrency=checkedAccessCurrencyValues(AccessCatalog(floatingReadPath).currencyValues(table),names,table,format);
+                if(exactCurrency->sourceDigest!=currencyDigest || exactCurrency->rowCount!=static_cast<qsizetype>(rows.size()-1))
+                    throw fail("Currency-Rohdaten, Schemahash oder CSV-Zeilenanzahl widersprechen sich");
+            }
+        }
+    }
     if(floatingSource==AccessFloatingSource::NativeMdbBits && schema.sourceIndexMetadata.isEmpty())
         for(const auto& column:columns) if(column.sourceType=="SINGLE" || column.sourceType=="DOUBLE") throw fail("Originale Gleitkomma-Quellmetadaten fehlen");
     if(floatingSource==AccessFloatingSource::NativeMdbBits && !schema.sourceIndexMetadata.isEmpty()) {
@@ -363,7 +398,8 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
         if (column.name.isEmpty() || seen.contains(column.name.toCaseFolded())
             || rows[0][i].value != column.name.toUtf8().toStdString()
             || (column.sqliteType != "TEXT" && column.sqliteType != "INTEGER"
-                && column.sqliteType != "REAL" && column.sqliteType != "BLOB" && column.sqliteType!="DECIMAL_EXACT")
+                && column.sqliteType != "REAL" && column.sqliteType != "BLOB" && column.sqliteType!="DECIMAL_EXACT"
+                && !(column.sqliteType=="CURRENCY_TICKS" && column.sourceType=="CURRENCY" && !currencyDigest.isEmpty()))
             || (column.autoNumber && column.sqliteType!="INTEGER")
             || column.sourceSize<0 || column.sourceSize>255
             || (column.sourceSize>0 && (column.sourceType!="VARCHAR" || column.sourceOrigin!="MDBTOOLS_MYSQL")))
@@ -389,11 +425,17 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
             const auto encoded=decimalSqlKey(decimalLiteral(storedDefault.toStdString()));
             storedDefault="X'"+QString::fromLatin1(QByteArray(reinterpret_cast<const char*>(encoded.data()),encoded.size()).toHex())+"'";
         }
+        if(column.sqliteType=="CURRENCY_TICKS" && column.hasDefault && storedDefault!="NULL") {
+            const auto ticks=accessCurrencyLiteralTicks(storedDefault);
+            if(!ticks) throw fail("Currency-Standardwert benötigt ein exaktes Zahlenliteral mit bis zu vier Nachkommastellen");
+            storedDefault=QString::number(*ticks);
+        }
         definitions << sqlQuote(column.name) + ' ' + (jetManaged ? QString("INT") : column.sqliteType)
             + (nativeCounter(column) ? " PRIMARY KEY AUTOINCREMENT" : descendingSinglePrimary && column.primaryKeyOrder ? " PRIMARY KEY DESC" : QString{})
             + (!nativeCounter(column) && column.autoNumber ? " DEFAULT ("+accessCounterDefault(tableName,column.name)+")" : QString{})
             + (!column.autoNumber && column.hasDefault ? " DEFAULT "+storedDefault : QString{})
             + (column.sqliteType=="DECIMAL_EXACT" ? " CHECK (linaccess_jet_decimal_field_valid("+sqlQuote(column.name)+","+QString::number(column.sourcePrecision)+","+QString::number(column.sourceScale)+"))" : QString{})
+            + (column.sqliteType=="CURRENCY_TICKS" ? " CHECK (typeof("+sqlQuote(column.name)+") IN ('integer','null'))" : QString{})
             + (column.required || properties.required.value_or(false) || column.primaryKeyOrder || column.autoNumber ? " NOT NULL" : "")
             + (properties.allowZeroLength && !*properties.allowZeroLength ? " CHECK (linaccess_jet_nonempty_text("+sqlQuote(column.name)+"))" : QString{})
             + (column.sourceSize>0 ? " CHECK (linaccess_jet_text_capacity("+sqlQuote(column.name)+","+QString::number(column.sourceSize)+"))" : QString{});
@@ -443,6 +485,14 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
                 const auto doubleProof=exactDoubles ? exactDoubles->columns.constFind(columns[c].name.toCaseFolded()) : QMap<QString,QVector<std::optional<double>>>::const_iterator{};
                 const bool hasDoubleProof=exactDoubles && doubleProof!=exactDoubles->columns.cend();
                 const bool csvNull=!cell.quoted && cell.value=="\x1e";
+                std::optional<qint64> currencyTicks;
+                if(columns[c].sqliteType=="CURRENCY_TICKS") {
+                    if(!exactCurrency) throw fail("Currency-Rohdaten fehlen");
+                    const auto found=exactCurrency->columns.constFind(columns[c].name.toCaseFolded());
+                    if(found==exactCurrency->columns.cend()) throw fail("Currency-Quellspalte fehlt");
+                    currencyTicks=found.value()[static_cast<qsizetype>(r-1)];
+                    if(currencyTicks.has_value()==csvNull) throw fail("Currency-NULL-Wert und CSV widersprechen sich");
+                }
                 if(hasSingleProof && ((*proof)[static_cast<qsizetype>(r-1)].has_value()==csvNull)) throw fail("Single-NULL-Quelle und CSV widersprechen sich");
                 if(hasDoubleProof && ((*doubleProof)[static_cast<qsizetype>(r-1)].has_value()==csvNull)) throw fail("Double-NULL-Quelle und CSV widersprechen sich");
                 std::optional<QString> decimalSource;
@@ -451,6 +501,9 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
                 // single-character markers mean NULL, not quoted literal text.
                 if (!cell.quoted && cell.value == "\x1e") {
                     converted = QVariant();
+                } else if(currencyTicks) {
+                    if(!mdbCurrencyExportMatches(value,*currencyTicks)) throw fail("Currency-Rohwert und CSV widersprechen sich");
+                    converted=QVariant::fromValue(*currencyTicks);
                 } else if(columns[c].sqliteType=="DECIMAL_EXACT") {
                     const auto decimal=decimalLiteral(value.toStdString());if(!decimalFitsField(decimal,columns[c].sourcePrecision,columns[c].sourceScale)) throw fail("Decimal-Wert überschreitet Präzision/Skala");
                     const auto bytes=decimalSqlKey(decimal);if(decimalSource && bytes!=decimalSqlKey(decimalLiteral(decimalSource->toStdString()))) throw fail("Decimal-Rohwert und CSV-Snapshot widersprechen sich");
@@ -543,6 +596,7 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
         if(!counterDigest.isEmpty() && accessSourceDigest(floatingReadPath)!=counterDigest) throw fail("AutoWert-Quelle wurde während des Imports verändert");
         if(exactSingles && accessSourceDigest(floatingReadPath)!=exactSingles->sourceDigest) throw fail("Single-Quelle wurde während des Imports verändert");
         if(exactDoubles && accessSourceDigest(floatingReadPath)!=exactDoubles->sourceDigest) throw fail("Double-Quelle wurde während des Imports verändert");
+        if(!currencyDigest.isEmpty() && accessSourceDigest(floatingReadPath)!=currencyDigest) throw fail("Currency-Quelle wurde während des Imports verändert");
         if (!scope.exec("RELEASE la_table_import")) throw fail(scope.lastError().text());
     } catch (...) {
         scope.exec("ROLLBACK TO la_table_import");
@@ -554,7 +608,7 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
 void importAccessTable(QSqlDatabase db, const QString& sourceFile,
                        const QString& tableName, const AccessTableSchema& schema,
                        const std::vector<std::vector<CsvField>>& rows,AccessBinaryEncoding binaryEncoding,AccessFloatingSource floatingSource) {
-    importAccessTablePhase(db, sourceFile, tableName, schema, rows,false,binaryEncoding,floatingSource);
+    importAccessTablePhase(db, sourceFile, tableName, schema, rows,ImportPhase::Complete,binaryEncoding,floatingSource);
 }
 
 void importAccessTable(QSqlDatabase db, const QString& sourceFile,
@@ -630,12 +684,12 @@ int importAccessDatabase(QSqlDatabase db, const QString& sourceFile) {
         for (auto it = schemas.cbegin(); it != schemas.cend(); ++it) {
             std::vector<CsvField> header;
             for (const auto& col : it.value().columns) header.push_back({col.name.toUtf8().toStdString(), true});
-            importAccessTablePhase(db, sourceFile, it.key(), it.value(), {header},false,AccessBinaryEncoding::MdbToolsHex,AccessFloatingSource::NativeMdbBits,readPath);
+            importAccessTablePhase(db, sourceFile, it.key(), it.value(), {header},ImportPhase::CreateSchema,AccessBinaryEncoding::MdbToolsHex,AccessFloatingSource::NativeMdbBits,readPath);
         }
         for (auto it = schemas.cbegin(); it != schemas.cend(); ++it) {
             const auto csv = AccessCatalog::exportTable(readPath,it.key(),true);
             importAccessTablePhase(db, sourceFile, it.key(), it.value(),
-                parseCsvDetailed(std::string_view(csv.constData(), csv.size())), true,AccessBinaryEncoding::MdbToolsHex,AccessFloatingSource::NativeMdbBits,readPath);
+                parseCsvDetailed(std::string_view(csv.constData(), csv.size())), ImportPhase::InsertRows,AccessBinaryEncoding::MdbToolsHex,AccessFloatingSource::NativeMdbBits,readPath);
         }
         if (!db.commit()) throw fail(db.lastError().text());
     } catch (...) { db.rollback(); throw; }
