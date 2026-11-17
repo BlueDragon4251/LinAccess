@@ -622,7 +622,11 @@ void verifyJetCurrencyReference(const QString& path,const QString& expectedForma
         query.finish();
     }
 
-    const auto records=makeDaoDatabase(db)->member("OpenRecordset",{
+    const auto database=makeDaoDatabase(db);
+    const auto tableDefinition=database->member("TableDefs",{VbaValue::string("currency_probe")}).object;
+    const auto definitionField=tableDefinition->member("Fields",{VbaValue::string("amount")}).object;
+    assert(definitionField->member("DefaultValue",{}).asText()=="1.25");
+    const auto records=database->member("OpenRecordset",{
         VbaValue::string("SELECT id,amount FROM currency_probe ORDER BY id")
     }).object;
     const auto field=records->member("Fields",{VbaValue::string("amount")}).object;
@@ -637,6 +641,16 @@ void verifyJetCurrencyReference(const QString& path,const QString& expectedForma
     }
     assert(records->member("EOF",{}).truthy());
     records->member("Close",{});
+
+    const auto defaults=database->member("OpenRecordset",{VbaValue::string("partial_currency")}).object;
+    const auto defaultField=defaults->member("Fields",{VbaValue::string("amount")}).object;
+    assert(defaultField->member("DefaultValue",{}).asText()=="1.25");
+    defaults->member("AddNew",{});
+    const auto defaultAmount=defaultField->member("Value",{});
+    assert(defaultAmount.kind==VbaValue::Kind::Currency && defaultAmount.currencyUnits==12500);
+    defaults->member("CancelUpdate",{});
+    defaults->member("Close",{});
+
     assert(query.exec("INSERT INTO partial_currency(id) VALUES (9)"));
     assert(query.exec("SELECT amount,typeof(amount) FROM partial_currency WHERE id=9") && query.next());
     assert(query.value(0).toLongLong()==12500 && query.value(1).toString()=="integer");
