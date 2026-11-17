@@ -27,8 +27,9 @@ QMap<QString,QString> sqliteColumnTypes(QSqlDatabase db,const QString& table) {
             else if (source == "DATETIME" || source == "DATE") types[column["name"].toString().toCaseFolded()] = "DATETIME";
             else if(source=="CURRENCY") {
                 const auto name=column["name"].toString().toCaseFolded();
-                if(types.value(name)!="REAL") throw VbaRuntimeError(3251,"Currency source requires the supported REAL backing");
-                types[name]="CURRENCY_REAL";
+                const auto storage=types.value(name);
+                if(storage=="REAL") types[name]="CURRENCY_REAL";
+                else if(storage!="CURRENCY_TICKS") throw VbaRuntimeError(3251,"Currency source requires CURRENCY_TICKS or legacy REAL backing");
             }
             else if(source=="DECIMAL" || source=="NUMERIC") {const auto name=column["name"].toString().toCaseFolded();if(types.value(name)!="DECIMAL_EXACT") throw VbaRuntimeError(3251,"Decimal source requires proven exact backing; reimport the original source");types[name]="DECIMAL_EXACT";}
             else if(source=="SINGLE") {const auto name=column["name"].toString().toCaseFolded();if(types.value(name)!="REAL" && types.value(name)!="SINGLE_REAL") throw VbaRuntimeError(3251,"Single source requires proven REAL backing");types[name]="SINGLE_REAL";}
