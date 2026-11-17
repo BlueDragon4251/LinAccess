@@ -346,6 +346,20 @@ std::shared_ptr<VbaObject> makeNativeFieldProperties(TableSchemaReader reader,QS
 std::optional<QString> nativeFieldDefaultExpression(const TableSchemaColumn& field) {
     if(provenDaoFieldType(field.type)==11 || field.sourceType==11) return {};
     if(!field.hasDefault) return QString{};
+    if(field.type=="CURRENCY_TICKS") {
+        if(field.sourceType && field.sourceType!=5) return {};
+        const auto stored=field.storedDefault.trimmed();
+        if(stored.compare("NULL",Qt::CaseInsensitive)==0) return QString("Null");
+        // The physical default stores signed ticks. Use that literal directly so
+        // neither imported metadata nor binary floating-point can change its value.
+        static const QRegularExpression integerLiteral(R"(\A([+-]?)\s*([0-9]+)\z)");
+        const auto match=integerLiteral.match(stored);
+        if(!match.hasMatch()) return {};
+        bool valid=false;
+        const auto ticks=(match.captured(1)+match.captured(2)).toLongLong(&valid);
+        if(!valid) return {};
+        return QString::fromStdString(VbaValue::currency(ticks).asText());
+    }
     if(field.sourceType==8 && field.nativeAttributes) if(const auto clock=nativeDateDefaultExpression(field.storedDefault)) return *clock;
     auto expression=field.literalDefault;
     if(field.type=="DECIMAL_EXACT" && expression.startsWith("X'")) {
