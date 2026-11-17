@@ -8,6 +8,7 @@
 #include "vba_qt_value.hpp"
 #include <bit>
 #include <limits>
+#include <optional>
 #include "access_autonumber.hpp"
 #include "jet_sql_functions.hpp"
 #include "dao_database.hpp"
@@ -451,6 +452,231 @@ void verifyJetIndexCatalogReference(const QString& path) {
     std::cout<<"Actual Jet index catalog: original primary/secondary names, flags, mixed primary directions, persistence, refusal and source hash verified\n";
 }
 
+const QVector<std::optional<qint64>> currencyProbeTicks{
+    std::numeric_limits<qint64>::max(),std::numeric_limits<qint64>::min(),9007199254740993LL,
+    1,-1,0,12500,std::nullopt
+};
+
+void verifyCurrencyRawMetadataContract() {
+    using namespace linaccess;
+    const QString table="currency_probe";
+    const QStringList names{"amount"};
+    const QString digest(64,'a');
+    const QJsonArray rows{
+        QJsonArray{"ffffffffffffff7f"},QJsonArray{"0000000000000080"},QJsonArray{"0100000000002000"},
+        QJsonArray{"0100000000000000"},QJsonArray{"ffffffffffffffff"},QJsonArray{"0000000000000000"},
+        QJsonArray{"d430000000000000"},QJsonArray{QJsonValue::Null}
+    };
+    const QJsonObject metadata{
+        {"version",1},{"source_table",table},{"source_sha256",digest},{"source_format","JET4"},
+        {"currency_encoding","int64-le-1e4"},{"columns",QJsonArray{"amount"}},{"rows",rows}
+    };
+    const auto decode=[&](const QJsonObject& value) {
+        return checkedAccessCurrencyValues(QJsonDocument(value).toJson(QJsonDocument::Compact),names,table);
+    };
+    for(const auto* format:{"JET4","ACE2010"}) {
+        auto raw=metadata;
+        raw.insert("source_format",format);
+        const auto decoded=decode(raw);
+        assert(decoded.rowCount==currencyProbeTicks.size() && decoded.sourceDigest==digest.toLatin1());
+        assert(decoded.columns.size()==1 && decoded.columns.value("amount")==currencyProbeTicks);
+    }
+    const auto reject=[&](const QJsonObject& invalid) {
+        bool refused=false;
+        try { (void)decode(invalid); } catch(const std::exception&) { refused=true; }
+        assert(refused);
+    };
+    for(const auto* required:{"version","source_table","source_sha256","source_format","currency_encoding","columns","rows"}) {
+        auto invalid=metadata;
+        invalid.remove(required);
+        reject(invalid);
+    }
+    for(const auto& cell:{QJsonValue(12500),QJsonValue("d4300000000000"),QJsonValue("GG30000000000000"),
+                          QJsonValue("0xd430000000000000"),QJsonValue("9223372036854775807")}) {
+        auto invalid=metadata;
+        invalid.insert("rows",QJsonArray{QJsonArray{cell}});
+        reject(invalid);
+    }
+    auto invalid=metadata;
+    invalid.insert("rows",QJsonArray{QJsonArray{},QJsonArray{QJsonValue::Null}});
+    reject(invalid);
+    invalid=metadata;
+    invalid.insert("columns",QJsonArray{"unrelated"});
+    reject(invalid);
+    invalid=metadata;
+    invalid.insert("source_table","other_table");
+    reject(invalid);
+    invalid=metadata;
+    invalid.insert("source_sha256",QString(64,'g'));
+    reject(invalid);
+    invalid=metadata;
+    invalid.insert("source_format","JET3");
+    reject(invalid);
+    invalid=metadata;
+    invalid.insert("currency_encoding","int64-be-1e4");
+    reject(invalid);
+
+    assert(mdbCurrencyExportMatches("922337203685477.5807",*currencyProbeTicks[0]));
+    assert(mdbCurrencyExportMatches("-922337203685477.5808",*currencyProbeTicks[1]));
+    assert(mdbCurrencyExportMatches("900719925474.0993",*currencyProbeTicks[2]));
+    assert(mdbCurrencyExportMatches("1.25",12500) && mdbCurrencyExportMatches("1.2500",12500));
+    assert(mdbCurrencyExportMatches("0.0001",1) && mdbCurrencyExportMatches("-0.0001",-1));
+    assert(!mdbCurrencyExportMatches("900719925474.0992",*currencyProbeTicks[2]));
+    assert(!mdbCurrencyExportMatches("922337203685477.5808",*currencyProbeTicks[0]));
+    assert(!mdbCurrencyExportMatches("-922337203685477.5809",*currencyProbeTicks[1]));
+    assert(!mdbCurrencyExportMatches("1.25001",12500) && !mdbCurrencyExportMatches("1,25",12500));
+}
+
+void verifyCurrencyCsvContract() {
+    using namespace linaccess;
+    const auto schema=parseMdbSchema("CREATE TABLE `cash`\n(\n`id` INTEGER,\n`amount` REAL DEFAULT 1.25\n);\n"
+                                     "-- LINACCESS_SOURCE_TYPE 616d6f756e74 CURRENCY\n");
+    assert(schema.columns.size()==2 && schema.columns[1].sourceType=="CURRENCY");
+    assert(schema.columns[1].sqliteType=="REAL" && schema.columns[1].hasDefault);
+
+    QTemporaryDir noSource;
+    assert(noSource.isValid());
+    const auto source=noSource.filePath("missing.mdb");
+    auto db=QSqlDatabase::addDatabase("QSQLITE","currency-csv-contract");
+    db.setDatabaseName(":memory:");
+    assert(db.open());
+    QSqlQuery query(db);
+    assert(query.exec("CREATE TABLE _la_import_log(source_file,kind,name,status,details)"));
+    query.finish();
+
+    const auto rows=parseCsvDetailed("id,amount\n1,1.25\n2,\x1e\n");
+    importAccessTable(db,source,"legacy_cash",schema,rows);
+    assert(sqliteColumnTypes(db,"legacy_cash").value("amount")=="CURRENCY_REAL");
+    assert(query.exec("SELECT amount,typeof(amount) FROM legacy_cash ORDER BY id"));
+    assert(query.next() && query.value(0).toDouble()==1.25 && query.value(1).toString()=="real");
+    const auto amount=qtFieldValue(query.value(0),"CURRENCY_REAL");
+    assert(amount.kind==VbaValue::Kind::Currency && amount.currencyUnits==12500);
+    assert(query.next() && query.value(0).isNull() && query.value(1).toString()=="null");
+    assert(!query.next());
+    query.finish();
+    assert(query.exec("INSERT INTO legacy_cash(id) VALUES (3)"));
+    assert(query.exec("SELECT amount,typeof(amount) FROM legacy_cash WHERE id=3") && query.next());
+    assert(query.value(0).toDouble()==1.25 && query.value(1).toString()=="real");
+    query.finish();
+
+    bool rejected=false;
+    try {
+        importAccessTable(db,source,"unproven_cash",schema,rows,
+                          AccessBinaryEncoding::Unsupported,AccessFloatingSource::NativeMdbBits);
+    } catch(const std::exception&) { rejected=true; }
+    assert(rejected && !db.tables().contains("unproven_cash"));
+    assert(query.exec("SELECT COUNT(*) FROM _la_table_schema WHERE table_name='unproven_cash'")
+           && query.next() && query.value(0).toInt()==0);
+    query.finish();
+    assert(query.exec("SELECT COUNT(*) FROM _la_import_log WHERE name='unproven_cash'")
+           && query.next() && query.value(0).toInt()==0);
+    query.finish();
+}
+
+void verifyJetCurrencyReference(const QString& path,const QString& expectedFormat) {
+    using namespace linaccess;
+    const auto before=accessSourceDigest(path);
+    const QString table="currency_probe";
+    AccessCatalog catalog(path);
+    const auto schema=parseMdbSchema(catalog.tableSchema(table));
+    assert(schema.columns.size()==2 && schema.columns[1].name=="amount" && schema.columns[1].sourceType=="CURRENCY");
+    assert(schema.columns[1].hasDefault && schema.columns[1].sourceDefault=="1.25");
+    const auto raw=catalog.currencyValues(table);
+    assert(QJsonDocument::fromJson(raw).object().value("source_format").toString()==expectedFormat);
+    const auto values=checkedAccessCurrencyValues(raw,{"amount"},table);
+    assert(values.rowCount==currencyProbeTicks.size() && values.sourceDigest==before);
+    assert(values.columns.value("amount")==currencyProbeTicks);
+
+    auto db=QSqlDatabase::addDatabase("QSQLITE","jet-currency-reference-"+expectedFormat);
+    db.setDatabaseName(":memory:");
+    assert(db.open());
+    QSqlQuery query(db);
+    assert(query.exec("CREATE TABLE _la_import_log(source_file,kind,name,status,details)"));
+    query.finish();
+    assert(importAccessDatabase(db,path)==1);
+    const auto rows=parseCsvDetailed(AccessCatalog::exportTable(path,table,true).toStdString());
+    importAccessTable(db,path,"partial_currency",schema,rows,
+                      AccessBinaryEncoding::MdbToolsHex,AccessFloatingSource::NativeMdbBits);
+    for(const auto& imported:{table,QString("partial_currency")}) {
+        assert(sqliteColumnTypes(db,imported).value("amount")=="CURRENCY_TICKS");
+        assert(query.exec("SELECT id,amount,typeof(amount) FROM "+imported+" ORDER BY id"));
+        for(qsizetype i=0;i<currencyProbeTicks.size();++i) {
+            assert(query.next() && query.value(0).toLongLong()==i+1);
+            const auto expected=currencyProbeTicks[i];
+            if(expected) assert(query.value(2).toString()=="integer" && query.value(1).toLongLong()==*expected);
+            else assert(query.value(2).toString()=="null" && query.value(1).isNull());
+        }
+        assert(!query.next());
+        query.finish();
+        assert(query.prepare("SELECT definition FROM _la_table_schema WHERE table_name=?"));
+        query.addBindValue(imported);
+        assert(query.exec() && query.next());
+        const auto metadata=QJsonDocument::fromJson(query.value(0).toByteArray()).array();
+        assert(metadata.size()==2 && metadata[1].toObject().value("source_default").toString()=="1.25");
+        query.finish();
+    }
+
+    const auto records=makeDaoDatabase(db)->member("OpenRecordset",{
+        VbaValue::string("SELECT id,amount FROM currency_probe ORDER BY id")
+    }).object;
+    const auto field=records->member("Fields",{VbaValue::string("amount")}).object;
+    assert(field->member("Type",{}).asNumber()==5 && field->member("Size",{}).asNumber()==8);
+    for(qsizetype i=0;i<currencyProbeTicks.size();++i) {
+        assert(!records->member("EOF",{}).truthy() && records->item("id").asNumber()==i+1);
+        const auto amount=field->member("Value",{});
+        const auto expected=currencyProbeTicks[i];
+        if(expected) assert(amount.kind==VbaValue::Kind::Currency && amount.currencyUnits==*expected);
+        else assert(amount.kind==VbaValue::Kind::Null);
+        records->member("MoveNext",{});
+    }
+    assert(records->member("EOF",{}).truthy());
+    records->member("Close",{});
+    assert(query.exec("INSERT INTO partial_currency(id) VALUES (9)"));
+    assert(query.exec("SELECT amount,typeof(amount) FROM partial_currency WHERE id=9") && query.next());
+    assert(query.value(0).toLongLong()==12500 && query.value(1).toString()=="integer");
+    query.finish();
+    assert(!query.exec("UPDATE partial_currency SET amount=1.25 WHERE id=9"));
+    query.finish();
+
+    const auto reject=[&](const AccessTableSchema& alteredSchema,const auto& alteredRows) {
+        bool refused=false;
+        try {
+            importAccessTable(db,path,"contradictory_currency",alteredSchema,alteredRows,
+                              AccessBinaryEncoding::MdbToolsHex,AccessFloatingSource::NativeMdbBits);
+        } catch(const std::exception&) { refused=true; }
+        assert(refused && !db.tables().contains("contradictory_currency"));
+    };
+    assert(rows.size()==static_cast<std::size_t>(currencyProbeTicks.size()+1));
+    auto alteredRows=rows;
+    alteredRows[3][1].value="900719925474.0992";
+    reject(schema,alteredRows);
+    alteredRows=rows;
+    alteredRows.back()[1]={"0",false};
+    reject(schema,alteredRows);
+    alteredRows=rows;
+    alteredRows[1][1]={"\x1e",false};
+    reject(schema,alteredRows);
+    alteredRows=rows;
+    alteredRows.resize(1);
+    reject(schema,alteredRows);
+
+    auto missingColumnProof=schema;
+    auto sourceMetadata=QJsonDocument::fromJson(schema.sourceIndexMetadata).object();
+    sourceMetadata.remove("currency_columns");
+    missingColumnProof.sourceIndexMetadata=QJsonDocument(sourceMetadata).toJson(QJsonDocument::Compact);
+    reject(missingColumnProof,rows);
+    auto wrongDigest=schema;
+    sourceMetadata=QJsonDocument::fromJson(schema.sourceIndexMetadata).object();
+    sourceMetadata.insert("source_sha256",QString(64,'0'));
+    wrongDigest.sourceIndexMetadata=QJsonDocument(sourceMetadata).toJson(QJsonDocument::Compact);
+    reject(wrongDigest,rows);
+    assert(query.exec("SELECT COUNT(*) FROM _la_import_log WHERE name='contradictory_currency'")
+           && query.next() && query.value(0).toInt()==0);
+    query.finish();
+    assert(accessSourceDigest(path)==before);
+    std::cout<<"Technical "<<expectedFormat.toStdString()<<" MONEY fixture: raw ticks, both imports, DAO, default, NULL and rejection verified\n";
+}
+
 void verifyDecimalCsvContract() {
     using namespace linaccess;
     const auto schema=parseMdbSchema("CREATE TABLE `decimal_csv`\n(\n`v` NUMERIC(28,4)\n);\n");
@@ -858,6 +1084,12 @@ CREATE INDEX `label` ON `source` (`a``b`);
     for(const auto* malformed:{"0","0x00","GG","00 1","00\n00"}) {
         bool rejected=false; try { (void)decodeMdbBinaryHex(malformed); } catch(const std::exception&) { rejected=true; } assert(rejected);
     }
+    verifyCurrencyRawMetadataContract();
+    verifyCurrencyCsvContract();
+    const auto jetCurrencyReference=qEnvironmentVariable("LINACCESS_JET_CURRENCY_REFERENCE");
+    if(!jetCurrencyReference.isEmpty()) verifyJetCurrencyReference(jetCurrencyReference,"JET4");
+    const auto aceCurrencyReference=qEnvironmentVariable("LINACCESS_ACE_CURRENCY_REFERENCE");
+    if(!aceCurrencyReference.isEmpty()) verifyJetCurrencyReference(aceCurrencyReference,"ACE2010");
     verifyDecimalCsvContract();
     const auto decimalReference=qEnvironmentVariable("LINACCESS_JET_DECIMAL_REFERENCE");if(!decimalReference.isEmpty()) verifyJetDecimalReference(decimalReference);
     const auto fieldFormatReference=qEnvironmentVariable("LINACCESS_JET_FIELD_FORMAT_REFERENCE");if(!fieldFormatReference.isEmpty()) verifyJetFieldFormatReference(fieldFormatReference);
