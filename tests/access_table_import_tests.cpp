@@ -512,6 +512,11 @@ void verifyCurrencyRawMetadataContract() {
     invalid=metadata;
     invalid.insert("source_format","JET3");
     reject(invalid);
+    bool wrongFormat=false;
+    try {
+        (void)checkedAccessCurrencyValues(QJsonDocument(metadata).toJson(QJsonDocument::Compact),names,table,"ACE2010");
+    } catch(const std::exception&) { wrongFormat=true; }
+    assert(wrongFormat);
     invalid=metadata;
     invalid.insert("currency_encoding","int64-be-1e4");
     reject(invalid);
@@ -530,7 +535,8 @@ void verifyCurrencyRawMetadataContract() {
 void verifyCurrencyCsvContract() {
     using namespace linaccess;
     const auto schema=parseMdbSchema("CREATE TABLE `cash`\n(\n`id` INTEGER,\n`amount` REAL DEFAULT 1.25\n);\n"
-                                     "-- LINACCESS_SOURCE_TYPE 616d6f756e74 CURRENCY\n");
+                                     "-- LINACCESS_SOURCE_TYPE 616d6f756e74 CURRENCY\n"
+                                     "-- LINACCESS_SOURCE_ORIGIN 616d6f756e74 MDBTOOLS_ACCESS\n");
     assert(schema.columns.size()==2 && schema.columns[1].sourceType=="CURRENCY");
     assert(schema.columns[1].sqliteType=="REAL" && schema.columns[1].hasDefault);
 
