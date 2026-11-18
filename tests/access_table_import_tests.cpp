@@ -762,6 +762,14 @@ void verifyDecimalCsvContract() {
     assert(db.rollback());
     absent("decimal_empty");
 
+    execute("SELECT Count(v) AS value INTO decimal_count FROM decimal_csv");
+    assert(query.exec("SELECT value FROM decimal_count") && query.next() && query.value(0).toInt()==1 && !query.next());
+    query.finish();
+    execute("SELECT 1 AS v INTO decimal_literal FROM decimal_csv");
+    assert(query.exec("SELECT v FROM decimal_literal") && query.next() && query.value(0).toInt()==1 && !query.next());
+    query.finish();
+    assert(nativeTableDecimalTypes(db,"decimal_count").isEmpty() && nativeTableDecimalTypes(db,"decimal_literal").isEmpty());
+
     reject("SELECT CDec('1') AS amount INTO decimal_computed FROM decimal_csv","decimal_computed",3251);
     reject("SELECT Sum(v) AS amount INTO decimal_sum FROM decimal_csv","decimal_sum",3251);
     reject("SELECT +v AS amount INTO decimal_unary FROM decimal_csv","decimal_unary",3251);

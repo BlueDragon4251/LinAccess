@@ -2873,9 +2873,7 @@ bool makeTableIdentifier(const QVector<Token>& tokens,qsizetype at) {
     return at>=0 && at<tokens.size() && (tokens[at].kind==Token::Word || tokens[at].kind==Token::Identifier);
 }
 QString directMakeTableField(QVector<Token> expression,const QString& qualifier) {
-    if(expression.size()>=3 && makeTableWord(expression,expression.size()-2,"AS") && makeTableIdentifier(expression,expression.size()-1))
-        expression.resize(expression.size()-2);
-    else if((expression.size()==2 || expression.size()==4) && makeTableIdentifier(expression,expression.size()-1))
+    if((expression.size()==2 || expression.size()==4) && makeTableIdentifier(expression,expression.size()-1))
         expression.removeLast(); // SQLite also accepts a trailing bare alias.
     if(expression.size()==3 && makeTableIdentifier(expression,0) && symbol(expression[1],".")
         && expression[0].value.compare(qualifier,Qt::CaseInsensitive)==0)
@@ -2996,9 +2994,12 @@ AccessMakeTableSource accessMakeTableSource(QSqlDatabase db,const AccessQueryPla
         if(symbol(tokens[at],"(")) ++depth;
         else if(symbol(tokens[at],")")) --depth;
         if(at!=into && (depth || !symbol(tokens[at],","))) continue;
-        const auto projection=tokens.mid(first,at-first);
+        auto projection=tokens.mid(first,at-first);
+        if(projection.size()>=3 && makeTableWord(projection,projection.size()-2,"AS") && makeTableIdentifier(projection,projection.size()-1))
+            projection.resize(projection.size()-2);
+        const bool untyped=result.types.value(directFields.size()).isEmpty();
         directFields.append(directMakeTableField(projection,qualifier));
-        if(directFields.last().isEmpty()) for(const auto& token:projection) {
+        if(untyped && directFields.last().isEmpty()) for(const auto& token:projection) {
             if((token.kind==Token::Word || token.kind==Token::Identifier)
                 && sourceTypes.value(token.value.toCaseFolded())=="DECIMAL_EXACT")
                 throw VbaRuntimeError(3251,"Decimal make-table expression requires a direct physical field");
