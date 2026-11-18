@@ -12,12 +12,47 @@
 #endif
 #include <cassert>
 
+static void testGoToRecordBoundaries(QSqlDatabase db) {
+    using linaccess::VbaValue;
+    const auto reject=[](const auto& commands,const std::vector<VbaValue>& args,int expected) {
+        int number=0;
+        try { (void)commands->member("GoToRecord",args); }
+        catch(const linaccess::VbaRuntimeError& error) { number=error.number; }
+        assert(number==expected);
+    };
+    const QByteArray queryLayout="Begin Form\nRecordSource =\"SELECT id,label FROM records ORDER BY id ASC\"\nEnd";
+    AccessFormPreview queryForm("navigation_query",queryLayout,{},db);
+    const auto queryCommands=makePreviewApplicationObject(queryForm)->member("DoCmd",{}).object;
+    const auto queryModel=makePreviewFormObject(queryForm);
+    queryCommands->member("GoToRecord",{VbaValue::integer(2),VbaValue::string("navigation_query"),VbaValue::integer(3)});
+    assert(queryModel->item("id").asNumber()==30 && queryModel->member("CurrentRecord",{}).asNumber()==3);
+    reject(queryCommands,{VbaValue::integer(2),VbaValue::string("navigation_query")},2046);
+    assert(queryModel->item("id").asNumber()==30 && !queryModel->member("NewRecord",{}).truthy() && queryForm.close());
+
+    QSqlQuery sql(db);
+    assert(sql.exec("CREATE TABLE limited_navigation(id INTEGER PRIMARY KEY)"));
+    assert(sql.exec("WITH RECURSIVE seq(id) AS (VALUES(1) UNION ALL SELECT id+1 FROM seq WHERE id<10001) INSERT INTO limited_navigation SELECT id FROM seq"));
+    const QByteArray boundedLayout="Begin Form\nRecordSource =\"limited_navigation\"\nOrderBy =\"id ASC\"\nOrderByOn =-1\nEnd";
+    AccessFormPreview bounded("navigation_limit",boundedLayout,{},db);
+    const auto boundedCommands=makePreviewApplicationObject(bounded)->member("DoCmd",{}).object;
+    const auto boundedForm=makePreviewFormObject(bounded);
+    boundedCommands->member("GoToRecord",{VbaValue::integer(2),VbaValue::string("navigation_limit"),VbaValue::integer(4),VbaValue::integer(10000)});
+    assert(boundedForm->item("id").asNumber()==10000);
+    for(const auto action:{1,3,5}) {
+        reject(boundedCommands,{VbaValue::integer(2),VbaValue::string("navigation_limit"),VbaValue::integer(action)},3035);
+        assert(boundedForm->item("id").asNumber()==10000);
+    }
+    assert(bounded.close());
+    assert(sql.exec("DROP TABLE limited_navigation"));
+}
+
 int main(int argc,char** argv) {
     QApplication app(argc,argv); using linaccess::VbaValue;
     auto db=QSqlDatabase::addDatabase("QSQLITE","current-record"); db.setDatabaseName(":memory:"); assert(db.open()); QSqlQuery sql(db);
     assert(sql.exec("CREATE TABLE _la_access_artifacts(id INTEGER PRIMARY KEY,kind TEXT,name TEXT,source_bytes BLOB)"));
     assert(sql.exec("CREATE TABLE records(id INTEGER PRIMARY KEY,label TEXT)")); assert(sql.exec("INSERT INTO records VALUES(10,'first'),(20,'second'),(30,'third')"));
     assert(sql.exec("CREATE TABLE positions(position INTEGER,type INTEGER)"));
+    testGoToRecordBoundaries(db);
     {
         const QByteArray buttons=R"FORM(Begin Form
 Begin Section

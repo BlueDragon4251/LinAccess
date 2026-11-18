@@ -2645,7 +2645,65 @@ void testModuleRecordNavigation(MainWindow& window,QSqlDatabase db) {
     sql.prepare("INSERT INTO _la_objects VALUES('module','NavigationProcedure',?)");sql.addBindValue(QJsonDocument(QJsonObject{{"version",1},{"vba","Public Sub NavigateNamed()\nApplication.DoCmd.GoToRecord ObjectType:=acDataTable,ObjectName:=\"module_nav_rows\",Record:=acGoTo,Offset:=3\nEnd Sub"}}).toJson(QJsonDocument::Compact));assert(sql.exec());sql.finish();application->member("Run",{VbaValue::string("NavigateNamed")});assert(currentRow()==2);
     const auto definition=QJsonObject{{"version",1},{"actions",QJsonArray{QJsonObject{{"action","GoToRecord"},{"arguments",QJsonArray{QJsonValue::Null,QJsonValue::Null,4,2}}}}}};linaccess::storeNativeMacro(db,"NavigateMacro",definition);commands->member("RunMacro",{VbaValue::string("NavigateMacro")});assert(currentRow()==1);
     AccessFormPreview form("ModuleNavigationForm","Begin Form\nRecordSource =\"module_nav_rows\"\nBegin Section\nEnd\nEnd",{},db,&window);form.show();QApplication::processEvents();auto root=makePreviewFormObject(form);assert(form.hasDataSource());commands->member("GoToRecord",{VbaValue::integer(2),VbaValue::string("modulenavigationform"),VbaValue::integer(4),VbaValue::integer(3)});assert(root->member("CurrentRecord",{}).number==3);commands->member("GoToRecord",{VbaValue::missing(),VbaValue::missing(),VbaValue::integer(2)});assert(root->member("CurrentRecord",{}).number==1);commands->member("RunMacro",{VbaValue::string("NavigateMacro")});assert(root->member("CurrentRecord",{}).number==2);
-    makePreviewApplicationObject(form)->member("DoCmd",{}).object->member("RunMacro",{VbaValue::string("NavigateMacro")});assert(root->member("CurrentRecord",{}).number==2);assert(form.close());
+    auto formCommands=makePreviewApplicationObject(form)->member("DoCmd",{}).object;
+    formCommands->member("RunMacro",{VbaValue::string("NavigateMacro")});
+    assert(root->member("CurrentRecord",{}).number==2);
+    const auto rejectNavigation=[](const auto& command, const std::vector<VbaValue>& arguments,int expected) {
+        int rejected=0;
+        try { (void)command->member("GoToRecord",arguments); }
+        catch(const linaccess::VbaRuntimeError& failure) { rejected=failure.number; }
+        assert(rejected==expected);
+    };
+    const std::vector<VbaValue> queryFirst{VbaValue::integer(1),VbaValue::missing(),VbaValue::integer(2)};
+    commands->member("SelectObject",{VbaValue::integer(1),VbaValue::string("ModuleNavigationQuery")});
+    auto* queryView=tabs->currentWidget()->findChild<QTableView*>();
+    assert(queryView && queryView->currentIndex().row()==1);
+    const std::vector<VbaValue> formFirst{VbaValue::integer(2),VbaValue::missing(),VbaValue::integer(2)};
+    rejectNavigation(formCommands,formFirst,2046);
+    rejectNavigation(commands,formFirst,2046);
+    rejectNavigation(formCommands,{VbaValue::integer(0),VbaValue::missing(),VbaValue::integer(2)},3251);
+    assert(!activePreviewDocument() && queryView->currentIndex().row()==1 && root->member("CurrentRecord",{}).number==2);
+    assert(AccessFormPreview::activateProjectDocument(db,&window,&form));
+    rejectNavigation(formCommands,queryFirst,3251);
+    rejectNavigation(commands,queryFirst,3251);
+    assert(activePreviewDocument()==&form && queryView->currentIndex().row()==1);
+    formCommands->member("GoToRecord",formFirst);
+    assert(root->member("CurrentRecord",{}).number==1 && activePreviewDocument()==&form);
+    formCommands->member("GoToRecord",{VbaValue::integer(1),VbaValue::string("modulenavigationquery"),VbaValue::integer(2)});
+    assert(queryView->currentIndex().row()==0 && queryView->currentIndex().data().toInt()==3);
+    commands->member("GoToRecord",{VbaValue::integer(1),VbaValue::missing(),VbaValue::integer(3)});
+    assert(queryView->currentIndex().row()==2 && queryView->currentIndex().data().toInt()==1);
+    rejectNavigation(formCommands,{VbaValue::integer(1),VbaValue::missing(),VbaValue::integer(5)},2448);
+
+    {
+        auto foreignDb=QSqlDatabase::addDatabase("QSQLITE","navigation-foreign-project");
+        foreignDb.setDatabaseName(":memory:");
+        assert(foreignDb.open());
+        AccessFormPreview foreign("ForeignNavigationForm","Begin Form\nBegin Section\nEnd\nEnd",{},foreignDb,&window);
+        auto foreignCommands=makePreviewApplicationObject(foreign)->member("DoCmd",{}).object;
+        rejectNavigation(foreignCommands,{VbaValue::integer(0),VbaValue::string("module_nav_rows"),VbaValue::integer(2)},3420);
+        rejectNavigation(foreignCommands,{VbaValue::integer(1),VbaValue::string("ModuleNavigationQuery"),VbaValue::integer(2)},3420);
+        assert(!activePreviewDocument() && currentRow()==2 && queryView->currentIndex().row()==2 && foreign.close());
+    }
+    QSqlDatabase::removeDatabase("navigation-foreign-project");
+
+    const QByteArray reportLayout="Begin Report\nRecordSource =\"module_nav_rows\"\nWidth =2400\n"
+        "Begin Section\nHeight =600\nForceNewPage =3\n"
+        "Begin TextBox\nName =\"rowNumber\"\nControlSource =\"id\"\nWidth =1800\nHeight =300\nEnd\nEnd\nEnd";
+    AccessFormPreview report("NavigationReport",reportLayout,{},db,&window);
+    report.show();
+    assert(AccessFormPreview::activateProjectDocument(db,&window,&report));
+    auto* reportPages=report.findChild<QPrintPreviewWidget*>("access-report-pages");
+    assert(activePreviewDocument()==&report && report.hasDataSource() && reportPages && reportPages->pageCount()>1);
+    reportPages->setCurrentPage(reportPages->pageCount());
+    const int reportPage=reportPages->currentPage();
+    const std::vector<VbaValue> reportFirst{VbaValue::integer(3),VbaValue::string("navigationreport"),VbaValue::integer(2)};
+    rejectNavigation(formCommands,reportFirst,3251);
+    rejectNavigation(commands,reportFirst,3251);
+    rejectNavigation(formCommands,{},438);
+    rejectNavigation(commands,{},438);
+    assert(activePreviewDocument()==&report && reportPages->currentPage()==reportPage && queryView->currentIndex().row()==2);
+    assert(report.close() && form.close());
     commands->member("Close",{VbaValue::integer(1),VbaValue::string("ModuleNavigationQuery")});commands->member("Close",{VbaValue::integer(0),VbaValue::string("module_nav_rows")});error=0;try {commands->member("GoToRecord",{VbaValue::integer(2),VbaValue::string("ModuleNavigationForm")});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==2450);assert(sql.exec("DELETE FROM _la_objects WHERE kind='module' AND name='NavigationProcedure'"));
 }
 

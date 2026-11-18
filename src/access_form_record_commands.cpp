@@ -14,6 +14,74 @@
 namespace {
 QString identifier(QString name) { return '"'+name.replace('"',"\"\"")+'"'; }
 }
+
+linaccess::NativeGoToRecordArguments linaccess::nativeGoToRecordArguments(const std::vector<VbaValue>& values) {
+    if(values.size()>4) throw VbaRuntimeError(450,"GoToRecord accepts at most four arguments");
+    const auto omitted=[&](std::size_t index) {
+        return index>=values.size() || values[index].kind==VbaValue::Kind::Missing || values[index].kind==VbaValue::Kind::Empty;
+    };
+    const auto number=[&](std::size_t index,int fallback) {
+        return omitted(index) ? fallback : static_cast<int>(coerceVbaModuleValue(values[index],"long").number);
+    };
+    NativeGoToRecordArguments result;
+    result.type=number(0,-1);
+    if(!omitted(1)) result.name=QString::fromStdString(coerceVbaModuleValue(values[1],"string").asText());
+    result.action=number(2,1);
+    result.offset=number(3,1);
+    if(result.type==3) throw VbaRuntimeError(3251,"GoToRecord does not navigate report records");
+    if(result.type< -1 || result.type>2 || (result.type==-1 && !result.name.isEmpty()))
+        throw VbaRuntimeError(3251,"GoToRecord object type/name unsupported");
+    if(result.action<0 || result.action>5) throw VbaRuntimeError(5,"Invalid GoToRecord action");
+    if((result.action==0 || result.action==1 || result.action==4) && result.offset<1)
+        throw VbaRuntimeError(2105,"Invalid record navigation offset");
+    return result;
+}
+
+void AccessFormPreview::navigateFormRecord(int action,int offset) {
+    using linaccess::VbaRuntimeError;
+    if(layout_.kind!=linaccess::AccessDocumentKind::Form)
+        throw VbaRuntimeError(438,"Report does not support record navigation");
+    if(closed_ || closing_ || openCancelled_)
+        throw VbaRuntimeError(2450,"GoToRecord form is not open");
+    if(recordCommandRunning_) throw VbaRuntimeError(3251,"Navigation during record command unsupported");
+    if(!dataSourceAvailable_) throw VbaRuntimeError(dataSourceErrorNumber_ ? dataSourceErrorNumber_ : 2046,"Record source unavailable");
+    const bool additions=layout_.allowAdditions && directTable_;
+    if(action==5 && !additions) throw VbaRuntimeError(2046,"New records are unavailable");
+    const auto requiresRecordEnd=[&] {
+        return action==3 || action==5 || ((action==0 || action==1) && currentRecordIndex_==0);
+    };
+    if(dataTruncated_ && requiresRecordEnd()) throw VbaRuntimeError(3035,"Incomplete record navigation");
+
+    const QPointer<AccessFormPreview> selected=this;
+    if(!saveRecord()) throw VbaRuntimeError(2501,"Record navigation save cancelled");
+    if(!selected || closed_ || closing_ || openCancelled_ || !dataSourceAvailable_)
+        throw VbaRuntimeError(2501,"GoToRecord target became unavailable during save");
+
+    const qint64 count=recordSelector_->count()-1;
+    const qint64 current=currentRecordIndex_ ? currentRecordIndex_ : count+1;
+    qint64 target;
+    switch(action) {
+    case 0: target=current-offset; break;
+    case 1: target=current+offset; break;
+    case 2: target=1; break;
+    case 3: target=count; break;
+    case 4: target=offset; break;
+    case 5: target=count+1; break;
+    default: throw VbaRuntimeError(5,"Invalid record navigation action");
+    }
+    if(dataTruncated_ && (requiresRecordEnd() || target>count))
+        throw VbaRuntimeError(3035,"Incomplete record navigation");
+    const bool newRecord=target==count+1 && (action==1 || action==5);
+    if(newRecord && !(layout_.allowAdditions && directTable_))
+        throw VbaRuntimeError(2046,"New records are unavailable");
+    if(!newRecord && (target<1 || target>count))
+        throw VbaRuntimeError(2105,"Cannot go to specified record");
+    const int index=newRecord ? 0 : static_cast<int>(target);
+    selectRecord(index);
+    if(!selected || closed_ || currentRecordIndex_!=index)
+        throw VbaRuntimeError(2501,"Record navigation cancelled");
+}
+
 void AccessFormPreview::clearRecordSelection() {
     if (!recordSelected_) return;
     recordSelected_=false; recordSelector_->setStyleSheet({});

@@ -28,6 +28,17 @@ class QLineEdit;
 class QCheckBox;
 class QKeyEvent;
 
+namespace linaccess {
+struct NativeGoToRecordArguments {
+    int type=-1;
+    QString name;
+    int action=1;
+    int offset=1;
+};
+// Callers resolve scalar defaults before routing the request.
+NativeGoToRecordArguments nativeGoToRecordArguments(const std::vector<VbaValue>& values);
+}
+
 // Renders controls from Access 2003 SaveAsText instead of placing them in an
 // unrelated auto-generated QFormLayout. Only supported VBA handlers can run.
 class AccessFormPreview final : public QDialog {
@@ -58,6 +69,8 @@ public:
     static bool databaseWindowActive(QWidget* window=nullptr);
     static QVector<QPointer<AccessFormPreview>> projectDocuments(const QSqlDatabase& database);
     static bool projectObjectLoaded(const QSqlDatabase& database,linaccess::AccessDocumentKind kind,const QString& name);
+    static void navigateDataRecord(QSqlDatabase database,QWidget* context,
+        const linaccess::NativeGoToRecordArguments& request,AccessFormPreview* caller=nullptr);
     static bool activateProjectDocument(QSqlDatabase database,QWidget* projectWindow,AccessFormPreview* target);
     static void cycleProjectDocuments(QSqlDatabase database,QWidget* projectWindow,bool backwards,AccessFormPreview* current=nullptr);
     static AccessFormPreview* showDocument(linaccess::AccessDocumentKind kind,QString name,
@@ -93,6 +106,7 @@ private:
     QString physicalRowIdentity() const;
     QVariant boundFieldSqlValue(const linaccess::VbaValue& value,const QString& field,const QString& type) const;
     void setTimerInterval(int interval);
+    void navigateFormRecord(int action,int offset);
     void selectCurrentRecordForCommand();
     void deleteCurrentRecord();
     void copyCurrentRecord();

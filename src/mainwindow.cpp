@@ -1123,31 +1123,47 @@ QVariantMap MainWindow::findTableRecord(const QVariantMap& request) {
     } catch(const linaccess::VbaRuntimeError& error) { return tableCommandFailure(error.number,QString::fromUtf8(error.what())); }
 }
 
-QVariantMap MainWindow::navigateQueryDocument(const QString& name,int action,int offset) {
+QVariantMap MainWindow::navigateQueryDocument(const QString& name,int action,int offset,const QString& projectConnection) {
+    if(projectConnection!=db_.connectionName()) return tableCommandFailure(3420,"Abfragenavigation gehört zu einem anderen Projekt.");
     if(!db_.isOpen() || QApplication::activeModalWidget()) return tableCommandFailure(2046,"Abfragenavigation ist in diesem Kontext nicht verfügbar.");
-    const QPointer<QWidget> page=name.isEmpty() ? activeDataPage_.data() : findOpenQuery(name);
+    const bool active=!activePreviewDocument() && AccessFormPreview::databaseWindowActive(this) && activeDataPage_
+        && tabs_->currentWidget()==activeDataPage_;
+    const QPointer<QWidget> page=name.isEmpty() ? (active ? activeDataPage_.data() : nullptr) : findOpenQuery(name);
     if(!page || tabs_->indexOf(page)<0 || page->property("la_project_object_kind").toString()!="query")
         return tableCommandFailure(3251,"Die angeforderte offene Abfrage ist nicht verfügbar.");
     const QPointer<MainWindow> self=this;
-    if(!activateDataPage(page)) return tableCommandFailure(2501,"Abfrageaktivierung wurde abgebrochen.");
-    if(!self || !page) return tableCommandFailure(2501,"Abfragedokument wurde während der Aktivierung geschlossen.");
-    return navigateTableDocument({},action,offset,false);
+    if((!active || activeDataPage_!=page) && !activateDataPage(page))
+        return tableCommandFailure(2501,"Abfrageaktivierung wurde abgebrochen.");
+    if(!self || !page || activeDataPage_!=page || tabs_->currentWidget()!=page
+        || activePreviewDocument() || !AccessFormPreview::databaseWindowActive(this))
+        return tableCommandFailure(2501,"Abfragedokument ist nach der Aktivierung nicht verfügbar.");
+    return navigateTableDocument({},action,offset,false,projectConnection);
 }
 
-QVariantMap MainWindow::navigateTableDocument(const QString& name,int action,int offset,bool explicitTable) {
+QVariantMap MainWindow::navigateTableDocument(const QString& name,int action,int offset,bool explicitTable,const QString& projectConnection) {
     const bool active= !activePreviewDocument() && AccessFormPreview::databaseWindowActive(this) && activeDataPage_
         && tabs_->indexOf(activeDataPage_)>=0 && tabs_->currentWidget()==activeDataPage_;
     if(!explicitTable && !active) return {};
+    if(!projectConnection.isEmpty() && projectConnection!=db_.connectionName())
+        return tableCommandFailure(3420,"Tabellennavigation gehört zu einem anderen Projekt.");
     if(action<0 || action>5) return tableCommandFailure(5,"Ungültige Datensatznavigation.");
     if((action==0 || action==1 || action==4) && offset<1) return tableCommandFailure(2105,"Ungültiger Datensatzabstand.");
     if(!db_.isOpen() || QApplication::activeModalWidget()) return tableCommandFailure(2046,"Tabellennavigation ist in diesem Kontext nicht verfügbar.");
     QPointer<MainWindow> self=this;
     QPointer<QWidget> page=name.isEmpty() ? (active ? activeDataPage_.data() : nullptr) : findOpenTable(name);
     if(!page) return tableCommandFailure(3251,"Die angeforderte offene Tabelle ist nicht verfügbar.");
+    const auto kind=page->property("la_project_object_kind").toString();
+    if(explicitTable && kind!="table") return tableCommandFailure(3251,"Das aktive Dokument ist keine Tabelle.");
+    if(kind!="table" && kind!="query") return tableCommandFailure(2046,"Kein natives Datenblatt verfügbar.");
+    const auto generation=property("la_project_generation");
+    const auto targetActive=[&] {
+        return self && page && db_.isOpen() && property("la_project_generation")==generation && activeDataPage_==page
+            && tabs_->currentWidget()==page && !activePreviewDocument() && AccessFormPreview::databaseWindowActive(this)
+            && !QApplication::activeModalWidget();
+    };
     if((!active || page!=activeDataPage_) && !activateDataPage(page)) return tableCommandFailure(2501,"Tabellenaktivierung wurde abgebrochen.");
-    if(!self || !page) return tableCommandFailure(2501,"Tabellendokument wurde während der Aktivierung geschlossen.");
-    if(page->property("la_project_object_kind").toString()=="query" && explicitTable) return tableCommandFailure(3251,"Die aktive Abfrage ist keine Tabelle.");
-    if(page->property("la_project_object_kind").toString()=="query" && !page->property("la_editable_query").toBool()) {
+    if(!targetActive()) return tableCommandFailure(2501,"Datenblatt ist nach der Aktivierung nicht verfügbar.");
+    if(kind=="query" && !page->property("la_editable_query").toBool()) {
         const QPointer<QTableView> view=page->findChild<QTableView*>("native-query-view");
         auto* result=view ? dynamic_cast<linaccess::AccessQueryModel*>(view->model()) : nullptr;
         if(!result) return tableCommandFailure(2046,"Kein natives Abfrageergebnis verfügbar.");
@@ -1169,13 +1185,13 @@ QVariantMap MainWindow::navigateTableDocument(const QString& name,int action,int
     if(!table || !model) return tableCommandFailure(2046,"Kein natives Tabellendokument.");
     if(action==5) return dispatchTableCommand(28);
     if(!table->finishEditing()) return tableModelFailure(model,2501);
-    if(!self || !table || !model) return tableCommandFailure(2501,"Tabellendokument wurde während der Validierung geschlossen.");
+    if(!targetActive() || !table || !model) return tableCommandFailure(2501,"Datenblatt ist nach der Validierung nicht verfügbar.");
     // A clean current record can move without writing unrelated drafts. Save
     // only the current existing record, or a sole populated inserted record.
     if(model->isDirty() && model->hasPendingRecord(table->currentIndex().row())) {
         const auto saved=saveDataPage(page,false,true);
         if(saved.value("error").toInt()) return saved;
-        if(!self || !page || !table || !model) return tableCommandFailure(2501,"Tabellendokument wurde beim Speichern geschlossen.");
+        if(!targetActive() || !table || !model) return tableCommandFailure(2501,"Datenblatt ist nach dem Speichern nicht verfügbar.");
     }
     const auto current=table->currentIndex();
     qint64 target=action==2 ? 0 : action==4 ? static_cast<qint64>(offset)-1
@@ -1187,7 +1203,7 @@ QVariantMap MainWindow::navigateTableDocument(const QString& name,int action,int
     while(model->canFetchMore() && (action==3 || target>=model->rowCount())) {
         if(model->rowCount()>=rowLimit) return tableCommandFailure(3251,"Datensatzmenge überschreitet die native Navigationsgrenze.");
         const int before=model->rowCount(); model->fetchMore();
-        if(!self || !table || !model) return tableCommandFailure(2501,"Tabellendokument wurde beim Laden geschlossen.");
+        if(!targetActive() || !table || !model) return tableCommandFailure(2501,"Datenblatt ist nach dem Laden nicht verfügbar.");
         if(model->rowCount()>rowLimit) return tableCommandFailure(3251,"Datensatzmenge überschreitet die native Navigationsgrenze.");
         if(model->rowCount()==before) {
             if(model->lastError().isValid()) return tableModelFailure(model,3146);

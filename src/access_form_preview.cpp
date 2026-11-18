@@ -874,76 +874,10 @@ public:
     void maximizeForm() override { commandDocument().window()->showMaximized(); }
     void minimizeForm() { commandDocument().window()->showMinimized(); }
     void restoreForm() { auto* window=commandDocument().window(); window->showNormal(); window->activateWindow(); }
-    bool tableNavigation(int action,int offset,const QString& name,bool explicitTable) {
-        if(!explicitTable && !usesActiveTableContext()) return false;
-        QWidget* owner=nullptr;
-        for(auto* ancestor=preview_.parentWidget();ancestor;ancestor=ancestor->parentWidget())
-            if(qobject_cast<QMainWindow*>(ancestor)) { owner=ancestor; break; }
-        if(!owner || owner->metaObject()->indexOfMethod("navigateTableDocument(QString,int,int,bool)")<0) return false;
-        QVariantMap result;
-        if(!QMetaObject::invokeMethod(owner,"navigateTableDocument",Qt::DirectConnection,Q_RETURN_ARG(QVariantMap,result),
-            Q_ARG(QString,name),Q_ARG(int,action),Q_ARG(int,offset),Q_ARG(bool,explicitTable)))
-            throw linaccess::VbaRuntimeError(3251,"Native table navigation dispatch is unavailable");
-        if(!result.value("handled").toBool()) return false;
-        const int error=result.value("error").toInt();
-        if(error) throw linaccess::VbaRuntimeError(error,result.value("description").toString().toStdString());
-        preview_.setProperty("la_explicit_table_context",true);
-        return true;
+    void gotoRecord(const linaccess::NativeGoToRecordArguments& request) {
+        AccessFormPreview::navigateDataRecord(preview_.db_,&preview_,request,&preview_);
     }
-    void queryNavigation(int action,int offset,const QString& name) {
-        QWidget* owner=nullptr;
-        for(auto* ancestor=preview_.parentWidget();ancestor;ancestor=ancestor->parentWidget())
-            if(qobject_cast<QMainWindow*>(ancestor)) { owner=ancestor; break; }
-        QVariantMap result;
-        if(!owner || !QMetaObject::invokeMethod(owner,"navigateQueryDocument",Qt::DirectConnection,Q_RETURN_ARG(QVariantMap,result),
-            Q_ARG(QString,name),Q_ARG(int,action),Q_ARG(int,offset)))
-            throw linaccess::VbaRuntimeError(3251,"Native query navigation is unavailable");
-        const int error=result.value("error").toInt();
-        if(error) throw linaccess::VbaRuntimeError(error,result.value("description").toString().toStdString());
-        if(!result.value("handled").toBool()) throw linaccess::VbaRuntimeError(3251,"Query navigation was not handled");
-        preview_.setProperty("la_explicit_table_context",true);
-    }
-    void gotoRecord(int action,int offset=1,const QString& name={}) {
-        if(name.isEmpty() && tableNavigation(action,offset,name,false)) return;
-        AccessFormPreview* selected=nullptr;
-        if (name.isEmpty()) selected=&commandDocument();
-        else {
-            for (auto* widget:QApplication::topLevelWidgets()) {
-                auto* candidate=dynamic_cast<AccessFormPreview*>(widget);
-                if (!candidate || !candidate->opened_ || candidate->closed_ || candidate->openCancelled_
-                    || candidate->layout_.kind!=linaccess::AccessDocumentKind::Form
-                    || candidate->db_.connectionName()!=preview_.db_.connectionName()
-                    || candidate->db_.databaseName()!=preview_.db_.databaseName()
-                    || candidate->formName_.compare(name,Qt::CaseInsensitive)!=0) continue;
-                if (selected) throw linaccess::VbaRuntimeError(5,"GoToRecord target is ambiguous");
-                selected=candidate;
-            }
-            if (!selected) throw linaccess::VbaRuntimeError(2450,"GoToRecord form is unavailable");
-        }
-        auto& document=*selected;
-        if (document.recordCommandRunning_) throw linaccess::VbaRuntimeError(3251,"Navigation during record command unsupported");
-        if (document.layout_.kind==linaccess::AccessDocumentKind::Report) throw linaccess::VbaRuntimeError(438,"Report does not support record navigation");
-        if (action<0 || action>5) throw linaccess::VbaRuntimeError(5,"Invalid record navigation action");
-        if ((action==0 || action==1 || action==4) && offset<1) throw linaccess::VbaRuntimeError(2105,"Invalid record navigation offset");
-        if (action==5 && (!document.layout_.allowAdditions || !document.directTable_ || !document.dataSourceAvailable_))
-            throw linaccess::VbaRuntimeError(2046,"New records are unavailable");
-        if (!document.saveRecord()) throw linaccess::VbaRuntimeError(2501,"Record navigation save cancelled");
-        const qint64 count=document.recordSelector_->count()-1;
-        const qint64 current=document.currentRecordIndex_ ? document.currentRecordIndex_ : count+1;
-        qint64 target=0;
-        if (action==0) target=current-offset;
-        else if (action==1) target=current+offset;
-        else if (action==2) target=1;
-        else if (action==3) target=count;
-        else if (action==4) target=offset;
-        else target=count+1;
-        const bool newRecord=target==count+1 && (action==1 || action==5);
-        if (newRecord && !document.layout_.allowAdditions) throw linaccess::VbaRuntimeError(2046,"New records are disabled");
-        if ((!newRecord && (target<1 || target>count)) || target>count+1) throw linaccess::VbaRuntimeError(2105,"Cannot go to specified record");
-        const auto index=newRecord ? 0 : static_cast<int>(target);
-        document.selectRecord(index);
-        if (document.currentRecordIndex_!=index) throw linaccess::VbaRuntimeError(2501,"Record navigation cancelled");
-    }
+    void gotoRecord(int action,int offset=1) { gotoRecord({-1,{},action,offset}); }
     void gotoLastRecord() override { gotoRecord(3); }
     void gotoNextRecord() override { gotoRecord(1); }
     void gotoNewRecord() override { gotoRecord(5); }
@@ -1231,16 +1165,7 @@ linaccess::VbaValue dispatchPreviewDocumentCommand(AccessFormPreview& preview,st
         return {};
     }
     if (command=="gotorecord") {
-        if (args.size()>4) throw VbaRuntimeError(450,"GoToRecord argument count invalid");
-        const auto type=!args.empty() && args[0].kind!=VbaValue::Kind::Empty && args[0].kind!=VbaValue::Kind::Missing ? number(args[0]) : -1;
-        const auto name=args.size()>1 && args[1].kind!=VbaValue::Kind::Empty && args[1].kind!=VbaValue::Kind::Missing ? QString::fromStdString(args[1].asText()) : QString{};
-        if ((type!=-1 && type!=0 && type!=1 && type!=2) || (!name.isEmpty() && type!=0 && type!=1 && type!=2)) throw VbaRuntimeError(3251,"GoToRecord object type unsupported");
-        const auto action=args.size()>2 && args[2].kind!=VbaValue::Kind::Empty && args[2].kind!=VbaValue::Kind::Missing ? number(args[2]) : 1;
-        const auto offset=args.size()>3 && args[3].kind!=VbaValue::Kind::Empty && args[3].kind!=VbaValue::Kind::Missing ? number(args[3]) : 1;
-        if(type==0) {
-            if(!host.tableNavigation(action,offset,name,true)) throw VbaRuntimeError(3251,"Native table navigation is unavailable");
-        } else if(type==1) host.queryNavigation(action,offset,name);
-        else host.gotoRecord(action,offset,name);
+        host.gotoRecord(linaccess::nativeGoToRecordArguments(args));
         return {};
     }
     throw VbaRuntimeError(438,"Document command unsupported");
@@ -1464,6 +1389,65 @@ bool AccessFormPreview::event(QEvent* event) {
 }
 
 bool AccessFormPreview::databaseWindowActive(QWidget* window) { return databaseWindowContext().window && (!window || databaseWindowContext().window==window); }
+
+void AccessFormPreview::navigateDataRecord(QSqlDatabase database,QWidget* context,
+    const linaccess::NativeGoToRecordArguments& request,AccessFormPreview* caller) {
+    using linaccess::VbaRuntimeError;
+    if(!database.isOpen()) throw VbaRuntimeError(3420,"GoToRecord project is closed");
+    if(caller && (caller->closed_ || caller->openCancelled_)) throw VbaRuntimeError(2450,"GoToRecord caller is closed");
+    if(closingProjects().contains(projectKey(database)) || (caller && caller->closing_))
+        throw VbaRuntimeError(2501,"GoToRecord project or caller is closing");
+    ++nativeExecutionDepth();
+    const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
+    const QPointer<AccessFormPreview> invokingForm=caller;
+    const bool projectContext=!caller || caller->hasActivated_ || caller->property("la_explicit_table_context").toBool();
+    const auto& [type,name,action,offset]=request;
+    if(type==0 || type==1 || (type==-1 && projectContext)) {
+        auto* owner=context;
+        while(owner && !qobject_cast<QMainWindow*>(owner)) owner=owner->parentWidget();
+        QVariantMap result;
+        bool invoked=false;
+        const auto projectConnection=database.connectionName();
+        if(type==1 && owner && owner->metaObject()->indexOfMethod("navigateQueryDocument(QString,int,int,QString)")>=0) {
+            invoked=QMetaObject::invokeMethod(owner,"navigateQueryDocument",Qt::DirectConnection,Q_RETURN_ARG(QVariantMap,result),
+                Q_ARG(QString,name),Q_ARG(int,action),Q_ARG(int,offset),Q_ARG(QString,projectConnection));
+        } else if(type!=1 && owner && owner->metaObject()->indexOfMethod("navigateTableDocument(QString,int,int,bool,QString)")>=0) {
+            const bool explicitTable=type==0;
+            invoked=QMetaObject::invokeMethod(owner,"navigateTableDocument",Qt::DirectConnection,Q_RETURN_ARG(QVariantMap,result),
+                Q_ARG(QString,name),Q_ARG(int,action),Q_ARG(int,offset),Q_ARG(bool,explicitTable),Q_ARG(QString,projectConnection));
+        }
+        if(const int error=result.value("error").toInt())
+            throw VbaRuntimeError(error,result.value("description").toString().toStdString());
+        if(invoked && result.value("handled").toBool()) {
+            if(invokingForm && !invokingForm->closed_) invokingForm->setProperty("la_explicit_table_context",true);
+            return;
+        }
+        if(type!=-1) throw VbaRuntimeError(3251,"Requested datasheet navigation is unavailable");
+    }
+
+    QPointer<AccessFormPreview> selected;
+    if(!name.isEmpty()) {
+        for(const auto& document:nativeLoadedProjectDocuments(database,context)) {
+            if(!document || document->layout_.kind!=linaccess::AccessDocumentKind::Form
+                || document->formName_.compare(name,Qt::CaseInsensitive)!=0) continue;
+            if(selected) throw VbaRuntimeError(5,"GoToRecord form target is ambiguous");
+            selected=document;
+        }
+        if(!selected) throw VbaRuntimeError(2450,"GoToRecord form is not open");
+    } else {
+        const auto active=activeDocument();
+        if(active && !active->closed_ && !active->closing_ && !active->openCancelled_ && !active->isHidden()
+            && projectKey(active->db_)==projectKey(database) && (!caller || caller->opened_ || projectContext)) {
+            selected=active;
+        } else if(caller && !projectContext && (type==-1 || !caller->opened_)) {
+            // Form initialization can issue a default command before the form takes focus.
+            selected=invokingForm;
+        }
+        if(!selected || (type==2 && selected->layout_.kind!=linaccess::AccessDocumentKind::Form))
+            throw VbaRuntimeError(2046,"GoToRecord requires an active data document of the requested type");
+    }
+    selected->navigateFormRecord(action,offset);
+}
 
 bool AccessFormPreview::projectObjectLoaded(const QSqlDatabase& database,linaccess::AccessDocumentKind kind,const QString& name) {
     if(!database.isOpen()) return false;

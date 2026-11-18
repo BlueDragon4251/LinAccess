@@ -35,8 +35,8 @@ public:
     Q_INVOKABLE QVariantMap closeQueryDocument(int type,const QString& name,int save);
     Q_INVOKABLE QVariantMap dispatchTableCommand(int command);
     Q_INVOKABLE QVariantMap closeTableDocument(int type,const QString& name,int save);
-    Q_INVOKABLE QVariantMap navigateQueryDocument(const QString& name,int action,int offset);
-    Q_INVOKABLE QVariantMap navigateTableDocument(const QString& name,int action,int offset,bool explicitTable);
+    Q_INVOKABLE QVariantMap navigateQueryDocument(const QString& name,int action,int offset,const QString& projectConnection);
+    Q_INVOKABLE QVariantMap navigateTableDocument(const QString& name,int action,int offset,bool explicitTable,const QString& projectConnection={});
     Q_INVOKABLE QVariantMap findTableRecord(const QVariantMap& request);
     Q_INVOKABLE QVariantMap tableKeyboardContext();
     Q_INVOKABLE QVariantMap requeryTableDocument();
