@@ -671,6 +671,7 @@ End Function
         assert(!committed.isDirty());
         assert(sql.exec("UPDATE _la_table_schema SET definition='[]' WHERE table_name='refresh_commit'"));
         assert(committed.submitTransactionally() && !committed.isDirty());
+        assert(committed.rowCount()==1 && committed.data(committed.index(0,1),Qt::DisplayRole).toString()=="committed-once");
         assert(sql.exec("SELECT COUNT(*),MIN(label) FROM refresh_commit") && sql.next() && sql.value(0).toInt()==1 && sql.value(1).toString()=="committed-once"); sql.finish();
     }
 

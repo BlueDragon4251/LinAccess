@@ -269,9 +269,10 @@ bool AccessTableModel::submitTransactionally() {
     submittedKeys_.clear();
     if(saving_ || changing_) return reject(2501);
     if(readOnly_) return reject(2448);
-    if(metadataError_) return reject(metadataError_);
     if(editStrategy()!=OnManualSubmit) return reject(3251);
+    // A clean save can retry a failed metadata refresh after a committed write.
     if(!isDirty()) return select();
+    if(metadataError_) return reject(metadataError_);
     struct Pending { int row; enum Kind { Update,Insert,Delete } kind; QSqlRecord values; };
     QVector<Pending> pending;
     auto candidates=dirtyRows_; candidates.unite(deletedRows_);
