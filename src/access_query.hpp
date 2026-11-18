@@ -87,8 +87,14 @@ AccessQueryPlan compileAccessQuery(const QString& source);
 AccessQueryPlan compileAccessFindCriteria(const QString& criteria,const QMap<QString,QString>& fieldTypes);
 // Resolves compiled action metadata against the live writable destination.
 QString accessActionSql(QSqlDatabase db,const AccessQueryPlan& plan);
-// Recover the SELECT source through SQL tokens, preserving parameter declarations.
-AccessQueryPlan accessMakeTableSource(QSqlDatabase db,const AccessQueryPlan& plan);
+struct AccessMakeTableSource {
+    QString sql;
+    QStringList columns;
+    QVector<QString> types;
+    QVector<QPair<int,int>> decimalShapes; // Empty unless an exact Decimal output requires explicit storage.
+};
+// Recover the SELECT source and check the provenance of any exact Decimal outputs.
+AccessMakeTableSource accessMakeTableSource(QSqlDatabase db,const AccessQueryPlan& plan);
 AccessQueryPlan filterAccessQueryPlan(QSqlDatabase db,const AccessQueryPlan& source,const QString& criteria);
 QString accessOrderByClause(const QString& orderBy,const QStringList& columns,const QString& tableQualifier={});
 AccessQueryPlan sortAccessQueryPlan(QSqlDatabase db,const AccessQueryPlan& source,const QString& orderBy);

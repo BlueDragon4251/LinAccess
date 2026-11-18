@@ -2326,25 +2326,6 @@ static QString checkedUpdateSql(QSqlDatabase db,const AccessQueryPlan& plan,bool
     installJetSqlFunctions(db);if(acceptedUpdate) *acceptedUpdate=true;
     return result;
 }
-AccessQueryPlan accessMakeTableSource(QSqlDatabase db,const AccessQueryPlan& plan) {
-    if(plan.makeTable.isEmpty() || plan.source.isEmpty() || plan.sql!=plan.compiledSql)
-        throw VbaRuntimeError(3251,"Make-table source metadata unavailable");
-    auto tokens=tokenize(plan.source); int depth=0; bool removed=false;
-    for(qsizetype i=0;i+1<tokens.size();++i) {
-        if(symbol(tokens[i],"(")) ++depth;
-        else if(symbol(tokens[i],")")) --depth;
-        else if(depth==0 && tokens[i].kind==Token::Word && tokens[i].value.compare("INTO",Qt::CaseInsensitive)==0) {
-            if(tokens[i+1].value.compare(plan.makeTable,Qt::CaseInsensitive)!=0)
-                throw VbaRuntimeError(3251,"Make-table destination metadata changed");
-            tokens.remove(i,2); removed=true; break;
-        }
-    }
-    if(!removed) throw VbaRuntimeError(3251,"Make-table SELECT source unavailable");
-    auto select=resolveCurrencyQuery(db,compileAccessQuery(renderJetTokens(tokens)));
-    if(!select.makeTable.isEmpty() || !select.sql.trimmed().startsWith("SELECT",Qt::CaseInsensitive))
-        throw VbaRuntimeError(3251,"Complex typed make-table source unsupported");
-    return select;
-}
 static bool actionUsesExactCurrencyStorage(QSqlDatabase db,const AccessQueryPlan& plan) {
     if(plan.daoQueryType!=48 && plan.daoQueryType!=64) return false;
     const auto tokens=tokenize(plan.source);QMap<QString,QString> tables;for(const auto& name:db.tables()) tables.insert(name.toCaseFolded(),name);QSet<QString> visited;
@@ -2847,8 +2828,12 @@ std::optional<AccessQueryPlan> exactUnionPlan(QSqlDatabase db,const AccessQueryP
     }
     auto result=input;result.sql=sql;result.compiledSql=sql;result.resultTypes=common;result.currencyContextResolved=true;return result;
 }
-}
-QStringList accessQueryColumns(QSqlDatabase db,const AccessQueryPlan& plan,QVector<QString>* columnTypes,QVector<QPair<QString,QString>>* fieldOrigins) {
+struct PreparedOutputStorage {
+    QString sql;
+    QVector<QString> declarations;
+};
+QStringList preparedQueryColumns(QSqlDatabase db,const AccessQueryPlan& plan,QVector<QString>* columnTypes,
+                                 QVector<QPair<QString,QString>>* fieldOrigins,PreparedOutputStorage* storage=nullptr) {
     SqliteExecutionBudget budget(db);
     const auto databaseHandle=db.driver()->handle();
     if (!databaseHandle.isValid() || QByteArray(databaseHandle.typeName())!="sqlite3*")
@@ -2868,13 +2853,177 @@ QStringList accessQueryColumns(QSqlDatabase db,const AccessQueryPlan& plan,QVect
     if(fieldOrigins) *fieldOrigins=prepared.fieldOrigins;
     QStringList columns;
     const int count=sqlite3_column_count(statement)-(prepared.hiddenRank ? 1 : 0);
-    for (int i=0;i<count;++i) columns.append(QString::fromUtf8(sqlite3_column_name(statement,i)));
+    if(storage) storage->sql=prepared.query.lastQuery();
+    for (int i=0;i<count;++i) {
+        columns.append(QString::fromUtf8(sqlite3_column_name(statement,i)));
+        if(storage) storage->declarations.append(QString::fromUtf8(sqlite3_column_decltype(statement,i)).trimmed().toUpper());
+    }
     if(columnTypes) {
         *columnTypes=prepared.columnTypes; columnTypes->resize(count);
         for(int i=0;i<count && i<prepared.types.size();++i)
             if(!prepared.types[i].isEmpty()) (*columnTypes)[i]=prepared.types[i];
     }
     return columns;
+}
+
+bool makeTableWord(const QVector<Token>& tokens,qsizetype at,const char* word) {
+    return at>=0 && at<tokens.size() && tokens[at].kind==Token::Word && tokens[at].value.compare(word,Qt::CaseInsensitive)==0;
+}
+bool makeTableIdentifier(const QVector<Token>& tokens,qsizetype at) {
+    return at>=0 && at<tokens.size() && (tokens[at].kind==Token::Word || tokens[at].kind==Token::Identifier);
+}
+QString directMakeTableField(QVector<Token> expression,const QString& qualifier) {
+    if(expression.size()>=3 && makeTableWord(expression,expression.size()-2,"AS") && makeTableIdentifier(expression,expression.size()-1))
+        expression.resize(expression.size()-2);
+    else if((expression.size()==2 || expression.size()==4) && makeTableIdentifier(expression,expression.size()-1))
+        expression.removeLast(); // SQLite also accepts a trailing bare alias.
+    if(expression.size()==3 && makeTableIdentifier(expression,0) && symbol(expression[1],".")
+        && expression[0].value.compare(qualifier,Qt::CaseInsensitive)==0)
+        expression.remove(0,2);
+    if(expression.size()!=1) return {};
+    if(symbol(expression[0],"*")) return QStringLiteral("*");
+    return makeTableIdentifier(expression,0) ? expression[0].value : QString{};
+}
+bool makeTableReadsDecimal(QSqlDatabase db,const QVector<Token>& tokens,QSet<QString>& seen) {
+    QSet<int> relationScopes;
+    int depth=0;
+    for(qsizetype at=0;at<tokens.size();++at) {
+        if(symbol(tokens[at],"(")) ++depth;
+        else if(symbol(tokens[at],")")) relationScopes.remove(depth--);
+        if(at+1<tokens.size() && symbol(tokens[at+1],"(") && makeTableIdentifier(tokens,at)) {
+            const auto function=tokens[at].value.toCaseFolded();
+            if(function=="cdec" || function.startsWith("linaccess_jet_cdec") || function.startsWith("linaccess_jet_decimal_")) return true;
+        }
+        static const QSet<QString> endsRelation{"where","group","having","order","limit","union","intersect","except"};
+        if(tokens[at].kind==Token::Word && endsRelation.contains(tokens[at].value.toCaseFolded())) relationScopes.remove(depth);
+        const bool from=makeTableWord(tokens,at,"FROM");
+        if(from) relationScopes.insert(depth);
+        if(!from && !makeTableWord(tokens,at,"JOIN") && !(symbol(tokens[at],",") && relationScopes.contains(depth))) continue;
+        auto nameAt=at+1;
+        while(nameAt<tokens.size() && symbol(tokens[nameAt],"(")) ++nameAt;
+        if(!makeTableIdentifier(tokens,nameAt) || makeTableWord(tokens,nameAt,"SELECT")) continue;
+        if(nameAt+2<tokens.size() && symbol(tokens[nameAt+1],".") && makeTableIdentifier(tokens,nameAt+2)) nameAt+=2;
+        const auto relation=tokens[nameAt].value;
+        const auto key=relation.toCaseFolded();
+        if(seen.contains(key)) continue;
+        if(seen.size()>=128) throw VbaRuntimeError(3251,"Make-table source dependency bound exceeded");
+        seen.insert(key);
+        if(sqliteColumnTypes(db,relation).values().contains("DECIMAL_EXACT")) return true;
+        QSqlQuery view(db);
+        view.prepare("SELECT sql FROM temp.sqlite_schema WHERE type='view' AND name=? COLLATE NOCASE "
+                     "UNION ALL SELECT sql FROM main.sqlite_schema WHERE type='view' AND name=? COLLATE NOCASE");
+        view.addBindValue(relation);
+        view.addBindValue(relation);
+        if(!view.exec()) failAccessQuery(view);
+        while(view.next()) if(makeTableReadsDecimal(db,tokenize(view.value(0).toString(),true),seen)) return true;
+        if(view.lastError().isValid()) failAccessQuery(view);
+    }
+    return false;
+}
+}
+QStringList accessQueryColumns(QSqlDatabase db,const AccessQueryPlan& plan,QVector<QString>* columnTypes,QVector<QPair<QString,QString>>* fieldOrigins) {
+    return preparedQueryColumns(db,plan,columnTypes,fieldOrigins);
+}
+
+AccessMakeTableSource accessMakeTableSource(QSqlDatabase db,const AccessQueryPlan& plan) {
+    if(plan.makeTable.isEmpty() || plan.source.isEmpty() || plan.sql!=plan.compiledSql)
+        throw VbaRuntimeError(3251,"Make-table source metadata unavailable");
+    auto tokens=tokenize(plan.source);
+    int depth=0;
+    qsizetype into=-1,body=0;
+    if(makeTableWord(tokens,0,"PARAMETERS")) {
+        while(body<tokens.size() && !symbol(tokens[body],";")) ++body;
+        ++body;
+    }
+    for(qsizetype at=body+1;at+1<tokens.size();++at) {
+        if(symbol(tokens[at],"(")) ++depth;
+        else if(symbol(tokens[at],")")) --depth;
+        else if(!depth && makeTableWord(tokens,at,"INTO")) {into=at;break;}
+    }
+    if(into<0 || tokens[into+1].value.compare(plan.makeTable,Qt::CaseInsensitive)!=0 || !makeTableWord(tokens,into+2,"FROM"))
+        throw VbaRuntimeError(3251,"Make-table SELECT source unavailable");
+    tokens.remove(into,2);
+    const auto select=resolveCurrencyQuery(db,compileAccessQuery(renderJetTokens(tokens)));
+    if(!select.makeTable.isEmpty() || !select.sql.trimmed().startsWith("SELECT",Qt::CaseInsensitive))
+        throw VbaRuntimeError(3251,"Complex typed make-table source unsupported");
+    AccessMakeTableSource result;
+    QVector<QPair<QString,QString>> origins;
+    PreparedOutputStorage storage;
+    result.columns=preparedQueryColumns(db,select,&result.types,&origins,&storage);
+    result.sql=select.sql;
+
+    const bool decimalOutput=result.types.contains("DECIMAL_EXACT") || storage.declarations.contains("DECIMAL_EXACT");
+    const auto isBoundary=[&](qsizetype at) {
+        return at>=tokens.size() || symbol(tokens[at],";") || makeTableWord(tokens,at,"WHERE")
+            || makeTableWord(tokens,at,"ORDER") || makeTableWord(tokens,at,"GROUP") || makeTableWord(tokens,at,"HAVING");
+    };
+    auto relationAt=into+1;
+    if(makeTableIdentifier(tokens,relationAt) && tokens[relationAt].value.compare("main",Qt::CaseInsensitive)==0
+        && relationAt+1<tokens.size() && symbol(tokens[relationAt+1],".")) relationAt+=2;
+    const auto relation=makeTableIdentifier(tokens,relationAt) ? tokens[relationAt].value : QString{};
+    auto next=relationAt+1;
+    if(makeTableWord(tokens,next,"AS")) ++next;
+    const auto qualifier=!isBoundary(next) && makeTableIdentifier(tokens,next) ? tokens[next++].value : relation;
+    const bool compound=std::any_of(tokens.cbegin()+body+1,tokens.cend(),[](const Token& token) {
+        return token.kind==Token::Word && QSet<QString>{"select","union","intersect","except"}.contains(token.value.toCaseFolded());
+    });
+    const bool typed=result.types.contains("CURRENCY_REAL") || result.types.contains("DATETIME") || result.types.contains("DATE");
+    if((typed || decimalOutput) && (select.hiddenRank || select.topLimit || select.daoQueryType!=0 || !select.rightJoinSql.isEmpty()))
+        throw VbaRuntimeError(3251,"Complex typed make-table source unsupported");
+
+    QSqlQuery physical(db);
+    physical.prepare("SELECT 1 FROM main.sqlite_schema WHERE type='table' AND name=? COLLATE NOCASE "
+                     "AND NOT EXISTS(SELECT 1 FROM temp.sqlite_schema WHERE name=? COLLATE NOCASE)");
+    physical.addBindValue(relation);
+    physical.addBindValue(relation);
+    if(!physical.exec()) failAccessQuery(physical);
+    const bool directSource=!compound && isBoundary(next) && physical.next();
+    physical.finish();
+    if(!directSource) {
+        QSet<QString> seen;
+        if(decimalOutput || makeTableReadsDecimal(db,tokens,seen))
+            throw VbaRuntimeError(3251,"Decimal make-table requires direct fields from an unshadowed physical table");
+        return result;
+    }
+
+    const auto sourceTypes=sqliteColumnTypes(db,relation);
+    if(!decimalOutput && !sourceTypes.values().contains("DECIMAL_EXACT")) return result;
+    QVector<QString> directFields;
+    auto first=body+1;
+    if(makeTableWord(tokens,first,"DISTINCT") || makeTableWord(tokens,first,"DISTINCTROW") || makeTableWord(tokens,first,"ALL")) ++first;
+    depth=0;
+    for(qsizetype at=first;at<=into;++at) {
+        if(symbol(tokens[at],"(")) ++depth;
+        else if(symbol(tokens[at],")")) --depth;
+        if(at!=into && (depth || !symbol(tokens[at],","))) continue;
+        const auto projection=tokens.mid(first,at-first);
+        directFields.append(directMakeTableField(projection,qualifier));
+        if(directFields.last().isEmpty()) for(const auto& token:projection) {
+            if((token.kind==Token::Word || token.kind==Token::Identifier)
+                && sourceTypes.value(token.value.toCaseFolded())=="DECIMAL_EXACT")
+                throw VbaRuntimeError(3251,"Decimal make-table expression requires a direct physical field");
+        }
+        first=at+1;
+    }
+    if(!decimalOutput) return result;
+    const bool wildcard=directFields.size()==1 && directFields.front()=="*";
+    if(!wildcard && directFields.size()!=result.columns.size())
+        throw VbaRuntimeError(3251,"Decimal make-table output mapping is ambiguous");
+    const auto shapes=nativeTableDecimalTypes(db,relation);
+    result.sql=storage.sql;
+    result.decimalShapes.resize(result.columns.size());
+    for(qsizetype at=0;at<result.columns.size();++at) {
+        if(result.types[at]!="DECIMAL_EXACT" && storage.declarations[at]!="DECIMAL_EXACT") continue;
+        const auto origin=origins.value(at);
+        if(origin.first.compare(relation,Qt::CaseInsensitive)!=0 || origin.second.isEmpty()
+            || (!wildcard && origin.second.compare(directFields[at],Qt::CaseInsensitive)!=0))
+            throw VbaRuntimeError(3251,"Decimal make-table output requires a direct physical field");
+        const auto shape=shapes.constFind(origin.second.toCaseFolded());
+        if(shape==shapes.cend()) throw VbaRuntimeError(3251,"Decimal make-table source precision/scale is not proven");
+        result.types[at]="DECIMAL_EXACT";
+        result.decimalShapes[at]=shape.value();
+    }
+    return result;
 }
 static AccessQueryResult executeAccessQueryPlanObserved(QSqlDatabase,const AccessQueryPlan&,const QMap<QString,QVariant>&);
 AccessQueryResult executeAccessQueryPlan(QSqlDatabase db,const AccessQueryPlan& plan,const QMap<QString,QVariant>& bindings) {

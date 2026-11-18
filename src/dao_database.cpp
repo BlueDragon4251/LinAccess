@@ -124,6 +124,66 @@ void removeDroppedTableMetadata(QSqlDatabase db,const QStringList& before) {
         }
     }
 }
+QString decimalFieldCheck(const QString& name,QPair<int,int> shape) {
+    return "linaccess_jet_decimal_field_valid("+quote(name)+','+QString::number(shape.first)+','+QString::number(shape.second)+')';
+}
+QString createTypedMakeTable(QSqlDatabase db,const QString& table,const AccessMakeTableSource& select) {
+    const bool decimal=!select.decimalShapes.isEmpty();
+    const QSet<QString> allowed{"CURRENCY_REAL","DATETIME","DATE","TEXT","BOOLEAN","INTEGER1","INTEGER2",
+                                "INTEGER4","INTEGER","INT","REAL","DOUBLE","FLOAT"};
+    QSet<QString> names;
+    QStringList definitions;
+    QJsonArray metadata;
+    QMap<QString,QPair<int,int>> expectedShapes;
+    for(qsizetype at=0;at<select.columns.size();++at) {
+        const auto& name=select.columns[at];
+        const auto key=name.toCaseFolded();
+        if(name.isEmpty() || names.contains(key)) throw VbaRuntimeError(3251,"Make-table output names must be unique");
+        names.insert(key);
+        const auto& type=select.types[at];
+        auto definition=quote(name);
+        if(type=="DECIMAL_EXACT") {
+            const auto shape=select.decimalShapes.value(at);
+            definition+=" DECIMAL_EXACT CHECK ("+decimalFieldCheck(name,shape)+')';
+            metadata.append(QJsonObject{{"name",name},{"sqlite_type",type},{"source_type","DECIMAL"},
+                                        {"source_origin","DAO_SELECT_INTO"},{"source_precision",shape.first},{"source_scale",shape.second}});
+            expectedShapes.insert(key,shape);
+        } else if(allowed.contains(type) || (decimal && (type=="CURRENCY_TICKS" || type=="SINGLE_REAL"))) definition+=" "+type;
+        definitions.append(definition);
+    }
+    if(definitions.isEmpty()) throw VbaRuntimeError(3251,"Make-table columns unavailable");
+    QSqlQuery query(db);
+    const auto target=(decimal ? QString("main.") : QString{})+quote(table);
+    if(decimal) {
+        if(table.startsWith("_la_",Qt::CaseInsensitive) || table.startsWith("sqlite_",Qt::CaseInsensitive))
+            throw VbaRuntimeError(3251,"Decimal make-table destination name is reserved");
+        query.prepare("SELECT 1 FROM temp.sqlite_schema WHERE name=? COLLATE NOCASE OR name='_la_table_schema' COLLATE NOCASE");
+        query.addBindValue(table);
+        if(!query.exec()) queryFailure(query);
+        if(query.next()) throw VbaRuntimeError(3251,"Decimal make-table destination or catalog has a TEMP shadow");
+        query.finish();
+        if(!query.exec("PRAGMA ignore_check_constraints") || !query.next()) queryFailure(query);
+        if(query.value(0).toInt()!=0) throw VbaRuntimeError(3251,"Decimal make-table requires enforced constraints");
+        query.finish();
+    }
+    if(!query.exec("CREATE TABLE "+target+" ("+definitions.join(',')+")")) queryFailure(query);
+    query.finish();
+    if(decimal) {
+        if(!query.exec("CREATE TABLE IF NOT EXISTS main._la_table_schema(table_name TEXT PRIMARY KEY,definition TEXT NOT NULL)"))
+            queryFailure(query);
+        query.prepare("INSERT INTO main._la_table_schema(table_name,definition) SELECT ?,? WHERE NOT EXISTS "
+                      "(SELECT 1 FROM main._la_table_schema WHERE table_name=? COLLATE NOCASE)");
+        query.addBindValue(table);
+        query.addBindValue(QJsonDocument(metadata).toJson(QJsonDocument::Compact));
+        query.addBindValue(table);
+        if(!query.exec()) queryFailure(query);
+        if(query.numRowsAffected()!=1) throw VbaRuntimeError(3251,"Decimal make-table destination metadata already exists");
+        query.finish();
+        if(nativeTableDecimalTypes(db,table)!=expectedShapes)
+            throw VbaRuntimeError(3251,"Decimal make-table destination storage is not proven");
+    }
+    return "INSERT INTO "+target+' '+select.sql;
+}
 qlonglong executeAction(QSqlDatabase db,const AccessQueryPlan& plan,const QMap<QString,QVariant>& bindings) {
     if (plan.sql.trimmed().startsWith("SELECT",Qt::CaseInsensitive)) throw VbaRuntimeError(3065,"DAO: Execute cannot run a SELECT query");
     if(!connectionUpdatable(db)) throw VbaRuntimeError(3027,"DAO: Database or object is read-only");
@@ -149,29 +209,9 @@ qlonglong executeAction(QSqlDatabase db,const AccessQueryPlan& plan,const QMap<Q
             QString action;
             if(makeTable) {
                 const auto select=accessMakeTableSource(db,plan);
-                QVector<QString> types;
-                const auto columns=accessQueryColumns(db,select,&types);
-                if(types.contains("DECIMAL_EXACT")) throw VbaRuntimeError(3251,"Decimal make-table precision/scale is not implemented");
-                if(types.contains("CURRENCY_REAL") || types.contains("DATETIME") || types.contains("DATE")) {
-                    if(select.hiddenRank || select.topLimit || select.daoQueryType!=0 || !select.rightJoinSql.isEmpty())
-                        throw VbaRuntimeError(3251,"Complex typed make-table source unsupported");
-                    // Build actual declared columns before executing any source rows.
-                    // Unknown output types remain untyped; never infer Jet types from values.
-                    const QSet<QString> allowed={"CURRENCY_REAL","DATETIME","DATE","TEXT","BOOLEAN","INTEGER1","INTEGER2","INTEGER4","INTEGER","INT","REAL","DOUBLE","FLOAT"};
-                    QSet<QString> names; QStringList definitions;
-                    for(qsizetype i=0;i<columns.size();++i) {
-                        const auto name=columns[i];
-                        if(name.isEmpty() || names.contains(name.toCaseFolded()))
-                            throw VbaRuntimeError(3251,"Make-table output names must be unique");
-                        names.insert(name.toCaseFolded());
-                        const auto type=types.value(i).toUpper();
-                        definitions.append(quote(name)+(allowed.contains(type) ? " "+type : QString{}));
-                    }
-                    if(definitions.isEmpty()) throw VbaRuntimeError(3251,"Make-table columns unavailable");
-                    if(!query.exec("CREATE TABLE "+quote(plan.makeTable)+" ("+definitions.join(',')+")")) queryFailure(query);
-                    query.finish();
-                    action="INSERT INTO "+quote(plan.makeTable)+" "+select.sql;
-                }
+                if(!select.decimalShapes.isEmpty() || select.types.contains("CURRENCY_REAL")
+                    || select.types.contains("DATETIME") || select.types.contains("DATE"))
+                    action=createTypedMakeTable(db,plan.makeTable,select);
             }
             if(action.isEmpty()) action=accessActionSql(db,plan);
             if (!query.prepare(action)) queryFailure(query);
@@ -516,7 +556,7 @@ QMap<QString,QPair<int,int>> checkedDecimalStorage(QSqlDatabase db,const QString
     QMap<QString,QPair<int,int>> result;bool any=false;for(const auto& column:columns) any=any || column.type=="DECIMAL_EXACT";
     if(!any) return result;QSqlQuery query(db);query.prepare("SELECT sql FROM main.sqlite_schema WHERE type='table' AND name=? COLLATE NOCASE");query.addBindValue(table);if(!query.exec()) queryFailure(query);if(!query.next()) return result;const auto sql=query.value(0).toString();query.finish();
     for(const auto& column:columns) if(column.type=="DECIMAL_EXACT" && column.sourceType==20 && column.decimalPrecision>0) {
-        const auto check="linaccess_jet_decimal_field_valid("+quote(column.name)+","+QString::number(column.decimalPrecision)+","+QString::number(column.decimalScale)+")";
+        const auto check=decimalFieldCheck(column.name,{column.decimalPrecision,column.decimalScale});
         if(hasExactNativeCheck(sql,check)) result.insert(column.name.toCaseFolded(),{column.decimalPrecision,column.decimalScale});
     }
     return result;

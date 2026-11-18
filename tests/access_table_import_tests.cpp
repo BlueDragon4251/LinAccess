@@ -720,6 +720,69 @@ void verifyDecimalCsvContract() {
     const auto database=makeDaoDatabase(db);database->member("Execute",{VbaValue::string("INSERT INTO decimal_default_probe DEFAULT VALUES")});
     const auto defaultRows=database->member("OpenRecordset",{VbaValue::string("decimal_default_probe")}).object;assert(defaultRows->item("v").asText()=="9007199254740993.0001");assert(defaultRows->member("Fields",{VbaValue::string("v")}).object->member("DefaultValue",{}).asText()=="9007199254740993.0001");
     defaultRows->member("AddNew",{});assert(defaultRows->item("v").asText()=="9007199254740993.0001");defaultRows->member("CancelUpdate",{});defaultRows->member("Close",{});
+
+    const auto execute=[&](const QString& sql) {database->member("Execute",{VbaValue::string(sql.toStdString())});};
+    const auto absent=[&](const QString& name) {
+        assert(!db.tables().contains(name,Qt::CaseInsensitive));
+        assert(query.prepare("SELECT 1 FROM main._la_table_schema WHERE table_name=? COLLATE NOCASE"));
+        query.addBindValue(name);
+        assert(query.exec() && !query.next());
+        query.finish();
+    };
+    const auto reject=[&](const QString& sql,const QString& name,int expected) {
+        int error=0;
+        try {execute(sql);} catch(const VbaRuntimeError& failure) {error=failure.number;}
+        assert(error==expected);
+        absent(name);
+    };
+    execute("SELECT d.v AS [saved value] INTO [decimal alias] FROM decimal_csv AS d");
+    assert(database->member("RecordsAffected",{}).asNumber()==1);
+    const QMap<QString,QPair<int,int>> expectedShapes{{"saved value",{28,4}}};
+    assert(nativeTableDecimalTypes(db,"decimal alias")==expectedShapes);
+    const auto copied=database->member("OpenRecordset",{VbaValue::string("decimal alias")}).object;
+    assert(copied->item("saved value").kind==VbaValue::Kind::Decimal && copied->item("saved value").text=="9007199254740993.0001");
+    assert(copied->member("Fields",{VbaValue::string("saved value")}).object->member("Type",{}).asNumber()==20);
+    copied->member("Edit",{});
+    int editError=0;
+    try {copied->assignItem("saved value",decimalLiteral("1.00001"));} catch(const VbaRuntimeError& failure) {editError=failure.number;}
+    assert(editError==6);
+    copied->member("CancelUpdate",{});
+    copied->member("Close",{});
+    assert(!query.exec("INSERT INTO [decimal alias] VALUES(1.25)"));
+    query.finish();
+
+    auto parameterized=database->member("CreateQueryDef",{VbaValue::string(""),VbaValue::string(
+        "PARAMETERS [gate] Long; SELECT d.* INTO decimal_empty FROM decimal_csv d WHERE [gate]<>0")}).object;
+    parameterized->member("Parameters",{VbaValue::string("gate")}).object->assign("Value",VbaValue::longInteger(0));
+    assert(db.transaction());
+    parameterized->member("Execute",{});
+    assert(parameterized->member("RecordsAffected",{}).asNumber()==0);
+    const QMap<QString,QPair<int,int>> sourceShapes{{"v",{28,4}}};
+    assert(nativeTableDecimalTypes(db,"decimal_empty")==sourceShapes);
+    assert(db.rollback());
+    absent("decimal_empty");
+
+    reject("SELECT CDec('1') AS amount INTO decimal_computed FROM decimal_csv","decimal_computed",3251);
+    reject("SELECT Sum(v) AS amount INTO decimal_sum FROM decimal_csv","decimal_sum",3251);
+    reject("SELECT +v AS amount INTO decimal_unary FROM decimal_csv","decimal_unary",3251);
+    reject("SELECT v INTO decimal_union FROM decimal_csv UNION ALL SELECT v FROM decimal_csv","decimal_union",3251);
+    reject("SELECT v AS amount,v AS amount INTO decimal_duplicate_output FROM decimal_csv","decimal_duplicate_output",3251);
+    reject("SELECT v INTO decimal_unproven FROM decimal_no_constraint","decimal_unproven",3251);
+    assert(query.exec("CREATE TABLE decimal_no_metadata(v DECIMAL_EXACT)"));
+    query.finish();
+    reject("SELECT v INTO decimal_untyped FROM decimal_no_metadata","decimal_untyped",3251);
+    assert(query.exec("CREATE VIEW decimal_indirect AS SELECT v FROM decimal_csv"));
+    query.finish();
+    reject("SELECT v INTO decimal_view_copy FROM decimal_indirect","decimal_view_copy",3251);
+
+    assert(query.exec("PRAGMA ignore_check_constraints=ON"));
+    assert(query.prepare("INSERT INTO decimal_csv VALUES(?)"));
+    query.addBindValue(QByteArray(reinterpret_cast<const char*>(invalid.data()),invalid.size()));
+    assert(query.exec());
+    query.finish();
+    assert(query.exec("PRAGMA ignore_check_constraints=OFF"));
+    query.finish();
+    reject("SELECT v INTO decimal_row_failure FROM decimal_csv ORDER BY rowid","decimal_row_failure",3146);
     assert(query.exec("SELECT v,typeof(v),length(v) FROM decimal_default_probe") && query.next() && query.value(1).toString()=="blob" && query.value(2).toInt()==24 && qtFieldValue(query.value(0),"DECIMAL_EXACT").text=="9007199254740993.0001" && !query.next());query.finish();
     {AccessTableModel model(nullptr,db);model.setEditStrategy(QSqlTableModel::OnManualSubmit);model.setTable("decimal_default_probe");assert(model.select() && model.insertRows(1,1) && model.index(1,0).data().toString()=="9007199254740993.0001" && model.submitTransactionally());}
     for(const auto* invalid:{"1.00001","1000000000000000000000000","'not-a-number'"}) {auto bad=defaults;bad.columns[0].sourceDefault=invalid;bad.columns[0].sqlDefault=invalid;bool rejected=false;try{importAccessTable(db,"technical-default-invalid","decimal_bad_default",bad,parseCsvDetailed("v\n"));}catch(const std::exception&){rejected=true;}assert(rejected && !db.tables().contains("decimal_bad_default"));}
@@ -731,8 +794,33 @@ void verifyJetDecimalReference(const QString& path) {
     const QStringList names{"large","small"};const QMap<QString,QPair<int,int>> types{{"large",{28,4}},{"small",{28,28}}};const auto raw=checkedAccessDecimalValues(catalog.decimalValues("decimal_probe"),names,"decimal_probe",types);assert(raw.rowCount==5 && raw.sourceDigest==before && raw.columns.value("large")[0]==QString("999999999999999999999999.9999") && raw.columns.value("small")[0]==QString("0.0000000000000000000000000001"));
     auto db=QSqlDatabase::addDatabase("QSQLITE","jet-decimal-reference");db.setDatabaseName(":memory:");assert(db.open());QSqlQuery query(db);assert(query.exec("CREATE TABLE _la_import_log(source_file,kind,name,status,details)"));query.finish();assert(importAccessDatabase(db,path)==1);
     const char* expectedLarge[]={"999999999999999999999999.9999","-999999999999999999999999.9999","9007199254740993.0001","0",nullptr};const char* expectedSmall[]={"0.0000000000000000000000000001","-0.0000000000000000000000000001","0.1234567890123456789012345678","0",nullptr};
-    const auto records=makeDaoDatabase(db)->member("OpenRecordset",{VbaValue::string("SELECT id,large,small FROM decimal_probe ORDER BY id")}).object;
-    for(int row=0;row<5;++row) {assert(!records->member("EOF",{}).truthy() && records->item("id").asNumber()==row+1);for(int field=0;field<2;++field) {const auto name=field ? "small" : "large";const auto value=records->item(name);const auto expected=field ? expectedSmall[row] : expectedLarge[row];assert(records->member("Fields",{VbaValue::string(name)}).object->member("Type",{}).asNumber()==20);assert(records->member("Fields",{VbaValue::string(name)}).object->member("DataUpdatable",{}).truthy()==records->member("Updatable",{}).truthy());if(expected) assert(value.kind==VbaValue::Kind::Decimal && value.text==expected);else assert(value.kind==VbaValue::Kind::Null);}records->member("MoveNext",{});}assert(records->member("EOF",{}).truthy());records->member("Close",{});
+    const auto database=makeDaoDatabase(db);
+    const auto expectRows=[&](const char* sql,const char* large,const char* small) {
+        const auto records=database->member("OpenRecordset",{VbaValue::string(sql)}).object;
+        for(int row=0;row<5;++row) {
+            assert(!records->member("EOF",{}).truthy() && records->item("id").asNumber()==row+1);
+            for(int field=0;field<2;++field) {
+                const auto name=field ? small : large;
+                const auto value=records->item(name);
+                const auto expected=field ? expectedSmall[row] : expectedLarge[row];
+                const auto daoField=records->member("Fields",{VbaValue::string(name)}).object;
+                assert(daoField->member("Type",{}).asNumber()==20);
+                assert(daoField->member("DataUpdatable",{}).truthy()==records->member("Updatable",{}).truthy());
+                if(expected) assert(value.kind==VbaValue::Kind::Decimal && value.text==expected);
+                else assert(value.kind==VbaValue::Kind::Null);
+            }
+            records->member("MoveNext",{});
+        }
+        assert(records->member("EOF",{}).truthy());
+        records->member("Close",{});
+    };
+    expectRows("SELECT id,large,small FROM decimal_probe ORDER BY id","large","small");
+    database->member("Execute",{VbaValue::string("SELECT d.id,d.large AS [saved large],d.small AS [saved small] "
+                                               "INTO decimal_copy FROM decimal_probe AS d ORDER BY d.id")});
+    assert(database->member("RecordsAffected",{}).asNumber()==5);
+    const QMap<QString,QPair<int,int>> copyTypes{{"saved large",{28,4}},{"saved small",{28,28}}};
+    assert(nativeTableDecimalTypes(db,"decimal_copy")==copyTypes);
+    expectRows("SELECT id,[saved large],[saved small] FROM decimal_copy ORDER BY id","saved large","saved small");
     assert(query.exec("SELECT id FROM decimal_probe ORDER BY large"));for(int id:{5,2,4,3,1}) assert(query.next() && query.value(0).toInt()==id);query.finish();
     auto rows=parseCsvDetailed(AccessCatalog::exportTable(path,"decimal_probe",true).toStdString());rows[1][1].value="1";bool refused=false;try{importAccessTable(db,path,"decimal_tampered_csv",schema,rows,AccessBinaryEncoding::MdbToolsHex,AccessFloatingSource::NativeMdbBits);}catch(const std::exception&){refused=true;}assert(refused && !db.tables().contains("decimal_tampered_csv"));
     assert(query.exec("SELECT definition FROM _la_table_schema WHERE table_name='decimal_probe'") && query.next());const auto metadata=QJsonDocument::fromJson(query.value(0).toByteArray()).array();assert(metadata[1].toObject().value("source_precision").toInt()==28 && metadata[1].toObject().value("source_scale").toInt()==4 && metadata[2].toObject().value("source_scale").toInt()==28);query.finish();
@@ -745,17 +833,17 @@ void verifyJetDecimalReference(const QString& path) {
     editable->member("Edit",{});editable->assignItem("small",VbaValue{});editable->member("Update",{});assert(editable->item("small").kind==VbaValue::Kind::Null);
     editable->member("MoveFirst",{});const auto copied=editable->member("GetRows",{VbaValue::longInteger(1)});assert(copied.kind==VbaValue::Kind::Array && vbaArrayLinearElement(copied,1).kind==VbaValue::Kind::Decimal);
     editable->member("AddNew",{});editable->assignItem("id",VbaValue::longInteger(6));editable->assignItem("large",decimalLiteral("-1.25"));editable->assignItem("small",decimalLiteral("0.0000000000000000000000000001"));editable->member("Update",{});editable->assign("Bookmark",editable->member("LastModified",{}));assert(editable->item("id").asNumber()==6 && editable->item("large").text=="-1.25");editable->member("Close",{});
-    const auto database=makeDaoDatabase(db);const auto execute=[&](const char* command) {database->member("Execute",{VbaValue::string(command)});};
+    const auto execute=[&](const char* command) {database->member("Execute",{VbaValue::string(command)});};
     execute("UPDATE decimal_probe SET large=large+CDec('0.0001') WHERE id=3");
     auto changed=database->member("OpenRecordset",{VbaValue::string("SELECT large FROM decimal_probe WHERE id=3")}).object;assert(changed->item("large").text=="9007199254740993.0002");changed->member("Close",{});
     execute("INSERT INTO decimal_probe(id,large,small) VALUES(7,CDec('9007199254740993.0001'),CDec('0.0000000000000000000000000001'))");
     execute("INSERT INTO decimal_probe(id,large,small) SELECT id+10,large,small FROM decimal_probe WHERE id=7");
     changed=database->member("OpenRecordset",{VbaValue::string("SELECT large,small FROM decimal_probe WHERE id=17")}).object;assert(changed->item("large").text=="9007199254740993.0001" && changed->item("small").text=="0.0000000000000000000000000001");changed->member("Close",{});
     assert(query.exec("CREATE TABLE decimal_binary_input(id INTEGER4,raw BLOB)"));assert(query.prepare("INSERT INTO decimal_binary_input VALUES(8,?)"));query.addBindValue(QByteArray(24,0));assert(query.exec());query.finish();
-    for(const auto& rejected:std::vector<std::pair<const char*,int>>{{"UPDATE decimal_probe SET large=CDec('1.00001') WHERE id=7",6},{"INSERT INTO decimal_probe(id,large) SELECT id,raw FROM decimal_binary_input",13},{"INSERT INTO decimal_probe(id,large) VALUES(8,CDec('1000000000000000000000000'))",6},{"SELECT large INTO decimal_action_make_table FROM decimal_probe",3251},{"DELETE FROM decimal_probe WHERE CDec('1')",3251}}) {
+    for(const auto& rejected:std::vector<std::pair<const char*,int>>{{"UPDATE decimal_probe SET large=CDec('1.00001') WHERE id=7",6},{"INSERT INTO decimal_probe(id,large) SELECT id,raw FROM decimal_binary_input",13},{"INSERT INTO decimal_probe(id,large) VALUES(8,CDec('1000000000000000000000000'))",6},{"UPDATE decimal_copy SET [saved large]=CDec('1.00001') WHERE id=1",6},{"DELETE FROM decimal_probe WHERE CDec('1')",3251}}) {
         int error=0;try {execute(rejected.first);}catch(const VbaRuntimeError& failure) {error=failure.number;}assert(error==rejected.second);
     }
-    changed=database->member("OpenRecordset",{VbaValue::string("SELECT large FROM decimal_probe WHERE id=7")}).object;assert(changed->item("large").text=="9007199254740993.0001");changed->member("Close",{});assert(!db.tables().contains("decimal_action_make_table"));
+    changed=database->member("OpenRecordset",{VbaValue::string("SELECT large FROM decimal_probe WHERE id=7")}).object;assert(changed->item("large").text=="9007199254740993.0001");changed->member("Close",{});
     execute("UPDATE decimal_probe SET small=NULL WHERE id=7");execute("DELETE FROM decimal_probe WHERE id=17 AND large=CDec('9007199254740993.0001')");
     assert(query.exec("SELECT small FROM decimal_probe WHERE id=7") && query.next() && query.value(0).isNull());query.finish();assert(query.exec("SELECT COUNT(*) FROM decimal_probe WHERE id=17 OR id=8") && query.next() && query.value(0).toInt()==0);query.finish();
     const auto computed=makeDaoDatabase(db)->member("OpenRecordset",{VbaValue::string("SELECT CDec('1') AS calculated")}).object;assert(!computed->member("Updatable",{}).truthy() && !computed->member("Fields",{VbaValue::string("calculated")}).object->member("DataUpdatable",{}).truthy());computed->member("Close",{});
