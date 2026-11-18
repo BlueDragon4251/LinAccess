@@ -25,9 +25,173 @@
 #endif
 #include <cassert>
 #include <iostream>
+#include <limits>
+
+static void testNativeFormRecordAppend() {
+    using namespace linaccess;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","native-form-record-append");
+    db.setDatabaseName(":memory:");
+    assert(db.open());
+    QSqlQuery sql(db);
+    assert(sql.exec("CREATE TABLE clipboard_source(id INTEGER PRIMARY KEY,amount CURRENCY_TICKS,n INTEGER,note TEXT,payload BLOB,empty_text TEXT,empty_blob BLOB)"));
+    assert(sql.exec("INSERT INTO clipboard_source VALUES(42,-9223372036854775808,9223372036854775806,NULL,x'001fff80','',x'')"));
+    assert(sql.exec("CREATE TABLE clipboard_target(payload BLOB,id INTEGER PRIMARY KEY AUTOINCREMENT,empty_blob BLOB,amount CURRENCY_TICKS,n INTEGER,empty_text TEXT,note TEXT DEFAULT 'note default',extra TEXT NOT NULL DEFAULT 'target default')"));
+    assert(sql.exec("INSERT INTO clipboard_target(id,n,note) VALUES(5,2,'stored'),(6,3,'pending delete')"));
+    AccessFormPreview form("Clipboard source",
+        "Begin Form\nRecordSource =\"clipboard_source\"\nBegin Section\nBegin TextBox\nName =\"id\"\nControlSource =\"id\"\nEnd\nEnd\nEnd\n",{},db);
+    form.show();
+    form.activateWindow();
+    QApplication::processEvents();
+    const auto command=makePreviewApplicationObject(form)->member("DoCmd",{}).object;
+    command->member("RunCommand",{VbaValue::longInteger(50)});
+    command->member("RunCommand",{VbaValue::longInteger(190)});
+    const auto* clipboard=QApplication::clipboard()->mimeData();
+    assert(clipboard->hasFormat(nativeRecordMime) && clipboard->text().contains("-922337203685477.5808"));
+    const auto copied=clipboard->data(nativeRecordMime);
+    const auto fields=QJsonDocument::fromJson(copied).object()["fields"].toArray();
+    assert(fields[1].toObject()["kind"]=="currency");
+
+    AccessTableModel table(nullptr,db);
+    table.setTable("clipboard_target");
+    table.setEditStrategy(QSqlTableModel::OnManualSubmit);
+    assert(table.select());
+    AccessTableView sheet;
+    sheet.setModel(&table);
+    sheet.setColumnHidden(1,true);
+    sheet.setColumnHidden(7,true);
+    assert(table.setData(table.index(0,6),"earlier update"));
+    assert(table.removeRow(1));
+    assert(table.setDataBlock(2,6,{{"earlier insert"}}));
+    const QPersistentModelIndex earlierInsert(table.index(2,6));
+    // The native append command also accepts the private MIME without TSV.
+    const auto setRecord=[](const QByteArray& bytes) {
+        auto* mime=new QMimeData;
+        mime->setData(nativeRecordMime,bytes);
+        QApplication::clipboard()->setMimeData(mime);
+    };
+    setRecord(copied);
+    sheet.resize(840,360);
+    sheet.show();
+    sheet.activateWindow();
+    QApplication::processEvents();
+    sheet.setCurrentIndex(table.index(0,4));
+    assert(!sheet.canPasteSelection() && !sheet.pasteSelection() && sheet.canAppendRecords());
+
+    QTimer::singleShot(0,&sheet,[&] {
+        auto* menu=qobject_cast<QMenu*>(QApplication::activePopupWidget());
+        assert(menu);
+        auto* paste=menu->findChild<QAction*>("datasheet-paste");
+        auto* append=menu->findChild<QAction*>("datasheet-paste-append");
+        assert(paste && !paste->isEnabled() && append && append->isEnabled());
+        menu->setActiveAction(append);
+        QTest::keyClick(menu,Qt::Key_Return);
+    });
+    const auto point=sheet.visualRect(table.index(0,4)).center();
+    QContextMenuEvent context(QContextMenuEvent::Mouse,point,sheet.viewport()->mapToGlobal(point));
+    QApplication::sendEvent(sheet.viewport(),&context);
+    assert(table.rowCount()==4 && table.canUndoBlock() && sheet.currentIndex().row()==3);
+    assert(sql.exec("SELECT count(*) FROM clipboard_target") && sql.next() && sql.value(0).toInt()==2);
+    sql.finish();
+    QTest::keyClick(&sheet,Qt::Key_Z,Qt::ControlModifier);
+    assert(table.rowCount()==3 && table.isPendingRecordDeleted(1) && earlierInsert.isValid() && earlierInsert.data().toString()=="earlier insert");
+    assert(table.clipboardText(table.index(0,6))=="earlier update" && table.canUndoBlock() && table.canRedoBlock());
+
+    auto invalid=QJsonDocument::fromJson(copied).object();
+    auto invalidFields=invalid["fields"].toArray();
+    auto invalidField=invalidFields[2].toObject();
+    invalidField["name"]="ID";
+    invalidFields[2]=invalidField;
+    invalid["fields"]=invalidFields;
+    setRecord(QJsonDocument(invalid).toJson());
+    assert(!sheet.canAppendRecords() && !sheet.pasteSelection(true) && table.rowCount()==3 && table.canRedoBlock());
+    setRecord(copied);
+    sheet.setColumnHidden(0,true);
+    assert(!sheet.canAppendRecords() && !sheet.pasteSelection(true) && table.rowCount()==3 && table.canRedoBlock());
+    sheet.setColumnHidden(0,false);
+    QTest::keyClick(&sheet,Qt::Key_Y,Qt::ControlModifier);
+    assert(table.rowCount()==4 && earlierInsert.isValid() && table.isPendingRecordDeleted(1));
+    assert(table.submitTransactionally());
+
+    assert(sql.exec("SELECT id,n,note,payload,empty_text,empty_blob,amount,extra FROM clipboard_target ORDER BY id"));
+    assert(sql.next() && sql.value(0).toInt()==5 && sql.value(2).toString()=="earlier update");
+    assert(sql.next() && sql.value(0).toInt()==7 && sql.value(2).toString()=="earlier insert");
+    assert(sql.next() && sql.value(0).toInt()==8 && sql.value(1).toLongLong()==9223372036854775806LL && sql.value(2).isNull());
+    assert(sql.value(3).toByteArray()==QByteArray::fromHex("001fff80"));
+    assert(!sql.value(4).isNull() && sql.value(4).toString().isEmpty());
+    assert(!sql.value(5).isNull() && sql.value(5).toByteArray().isEmpty());
+    assert(sql.value(6).toLongLong()==std::numeric_limits<qlonglong>::min() && sql.value(7).toString()=="target default");
+    assert(!sql.next());
+    sql.finish();
+    assert(form.close());
+    QApplication::clipboard()->clear();
+}
+
+static void testRecordAppendPreflight() {
+    using namespace linaccess;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","native-clipboard-append-preflight");
+    db.setDatabaseName(":memory:");
+    assert(db.open());
+    const auto dao=makeDaoDatabase(db);
+    const auto definition=dao->member("CreateTableDef",{VbaValue::string("checked_records")}).object;
+    const auto fields=definition->member("Fields",{}).object;
+    const auto id=definition->member("CreateField",{VbaValue::string("id"),VbaValue::integer(4)}).object;
+    id->assign("Attributes",VbaValue::longInteger(17));
+    fields->member("Append",{VbaValue::reference(id)});
+    const auto amount=definition->member("CreateField",{VbaValue::string("amount"),VbaValue::integer(4)}).object;
+    amount->assign("Required",VbaValue::logical(true));
+    amount->assign("DefaultValue",VbaValue::string("4"));
+    amount->assign("ValidationRule",VbaValue::string("Between 2 And 8"));
+    amount->assign("ValidationText",VbaValue::string("Amount must be between 2 and 8."));
+    fields->member("Append",{VbaValue::reference(amount)});
+    const auto label=definition->member("CreateField",{VbaValue::string("label"),VbaValue::integer(10),VbaValue::integer(4)}).object;
+    label->assign("Required",VbaValue::logical(true));
+    label->assign("AllowZeroLength",VbaValue::logical(false));
+    fields->member("Append",{VbaValue::reference(label)});
+    dao->member("TableDefs",{}).object->member("Append",{VbaValue::reference(definition)});
+
+    AccessTableModel table(nullptr,db);
+    table.setTable("checked_records");
+    table.setEditStrategy(QSqlTableModel::OnManualSubmit);
+    assert(table.select());
+    assert(!table.setTypedRecordBlock(0,{"amount"},{{3}}) && table.lastError().nativeErrorCode()=="3314");
+    assert(!table.setTypedRecordBlock(0,{"label"},{{QStringLiteral("longer")}}) && table.lastError().nativeErrorCode()=="3163");
+    assert(!table.setTypedRecordBlock(0,{"label"},{{QStringLiteral("")}}) && table.lastError().nativeErrorCode()=="3315");
+    assert(!table.setTypedRecordBlock(0,{"label","amount"},{{QStringLiteral("good"),3},{QStringLiteral("bad"),QVariant{}}}) && table.lastError().nativeErrorCode()=="3314");
+    assert(!table.setTypedRecordBlock(0,{"label","amount"},{{QStringLiteral("good"),3},{QStringLiteral("bad"),9}}) && table.lastError().nativeErrorCode()=="3317");
+    assert(table.lastError().databaseText()=="Amount must be between 2 and 8.");
+    assert(table.rowCount()==0 && !table.isDirty() && !table.canUndoBlock());
+    assert(table.setTypedRecordBlock(0,{"label"},{{QStringLiteral("good")}}));
+    assert(table.undoBlock() && table.rowCount()==0 && table.redoBlock() && table.submitTransactionally());
+    QSqlQuery sql(db);
+    assert(sql.exec("SELECT id,amount,label FROM checked_records") && sql.next());
+    assert(sql.value(0).toInt()==1 && sql.value(1).toInt()==4 && sql.value(2).toString()=="good" && !sql.next());
+    sql.finish();
+
+    assert(sql.exec("CREATE TABLE generated_only(id INTEGER PRIMARY KEY AUTOINCREMENT,label TEXT NOT NULL DEFAULT 'default')"));
+    table.setTable("generated_only");
+    assert(table.select() && table.setTypedRecordBlock(0,{"id"},{{99}}));
+    assert(table.undoBlock() && table.redoBlock() && table.submitTransactionally());
+    assert(sql.exec("SELECT id,label FROM generated_only") && sql.next());
+    assert(sql.value(0).toInt()==1 && sql.value(1).toString()=="default" && !sql.next());
+    sql.finish();
+
+    assert(sql.exec("CREATE TABLE append_lazy(id INTEGER PRIMARY KEY,n INTEGER NOT NULL)"));
+    assert(sql.exec("WITH RECURSIVE r(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM r WHERE n<300) INSERT INTO append_lazy SELECT n,n FROM r"));
+    table.setTable("append_lazy");
+    assert(table.select() && table.canFetchMore());
+    const int loaded=table.rowCount();
+    assert(table.setTypedDataBlock(0,1,{{999}}));
+    assert(!table.setTypedRecordBlock(loaded,{"n"},{{2}}) && table.lastError().nativeErrorCode()=="3314");
+    assert(!table.setTypedRecordBlock(loaded,{"id","n"},{{301,QVariant{}}}) && table.lastError().nativeErrorCode()=="3314");
+    assert(table.rowCount()==loaded && table.canFetchMore() && table.canUndoBlock());
+    assert(table.setTypedRecordBlock(loaded,{"n","id"},{{2,301}}) && table.rowCount()==301);
+    assert(table.undoBlock() && table.rowCount()==300 && table.clipboardText(table.index(0,1))=="999");
+}
 
 int main(int argc,char** argv) {
     QApplication app(argc,argv);
+    testNativeFormRecordAppend();
+    testRecordAppendPreflight();
     using linaccess::VbaValue;
     auto db=QSqlDatabase::addDatabase("QSQLITE","currency-fields"); db.setDatabaseName(":memory:"); assert(db.open());
     QSqlQuery sql(db);

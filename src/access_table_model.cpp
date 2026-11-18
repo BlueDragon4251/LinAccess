@@ -1,6 +1,7 @@
 #include "native_schema_editor.hpp"
 #include "access_format.hpp"
 #include "native_field_defaults.hpp"
+#include "native_field_validation.hpp"
 #include "dao_database.hpp"
 #include "access_table_model.hpp"
 #include "access_autonumber.hpp"
@@ -8,6 +9,7 @@
 #include "native_find_value.hpp"
 #include "native_text_replace.hpp"
 #include "native_grid_mime.hpp"
+#include "sqlite_execution.hpp"
 #include "vba_currency.hpp"
 #include <QSqlError>
 #include <QElapsedTimer>
@@ -61,8 +63,21 @@ bool AccessTableModel::rejectEdit(int number,const QString& message) {
 }
 bool AccessTableModel::reject(int number) { return rejectEdit(number,editMessage(number)); }
 bool AccessTableModel::refreshTypes() {
-    types_.clear();decimalTypes_.clear();captions_.clear();descriptions_.clear();formats_.clear(); generated_.clear(); metadataError_=0;
-    try { types_=sqliteColumnTypes(database(),tableName());if(types_.values().contains("DECIMAL_EXACT")) decimalTypes_=nativeTableDecimalTypes(database(),tableName()); generated_=generatedAccessColumns(database(),tableName());const auto properties=nativeTableFieldDisplayProperties(database(),tableName());for(auto it=properties.cbegin();it!=properties.cend();++it) {if(it.value().caption) captions_.insert(it.key(),*it.value().caption);if(it.value().description) descriptions_.insert(it.key(),*it.value().description);if(it.value().format) formats_.insert(it.key(),*it.value().format);}return true; }
+    types_.clear();decimalTypes_.clear();captions_.clear();descriptions_.clear();formats_.clear();
+    generated_.clear();nativeOwnedFields_.clear();metadataError_=0;
+    try {
+        types_=sqliteColumnTypes(database(),tableName());
+        if(types_.values().contains("DECIMAL_EXACT")) decimalTypes_=nativeTableDecimalTypes(database(),tableName());
+        generated_=generatedAccessColumns(database(),tableName());
+        const auto properties=nativeTableFieldDisplayProperties(database(),tableName());
+        for(auto it=properties.cbegin();it!=properties.cend();++it) {
+            if(it.value().caption) captions_.insert(it.key(),*it.value().caption);
+            if(it.value().description) descriptions_.insert(it.key(),*it.value().description);
+            if(it.value().format) formats_.insert(it.key(),*it.value().format);
+            if(it.value().nativeOwned) nativeOwnedFields_.insert(it.key());
+        }
+        return true;
+    }
     catch(const VbaRuntimeError& error) { metadataError_=error.number; return reject(error.number); }
 }
 QVariant AccessTableModel::checkedColumnInput(int column,const QVariant& input) const {
@@ -86,17 +101,17 @@ QVariant AccessTableModel::checkedColumnInput(int column,const QVariant& input) 
     return sqlDecimalFieldValue(value,shape->first,shape->second);
 }
 void AccessTableModel::setTable(const QString& table) {
-    if(saving_) { (void)reject(2501); return; }
+    if(saving_ || changing_) { (void)reject(2501); return; }
     queryAliases_.clear();sourceSort_.clear();clearBlockHistory();dirtyRows_.clear(); deletedRows_.clear(); submittedKeys_.clear(); insertedKey_.clear(); QSqlTableModel::setTable(table); (void)refreshTypes();
 }
 bool AccessTableModel::select() {
-    if(saving_) return reject(2501);
+    if(saving_ || changing_) return reject(2501);
     clearBlockHistory();const bool result=refreshTypes() && QSqlTableModel::select();
     if(result) { dirtyRows_.clear(); deletedRows_.clear(); }
     return result;
 }
 void AccessTableModel::clear() {
-    if(saving_) { (void)reject(2501); return; }
+    if(saving_ || changing_) { (void)reject(2501); return; }
     queryAliases_.clear();sourceSort_.clear();clearBlockHistory();QSqlTableModel::clear();decimalTypes_.clear();captions_.clear();descriptions_.clear(); dirtyRows_.clear(); deletedRows_.clear(); submittedKeys_.clear(); insertedKey_.clear();
 }
 QVector<QPersistentModelIndex> AccessTableModel::rowAnchors(const QSet<int>& rows) const {
@@ -580,7 +595,7 @@ bool AccessTableModel::setTypedDataBlock(int firstRow,const QVector<int>& column
     if(columns.isEmpty()) return reject(5);return applyDataBlock(firstRow,columns.front(),values,true,nullptr,false,nullptr,&columns);
 }
 bool AccessTableModel::setTypedRecordBlock(int firstRow,const QStringList& fields,const QVector<QVector<QVariant>>& values) {
-    if(firstRow!=rowCount() || canFetchMore()) return reject(3251);
+    if(firstRow!=rowCount()) return reject(3251);
     if(fields.isEmpty() || fields.size()>columnCount() || values.isEmpty()) return reject(13);
     if(values.size()>1000000/columnCount()) return reject(3251);
     try {
@@ -596,6 +611,94 @@ bool AccessTableModel::setTypedRecordBlock(int firstRow,const QStringList& field
         return applyDataBlock(firstRow,0,mapped,true,nullptr,true,&supplied);
     } catch(const std::bad_alloc&) {return reject(7);}
 }
+void AccessTableModel::checkRecordAppend(const QVector<QVector<QVariant>>& rows,const QSet<int>& supplied,const QMap<QString,QVariant>& pendingDefaults) const {
+    const auto db=database();
+    const auto table=record();
+    const auto primary=primaryKey();
+    QSqlQuery info(db);
+    const auto name=db.driver()->escapeIdentifier(tableName(),QSqlDriver::TableName);
+    if(!info.exec("PRAGMA main.table_info("+name+")")) throw VbaRuntimeError(3146,"Die Zielspalten konnten nicht geprüft werden.");
+    struct Field {bool required;bool hasDefault;};
+    QVector<Field> physicalFields;
+    while(info.next()) {
+        const int column=physicalFields.size();
+        if(column>=table.count() || table.fieldName(column)!=info.value(1).toString())
+            throw VbaRuntimeError(3251,"Die Zielspalten haben sich geändert.");
+        const bool manualRowId=primary.count()==1 && info.value(5).toInt()==1 && info.value(2).toString().compare("INTEGER",Qt::CaseInsensitive)==0;
+        auto initial=info.value(4).toString().trimmed();
+        while(initial.startsWith('(') && initial.endsWith(')')) initial=initial.mid(1,initial.size()-2).trimmed();
+        physicalFields.push_back({info.value(3).toBool() || manualRowId,!info.value(4).isNull() && initial.compare("NULL",Qt::CaseInsensitive)!=0});
+    }
+    if(info.lastError().isValid() || physicalFields.size()!=table.count())
+        throw VbaRuntimeError(3251,"Die Zielspalten konnten nicht vollständig geprüft werden.");
+    info.finish();
+
+    std::shared_ptr<VbaObject> fields;
+    std::optional<QMap<QString,QVariant>> literals;
+    SqliteExecutionBudget budget(db);
+    for(int column=0;column<table.count();++column) {
+        if(isGeneratedColumn(column)) continue;
+        const auto fieldName=table.fieldName(column);
+        const auto key=fieldName.toCaseFolded();
+        const auto physical=physicalFields[column];
+        const bool explicitValue=supplied.contains(column);
+        const bool hasPendingDefault=pendingDefaults.contains(key);
+        if(!explicitValue && !hasPendingDefault && !physical.hasDefault && physical.required)
+            throw VbaRuntimeError(3314,"Für das Pflichtfeld "+fieldName.toStdString()+" fehlt ein Wert.");
+
+        int capacity=0;
+        bool nonempty=false;
+        QString predicate,validationText;
+        if(nativeOwnedFields_.contains(key)) {
+            if(!fields) {
+                const auto dao=makeDaoDatabase(db);
+                const auto definition=dao->member("TableDefs",{VbaValue::string(tableName().toStdString())}).object;
+                fields=definition->member("Fields",{}).object;
+            }
+            const auto field=fields->member("Item",{VbaValue::string(fieldName.toStdString())}).object;
+            const int type=field->member("Type",{}).asNumber();
+            if(type==10) capacity=field->member("Size",{}).asNumber();
+            if(type==10 || type==12) {
+                try {nonempty=!field->member("AllowZeroLength",{}).truthy();}
+                catch(const VbaRuntimeError& error) {if(error.number!=3251) throw;}
+            }
+            const auto rule=QString::fromStdString(field->member("ValidationRule",{}).asText());
+            if(!rule.isEmpty()) {
+                predicate=nativeFieldValidationPredicate(type,rule,"candidate");
+                validationText=QString::fromStdString(field->member("ValidationText",{}).asText());
+            }
+        }
+        if(!physical.required && !capacity && !nonempty && predicate.isEmpty()) continue;
+        QVariant initial;
+        if(!explicitValue) {
+            if(hasPendingDefault) initial=pendingDefaults.value(key);
+            else if(physical.hasDefault) {
+                if(!literals) literals=nativeTableLiteralDefaults(db,tableName());
+                if(!literals->contains(key)) continue; // Other SQL defaults remain the database's responsibility.
+                initial=literals->value(key);
+            }
+        }
+        QSqlQuery validate(db);
+        if(!predicate.isEmpty() && !validate.prepare("SELECT "+predicate+" FROM (SELECT ? AS candidate)"))
+            throw VbaRuntimeError(3146,"Die Gültigkeitsregel konnte nicht vorbereitet werden.");
+        for(const auto& row:rows) {
+            const auto value=explicitValue ? row[column] : initial;
+            if(value.isNull()) {
+                if(physical.required) throw VbaRuntimeError(3314,"Für das Pflichtfeld "+fieldName.toStdString()+" fehlt ein Wert.");
+                continue;
+            }
+            if(capacity && value.toString().size()>capacity) throw VbaRuntimeError(3163,"Der Text überschreitet die Feldgröße von "+fieldName.toStdString()+".");
+            if(nonempty && value.toString().isEmpty()) throw VbaRuntimeError(3315,"Das Feld "+fieldName.toStdString()+" erlaubt keinen leeren Text.");
+            if(!predicate.isEmpty()) {
+                validate.bindValue(0,value);
+                if(!validate.exec() || !validate.next()) throw VbaRuntimeError(3146,"Die Gültigkeitsregel konnte nicht ausgewertet werden.");
+                if(!validate.value(0).isNull() && !validate.value(0).toBool())
+                    throw VbaRuntimeError(3317,validationText.isEmpty() ? "Der Wert verletzt die Gültigkeitsregel von "+fieldName.toStdString()+"." : validationText.toStdString());
+                validate.finish();
+            }
+        }
+    }
+}
 bool AccessTableModel::applyDataBlock(int firstRow,int firstColumn,const QVector<QVector<QVariant>>& values,bool typed,const QMap<QString,QVariant>* restoredDefaults,bool skipGenerated,const QSet<int>* suppliedColumns,const QVector<int>* mappedColumns) {
     if(saving_ || changing_) return reject(2501);
     if(readOnly_) return reject(2448);
@@ -603,26 +706,24 @@ bool AccessTableModel::applyDataBlock(int firstRow,int firstColumn,const QVector
     const QScopedValueRollback<bool> blockMutation(blockMutation_,true);
     if(editStrategy()!=QSqlTableModel::OnManualSubmit) return reject(3251);
     if(!canPasteOverUpdates()) return rejectEdit(3251,"Der vorhandene Entwurfsumfang überschreitet die native Bereichsgrenze.");
-    if(skipGenerated && (!typed || firstColumn!=0 || firstRow!=rowCount() || canFetchMore())) return reject(3251);
+    if(skipGenerated && (!typed || !suppliedColumns || firstColumn!=0 || firstRow!=rowCount())) return reject(3251);
     if(metadataError_) return reject(metadataError_);
     if(firstRow<0 || firstRow>rowCount() || firstColumn<0 || firstColumn>=columnCount() || values.isEmpty() || values.front().isEmpty()) return reject(5);
     const auto columns=values.front().size();
     if(mappedColumns) {if(skipGenerated || mappedColumns->size()!=columns) return reject(5);QSet<int> unique;for(const int column:*mappedColumns) {if(column<0 || column>=columnCount() || unique.contains(column)) return reject(5);unique.insert(column);}}
-    const qint64 endRow=static_cast<qint64>(firstRow)+values.size();
+    qint64 endRow=static_cast<qint64>(firstRow)+values.size();
     if(values.size()>1000000/columns || endRow>std::numeric_limits<int>::max()
         || (!mappedColumns && static_cast<qint64>(firstColumn)+columns>columnCount())) return reject(5);
-    // Exhaust the source before appending: an unfetched record is never a new row.
-    while(rowCount()<endRow && canFetchMore()) {
+    while(!skipGenerated && rowCount()<endRow && canFetchMore()) {
         const int previous=rowCount();fetchMore();if(rowCount()==previous) break;
     }
-    const int originalRows=rowCount();
+    int originalRows=rowCount();
     const int appended=std::max(0,static_cast<int>(endRow)-originalRows);
-    struct Cell { int row,column; QVariant value; };
+    struct Cell { int offset,column; QVariant value; };
     QVector<Cell> checked;QMap<QString,QVariant> dateDefaults;BlockHistory history;
-    history.firstRow=firstRow;history.firstColumn=firstColumn;history.originalRows=originalRows;history.applied=true;history.skipGenerated=skipGenerated;if(mappedColumns) history.columns=*mappedColumns;if(suppliedColumns) history.suppliedColumns=*suppliedColumns;
+    history.firstColumn=firstColumn;history.applied=true;history.skipGenerated=skipGenerated;if(mappedColumns) history.columns=*mappedColumns;if(suppliedColumns) history.suppliedColumns=*suppliedColumns;
     QVector<BlockHistory> nextHistory;
     try {
-        history.before=captureUpdates();
         if(appended) dateDefaults=restoredDefaults ? *restoredDefaults : pendingScalarDefaults(database(),tableName(),types_);
         history.dateDefaults=dateDefaults;
         checked.reserve(values.size()*columns);
@@ -632,7 +733,7 @@ bool AccessTableModel::applyDataBlock(int firstRow,int firstColumn,const QVector
             for(qsizetype column=0;column<columns;++column) {
                 const int targetRow=firstRow+row,targetColumn=mappedColumns ? (*mappedColumns)[column] : firstColumn+column;
                 const auto type=columnType(targetColumn);
-                if(skipGenerated && (generated_.contains(record().fieldName(targetColumn).toCaseFolded()) || (suppliedColumns && !suppliedColumns->contains(targetColumn)))) {historyRow.push_back(QVariant{});continue;}
+                if(skipGenerated && (isGeneratedColumn(targetColumn) || !suppliedColumns->contains(targetColumn))) {historyRow.push_back(QVariant{});continue;}
                 if(targetRow<originalRows) {
                     if(deletedRows_.contains(targetRow)) return reject(2448);
                     if(!(flags(index(targetRow,targetColumn))&Qt::ItemIsEditable) && !(typed && type.contains("BLOB",Qt::CaseInsensitive) && isPasteColumn(targetColumn,true))) return reject(2448);
@@ -653,10 +754,26 @@ bool AccessTableModel::applyDataBlock(int firstRow,int firstColumn,const QVector
                 else if(typed && (type=="INTEGER" || type=="INT" || type=="BIGINT") && (input.metaType().id()==QMetaType::LongLong || input.metaType().id()==QMetaType::Int)) converted=input;
                 else if(typed && (input.metaType().id()==QMetaType::Double || input.metaType().id()==QMetaType::Bool)) converted=sqlFieldValue(input.metaType().id()==QMetaType::Bool ? VbaValue::logical(input.toBool()) : VbaValue::numeric(input.toDouble()),type);
                 else converted=checkedColumnInput(targetColumn,input);
-                checked.push_back({targetRow,targetColumn,converted});historyRow.push_back(converted);
+                checked.push_back({static_cast<int>(row),targetColumn,converted});historyRow.push_back(converted);
             }
             history.values.push_back(std::move(historyRow));
         }
+        if(skipGenerated) {
+            checkRecordAppend(history.values,*suppliedColumns,dateDefaults);
+            // Load all stored rows after preflight so a refused record leaves
+            // the existing draft history at its current fetch boundary.
+            while(canFetchMore()) {
+                const int previous=rowCount();
+                if(previous>=1000000) return reject(3251);
+                fetchMore();
+                if(rowCount()==previous && canFetchMore()) return reject(3251);
+            }
+            firstRow=originalRows=rowCount();
+            endRow=static_cast<qint64>(firstRow)+values.size();
+        }
+        history.firstRow=firstRow;
+        history.originalRows=originalRows;
+        history.before=captureUpdates();
         if(!replayingHistory_) nextHistory=prepareBlockHistory(history);
     } catch(const VbaRuntimeError& error) { return rejectEdit(error.number,QString::fromUtf8(error.what())); }
       catch(const std::bad_alloc&) { return reject(7); }
@@ -672,12 +789,15 @@ bool AccessTableModel::applyDataBlock(int firstRow,int firstColumn,const QVector
                 const int column=fieldIndex(it.key());
                 if(column>=0 && !QSqlTableModel::setData(index(row,column),it.value(),Qt::EditRole)) {failure=3251;break;}
             }
-            if(!failure) for(const auto& cell:checked) if(!QSqlTableModel::setData(index(cell.row,cell.column),cell.value,Qt::EditRole)) { failure=3251; break; }
+            if(!failure) for(const auto& cell:checked) if(!QSqlTableModel::setData(index(firstRow+cell.offset,cell.column),cell.value,Qt::EditRole)) { failure=3251; break; }
         } catch(const std::bad_alloc&) { failure=7; }
           catch(const std::exception&) { failure=3251; }
-        // The cache was clean on entry; revert inserted rows and changed cells together.
     }
-    if(failure) {const bool restored=restoreUpdates(history.before,originalRows);if(!restored) clearBlockHistory();return reject(restored ? failure : 3251);}
+    if(failure) {
+        const bool restored=skipGenerated ? discardAppendedRows(originalRows) : restoreUpdates(history.before,originalRows);
+        if(!restored) clearBlockHistory();
+        return reject(restored ? failure : 3251);
+    }
     for(int row=originalRows;row<endRow;++row) dirtyRows_.insert(row);
     if(!replayingHistory_) {undoHistory_.swap(nextHistory);redoHistory_.clear();}
     const int firstChanged=mappedColumns ? *std::min_element(mappedColumns->cbegin(),mappedColumns->cend()) : firstColumn;
@@ -691,6 +811,16 @@ bool AccessTableModel::applyDataBlock(int firstRow,int firstColumn,const QVector
 }
 bool AccessTableModel::canPasteOverUpdates() const {
     return !isDirty() || static_cast<qint64>(rowCount())*columnCount()<=1000000;
+}
+bool AccessTableModel::discardAppendedRows(int first) {
+    while(rowCount()>first) {
+        const int last=rowCount()-1;
+        if(isStoredRecord(last)) return false;
+        QSqlTableModel::revertRow(last);
+        if(rowCount()!=last) return false;
+        dirtyRows_.remove(last);
+    }
+    return rowCount()==first;
 }
 QVector<AccessTableModel::CachedUpdate> AccessTableModel::captureUpdates() const {
     QVector<CachedUpdate> updates;if(!isDirty()) return updates;
@@ -781,7 +911,9 @@ bool AccessTableModel::undoBlock() {
         const auto history=undoHistory_.back();auto nextUndo=undoHistory_,nextRedo=redoHistory_;
         nextUndo.removeLast();nextRedo.append(history);const auto generation=historyGeneration_;
         const QScopedValueRollback<bool> changing(changing_,true),blockMutation(blockMutation_,true);
-        if(!history.deletions.isEmpty() && history.before.isEmpty()) {
+        if(history.skipGenerated) {
+            if(!discardAppendedRows(history.originalRows)) {clearBlockHistory();return reject(3251);}
+        } else if(!history.deletions.isEmpty() && history.before.isEmpty()) {
             for(const int row:history.deletions) {QSqlTableModel::revertRow(row);dirtyRows_.remove(row);deletedRows_.remove(row);}
         } else if(!restoreUpdates(history.before,history.originalRows)) {clearBlockHistory();return reject(3251);}
         if(generation!=historyGeneration_) return reject(2501);
@@ -836,17 +968,37 @@ bool AccessTableModel::deleteRowFromTable(int row) {
 bool AccessTableModel::insertRowIntoTable(const QSqlRecord& row) {
     insertedKey_.clear();
     auto values=row;
-    for(int i=0;i<values.count();++i) if(generated_.contains(values.fieldName(i).toCaseFolded())) values.setGenerated(i,false);
-    AccessCounterSqlScope counterScope(database());
+    bool hasValues=false;
+    for(int i=0;i<values.count();++i) {
+        if(generated_.contains(values.fieldName(i).toCaseFolded())) values.setGenerated(i,false);
+        hasValues|=values.isGenerated(i);
+    }
+    const auto db=database();
+    AccessCounterSqlScope counterScope(db);
     try {
-        const bool inserted=QSqlTableModel::insertRowIntoTable(values);
+        bool inserted=false;
+        if(hasValues || db.driverName()!=QStringLiteral("QSQLITE")) {
+            inserted=QSqlTableModel::insertRowIntoTable(values);
+        } else {
+            // Qt's SQLite INSERT builder has no statement for an empty field list.
+            emit beforeInsert(values);
+            const auto* driver=db.driver();
+            const auto statement=driver->sqlStatement(QSqlDriver::InsertStatement,tableName(),values,true);
+            QSqlQuery insert(db);
+            if(statement.isEmpty()) inserted=insert.exec("INSERT INTO "+driver->escapeIdentifier(tableName(),QSqlDriver::TableName)+" DEFAULT VALUES");
+            else if(insert.prepare(statement)) {
+                for(int field=0;field<values.count();++field) if(values.isGenerated(field)) insert.addBindValue(values.value(field));
+                inserted=insert.exec();
+            }
+            if(!inserted) setLastError(insert.lastError());
+        }
         counterScope.complete(inserted);
         if(!inserted) return false;
     } catch(const VbaRuntimeError& error) {return reject(error.number);}
     // Capture actual generated keys on this connection inside the transaction.
     // SQLite restores last_insert_rowid after triggers; another connection
     // cannot change it. Never infer a key from MAX(), row order or draft text.
-    const auto db=database(); const auto primary=primaryKey();
+    const auto primary=primaryKey();
     if(db.driverName()!=QStringLiteral("QSQLITE") || primary.isEmpty()) return true;
     QString rowid;
     for(const auto& candidate:{QStringLiteral("_rowid_"),QStringLiteral("rowid"),QStringLiteral("oid")}) {

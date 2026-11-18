@@ -70,6 +70,8 @@ protected:
     bool deleteRowFromTable(int row) override;
 private:
     bool applyDataBlock(int firstRow,int firstColumn,const QVector<QVector<QVariant>>& values,bool typed,const QMap<QString,QVariant>* restoredDefaults=nullptr,bool skipGenerated=false,const QSet<int>* suppliedColumns=nullptr,const QVector<int>* mappedColumns=nullptr);
+    void checkRecordAppend(const QVector<QVector<QVariant>>& rows,const QSet<int>& supplied,const QMap<QString,QVariant>& pendingDefaults) const;
+    bool discardAppendedRows(int first);
     bool refreshTypes();
     bool changeDecimalRow(int row,const QSqlRecord* values);
     QVariant checkedColumnInput(int column,const QVariant& input) const;
@@ -80,7 +82,7 @@ private:
     QMap<QString,QString> types_,captions_,descriptions_,formats_;
     QMap<QString,QPair<int,int>> decimalTypes_;
     QMap<int,QString> queryAliases_;
-    QSet<QString> generated_;
+    QSet<QString> generated_,nativeOwnedFields_;
     int metadataError_{};
     QVector<QPair<int,Qt::SortOrder>> sourceSort_;
     int sortColumn_{-1};

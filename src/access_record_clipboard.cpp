@@ -2,6 +2,7 @@
 #include "dao_database.hpp"
 #include "access_autonumber.hpp"
 #include "jet_sql_functions.hpp"
+#include "native_grid_mime.hpp"
 #include "sqlite_execution.hpp"
 #include "vba_qt_value.hpp"
 #include <QApplication>
@@ -18,48 +19,10 @@
 #include <QSignalBlocker>
 #include <QSqlError>
 #include <QSqlQuery>
-#include <cmath>
 
 namespace {
 using linaccess::VbaRuntimeError;
-constexpr auto format="application/x-linaccess-record-v1";
-constexpr qsizetype limit=8*1024*1024;
 QString identifier(QString name) { return '"'+name.replace('"',"\"\"")+'"'; }
-QJsonObject encode(const QString& name,const QVariant& value) {
-    QJsonObject field{{"name",name}};
-    if (value.isNull()) field["kind"]="null";
-    else if (value.metaType().id()==QMetaType::Int || value.metaType().id()==QMetaType::LongLong) {
-        field["kind"]="integer"; field["value"]=QString::number(value.toLongLong());
-    } else if (value.metaType().id()==QMetaType::Double) {
-        if (!std::isfinite(value.toDouble())) throw VbaRuntimeError(6,"Nonfinite clipboard value");
-        field["kind"]="real"; field["value"]=value.toDouble();
-    } else if (value.metaType().id()==QMetaType::Bool) {
-        field["kind"]="boolean"; field["value"]=value.toBool();
-    } else if (value.metaType().id()==QMetaType::QString) {
-        if (value.toString().size()>limit/2) throw VbaRuntimeError(3035,"Clipboard value limit exceeded");
-        field["kind"]="text"; field["value"]=value.toString();
-    } else if (value.metaType().id()==QMetaType::QByteArray) {
-        if (value.toByteArray().size()>limit) throw VbaRuntimeError(3035,"Clipboard value limit exceeded");
-        field["kind"]="binary"; field["value"]=QString::fromLatin1(value.toByteArray().toBase64());
-    } else throw VbaRuntimeError(13,"Clipboard value type unsupported");
-    return field;
-}
-QVariant decode(const QJsonObject& field) {
-    const auto kind=field["kind"].toString(); const auto value=field["value"];
-    if (kind=="null") return {};
-    if (kind=="integer" && value.isString()) {
-        bool valid=false; const auto integer=value.toString().toLongLong(&valid);
-        if (valid && QString::number(integer)==value.toString()) return QVariant::fromValue(integer);
-    }
-    if (kind=="real" && value.isDouble() && std::isfinite(value.toDouble())) return value.toDouble();
-    if (kind=="boolean" && value.isBool()) return value.toBool();
-    if (kind=="text" && value.isString()) return value.toString();
-    if (kind=="binary" && value.isString()) {
-        const auto bytes=QByteArray::fromBase64Encoding(value.toString().toLatin1(),QByteArray::AbortOnBase64DecodingErrors);
-        if (bytes) return bytes.decoded;
-    }
-    throw VbaRuntimeError(13,"Invalid typed clipboard value");
-}
 QString tabCell(QString value) {
     if (value.contains('\t') || value.contains('\r') || value.contains('\n') || value.contains('"')) {
         value.replace('"',"\"\""); return '"'+value+'"';
@@ -82,12 +45,32 @@ void AccessFormPreview::copyCurrentRecord() {
     if (dataColumns_.size()>255 || row.size()!=dataColumns_.size()) throw VbaRuntimeError(3035,"Clipboard column limit exceeded");
     QJsonArray fields; QStringList labels,values;
     for (qsizetype i=0;i<row.size();++i) {
-        fields.append(encode(dataColumns_[i],row[i])); labels.append(tabCell(dataColumns_[i]));
-        values.append(tabCell(row[i].metaType().id()==QMetaType::QByteArray ? QStringLiteral("0x")+QString::fromLatin1(row[i].toByteArray().toHex()) : row[i].toString()));
+        const auto& name=dataColumns_[i];
+        const auto& value=row[i];
+        const auto type=dataTypes_.value(name.toCaseFolded());
+        auto storage=value;
+        auto storageType=type;
+        QString text;
+        if(!value.isNull() && (type=="CURRENCY_REAL" || type=="CURRENCY_TICKS" || type=="DECIMAL_EXACT")) {
+            const auto scalar=linaccess::qtFieldValue(value,type);
+            text=QString::fromStdString(scalar.asText());
+            if(type=="DECIMAL_EXACT") storage=text;
+            if(type=="CURRENCY_REAL") {
+                storage=QVariant::fromValue(static_cast<qlonglong>(scalar.currencyUnits));
+                storageType="CURRENCY_TICKS";
+            }
+        } else {
+            text=value.metaType().id()==QMetaType::QByteArray ? QStringLiteral("0x")+QString::fromLatin1(value.toByteArray().toHex()) : value.toString();
+        }
+        auto field=linaccess::nativeGridEncode(storage,storageType);
+        field.insert("name",name);
+        fields.append(field);
+        labels.append(tabCell(name));
+        values.append(tabCell(text));
     }
     const auto data=QJsonDocument(QJsonObject{{"version",1},{"fields",fields}}).toJson(QJsonDocument::Compact);
-    if (data.size()>limit) throw VbaRuntimeError(3035,"Clipboard record limit exceeded");
-    auto* mime=new QMimeData; mime->setData(format,data); mime->setText(labels.join('\t')+'\n'+values.join('\t'));
+    if (data.size()>linaccess::nativeGridMimeLimit) throw VbaRuntimeError(3035,"Clipboard record limit exceeded");
+    auto* mime=new QMimeData; mime->setData(linaccess::nativeRecordMime,data); mime->setText(labels.join('\t')+'\n'+values.join('\t'));
     QApplication::clipboard()->setMimeData(mime);
 }
 
@@ -98,21 +81,11 @@ void AccessFormPreview::pasteAppendRecord() {
     for (const auto* event:{"beforeinsert","afterinsert","beforeupdate","afterupdate","ondirty"})
         if (!layout_.events.value(event).trimmed().isEmpty()) throw VbaRuntimeError(3251,"PasteAppend insertion event pipeline unsupported");
     const auto* mime=QApplication::clipboard()->mimeData();
-    if (!mime || !mime->hasFormat(format)) throw VbaRuntimeError(2046,"No native record on clipboard");
-    const auto bytes=mime->data(format);
-    if (bytes.size()>limit) throw VbaRuntimeError(3035,"Clipboard record limit exceeded");
-    const auto document=QJsonDocument::fromJson(bytes);
-    if (!document.isObject() || document.object()["version"]!=QJsonValue(1) || !document.object()["fields"].isArray())
-        throw VbaRuntimeError(13,"Invalid clipboard record");
-    const auto fields=document.object()["fields"].toArray();
-    if (fields.size()>255 || fields.size()!=dataColumns_.size()) throw VbaRuntimeError(13,"Clipboard field shape mismatch");
+    if (!mime || !mime->hasFormat(linaccess::nativeRecordMime)) throw VbaRuntimeError(2046,"No native record on clipboard");
+    const auto block=linaccess::nativeRecordDecode(mime->data(linaccess::nativeRecordMime));
+    if (block.fields.size()!=dataColumns_.size()) throw VbaRuntimeError(13,"Clipboard field shape mismatch");
     QMap<QString,QVariant> source;
-    for (const auto& field:fields) {
-        if (!field.isObject() || !field.toObject()["name"].isString()) throw VbaRuntimeError(13,"Invalid clipboard field");
-        const auto object=field.toObject(); const auto name=object["name"].toString().toCaseFolded();
-        if (name.isEmpty() || source.contains(name)) throw VbaRuntimeError(13,"Ambiguous clipboard field");
-        source.insert(name,decode(object));
-    }
+    for (qsizetype i=0;i<block.fields.size();++i) source.insert(block.fields[i].toCaseFolded(),block.rows.front()[i]);
     QString table;
     for (const auto& candidate:db_.tables()) if (candidate.compare(layout_.recordSource.trimmed(),Qt::CaseInsensitive)==0) { table=candidate; break; }
     if (table.isEmpty()) throw VbaRuntimeError(3078,"Append table unavailable");
@@ -131,7 +104,10 @@ void AccessFormPreview::pasteAppendRecord() {
         if (counters.contains(name) && !generated.contains(name)) throw VbaRuntimeError(3251,"Counter generation for this column unsupported");
         if (generated.contains(name)) continue;
         auto value=source.value(name); const auto type=dataTypes_.value(name);
-        if (!value.isNull() && type!="BLOB" && type!="TEXT" && !(type.contains("INT",Qt::CaseInsensitive) && value.metaType().id()==QMetaType::LongLong))
+        if (value.metaType()==QMetaType::fromType<linaccess::NativeGridCurrency>()) {
+            if (type!="CURRENCY_TICKS" && type!="CURRENCY_REAL" && type!="TEXT") throw VbaRuntimeError(13,"Clipboard Currency column type mismatch");
+            value=linaccess::sqlFieldValue(VbaValue::currency(value.value<linaccess::NativeGridCurrency>().units),type);
+        } else if (!value.isNull() && type!="BLOB" && type!="TEXT" && !(type.contains("INT",Qt::CaseInsensitive) && value.metaType().id()==QMetaType::LongLong))
             value=linaccess::sqlFieldValue(linaccess::qtFieldValue(value,type),type);
         if (!value.isNull() && ((type=="BLOB")!=(value.metaType().id()==QMetaType::QByteArray))) throw VbaRuntimeError(13,"Clipboard column type mismatch");
         columns.append(identifier(column)); placeholders.append("?"); values.append(value);

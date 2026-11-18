@@ -3,18 +3,21 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSet>
+#include <QStringList>
 #include <QVariant>
 #include <cmath>
 namespace linaccess {struct NativeGridCurrency {qint64 units{};};}
 Q_DECLARE_METATYPE(linaccess::NativeGridCurrency)
 namespace linaccess {
 inline constexpr auto nativeGridMime="application/x-linaccess-grid-v1";
+inline constexpr auto nativeRecordMime="application/x-linaccess-record-v1";
 inline constexpr qsizetype nativeGridMimeLimit=8*1024*1024;
 inline QJsonObject nativeGridEncode(const QVariant& value,const QString& type={}) {
     if(value.isNull()) return {{"kind","null"}};
     const auto kind=value.metaType().id();
     if(type=="CURRENCY_TICKS") {
-        if(kind!=QMetaType::Int && kind!=QMetaType::LongLong) throw VbaRuntimeError(13,"Exact Currency query clipboard requires integer ticks");
+        if(kind!=QMetaType::Int && kind!=QMetaType::LongLong) throw VbaRuntimeError(13,"Exact Currency clipboard requires integer ticks");
         return {{"kind","currency"},{"value",QString::number(value.toLongLong())}};
     }
     if(kind==QMetaType::Int || kind==QMetaType::LongLong) return {{"kind","integer"},{"value",QString::number(value.toLongLong())}};
@@ -54,20 +57,72 @@ inline QVariant nativeGridDecode(const QJsonValue& cell) {
     }
     throw VbaRuntimeError(13,"Invalid typed grid value");
 }
-inline QVector<QVector<QVariant>> nativeGridDecodeBlock(const QByteArray& bytes) {
-    if(bytes.size()>nativeGridMimeLimit) throw VbaRuntimeError(3035,"Grid clipboard size limit exceeded");
-    QJsonParseError error;const auto document=QJsonDocument::fromJson(bytes,&error);
-    if(error.error!=QJsonParseError::NoError || !document.isObject()) throw VbaRuntimeError(13,"Invalid grid clipboard document");
+struct NativeClipboardBlock {
+    QStringList fields;
+    QVector<QVector<QVariant>> rows;
+};
+
+inline QJsonObject nativeClipboardObject(const QByteArray& bytes) {
+    if(bytes.size()>nativeGridMimeLimit) throw VbaRuntimeError(3035,"Typed clipboard size limit exceeded");
+    QJsonParseError error;
+    const auto document=QJsonDocument::fromJson(bytes,&error);
+    if(error.error!=QJsonParseError::NoError || !document.isObject()) throw VbaRuntimeError(13,"Invalid typed clipboard document");
     const auto root=document.object();
-    if(root.value("version")!=QJsonValue(1) || !root.value("rows").isArray()) throw VbaRuntimeError(13,"Invalid grid clipboard version");
-    const auto rows=root.value("rows").toArray();QVector<QVector<QVariant>> result;qsizetype columns=0;
+    if(root.value("version")!=QJsonValue(1)) throw VbaRuntimeError(13,"Invalid typed clipboard version");
+    return root;
+}
+
+inline QString nativeClipboardField(const QJsonValue& value,QSet<QString>& seen) {
+    const auto field=value.toString();
+    const auto key=field.toCaseFolded();
+    if(!value.isString() || field.isEmpty() || !field.isValidUtf16() || field.contains(QChar(0)) || seen.contains(key))
+        throw VbaRuntimeError(13,"Invalid or ambiguous clipboard field name");
+    seen.insert(key);
+    return field;
+}
+
+inline QVector<QVector<QVariant>> nativeGridDecodeBlock(const QByteArray& bytes,QStringList* fieldNames=nullptr) {
+    const auto root=nativeClipboardObject(bytes);
+    if(!root.value("rows").isArray()) throw VbaRuntimeError(13,"Invalid grid clipboard rows");
+    const auto rows=root.value("rows").toArray();
+    QVector<QVector<QVariant>> result;
+    qsizetype columns=0;
     if(rows.isEmpty()) throw VbaRuntimeError(13,"Empty grid clipboard block");
     for(const auto& row:rows) {
         if(!row.isArray()) throw VbaRuntimeError(13,"Invalid grid clipboard row");
         const auto cells=row.toArray();if(!columns) columns=cells.size();
         if(!columns || cells.size()!=columns || rows.size()>1000000/columns) throw VbaRuntimeError(13,"Invalid grid clipboard shape");
-        QVector<QVariant> values;values.reserve(columns);for(const auto& cell:cells) values.push_back(nativeGridDecode(cell));result.push_back(std::move(values));
+        QVector<QVariant> values;
+        values.reserve(columns);
+        for(const auto& cell:cells) values.push_back(nativeGridDecode(cell));
+        result.push_back(std::move(values));
     }
+    if(fieldNames) {
+        QStringList names;
+        const auto fields=root.value("fields");
+        if(!fields.isUndefined()) {
+            if(!fields.isArray() || fields.toArray().size()!=columns) throw VbaRuntimeError(13,"Grid clipboard field shape mismatch");
+            QSet<QString> seen;
+            for(const auto& field:fields.toArray()) names.append(nativeClipboardField(field,seen));
+        }
+        *fieldNames=std::move(names);
+    }
+    return result;
+}
+
+inline NativeClipboardBlock nativeRecordDecode(const QByteArray& bytes) {
+    const auto root=nativeClipboardObject(bytes);
+    const auto fields=root.value("fields").toArray();
+    if(fields.isEmpty() || fields.size()>255) throw VbaRuntimeError(13,"Invalid form clipboard field shape");
+    NativeClipboardBlock result;
+    QVector<QVariant> row;
+    QSet<QString> seen;
+    for(const auto& field:fields) {
+        if(!field.isObject()) throw VbaRuntimeError(13,"Invalid form clipboard field");
+        result.fields.append(nativeClipboardField(field.toObject().value("name"),seen));
+        row.append(nativeGridDecode(field));
+    }
+    result.rows.append(std::move(row));
     return result;
 }
 }
