@@ -20,7 +20,7 @@ if(LINACCESS_BUILD_GUI)
     target_link_libraries(linaccess_mdb_metadata PRIVATE Qt6::Core PkgConfig::MDB)
     add_subdirectory(third_party/sqlite)
     add_library(linaccess_data STATIC
-        src/access_catalog.cpp src/access_index_metadata.cpp src/access_floating_metadata.cpp src/access_table_model.cpp src/access_autonumber.cpp src/access_table_import.cpp src/access_query.cpp src/access_value_list.cpp src/access_format.cpp
+        src/access_catalog.cpp src/access_index_metadata.cpp src/access_floating_metadata.cpp src/access_table_model.cpp src/access_autonumber.cpp src/access_table_import.cpp src/access_ole_package.cpp src/access_query.cpp src/access_value_list.cpp src/access_format.cpp
         src/execution_capabilities.cpp src/native_macro.cpp src/native_macro_runner.cpp src/dao_database.cpp src/sqlite_execution.cpp src/jet_sql_functions.cpp src/vba_source_codec.cpp
         src/vba_qt_value.cpp src/vba_module_context.cpp src/access_form_import.cpp)
     target_link_libraries(linaccess_data PUBLIC linaccess_runtime Qt6::Core Qt6::Sql linaccess_sqlite)
@@ -234,6 +234,9 @@ if(BUILD_TESTING)
         target_include_directories(linaccess_table_import_tests PRIVATE src)
         target_link_libraries(linaccess_table_import_tests PRIVATE linaccess_runtime linaccess_data Qt6::Core Qt6::Sql)
         add_test(NAME table_import_contracts COMMAND linaccess_table_import_tests)
+        add_executable(linaccess_ole_package_tests tests/ole_package_tests.cpp)
+        target_link_libraries(linaccess_ole_package_tests PRIVATE linaccess_data)
+        add_test(NAME access_ole_package COMMAND linaccess_ole_package_tests)
         add_executable(linaccess_joined_update_tests tests/joined_update_tests.cpp)
         target_link_libraries(linaccess_joined_update_tests PRIVATE linaccess_data Qt6::Core Qt6::Sql)
         add_test(NAME joined_update_contracts COMMAND linaccess_joined_update_tests)
