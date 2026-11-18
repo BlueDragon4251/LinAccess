@@ -101,7 +101,10 @@ int main(int argc,char** argv) {
             if(column->col_type==MDB_FLOAT) { singleColumns.append(name); singleFields.append(column); }
             if(column->col_type==MDB_DOUBLE) { doubleColumns.append(name); doubleFields.append(column); }
             if(column->col_type==MDB_MONEY) {
-                if(!column->is_fixed || column->col_size!=8) throw 1;
+                // A Jet4 MONEY value can occupy a variable row slot. MDBTools
+                // obtains its actual width from the row offsets in that layout.
+                if(column->col_size!=8 || (!column->is_fixed &&
+                    (mdb->f->jet_version!=MDB_VER_JET4 || column->var_col_num>=table->num_var_cols))) throw 1;
                 currencyColumns.append(name);
                 currencyFields.append(column);
             }

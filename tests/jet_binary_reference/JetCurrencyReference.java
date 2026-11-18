@@ -18,14 +18,19 @@ class JetCurrencyReference {
         Long.MAX_VALUE, Long.MIN_VALUE, 9007199254740993L, 1L, -1L, 0L, 12500L, null
     };
 
-    private static void writeAndVerify(Path file, Database.FileFormat format) throws Exception {
+    private static void writeAndVerify(Path file, Database.FileFormat format, boolean variableSlot) throws Exception {
         if (Files.exists(file)) {
             throw new IllegalStateException("Refusing to replace fixture " + file);
         }
         try (Database db = DatabaseBuilder.create(format, file.toFile())) {
             Table table = new TableBuilder(TABLE)
                 .addColumn(new ColumnBuilder("id", DataType.LONG))
-                .addColumn(new ColumnBuilder("amount", DataType.MONEY))
+                .addColumn(new ColumnBuilder("amount", DataType.MONEY) {
+                    @Override
+                    public boolean isVariableLength() {
+                        return variableSlot;
+                    }
+                })
                 .toTable(db);
             for (int i = 0; i < TICKS.length; ++i) {
                 Long ticks = TICKS[i];
@@ -43,8 +48,9 @@ class JetCurrencyReference {
             }
             Table table = db.getTable(TABLE);
             var amount = table.getColumn("amount");
-            if (amount.getType() != DataType.MONEY || !DEFAULT.equals(amount.getProperties().getValue("DefaultValue"))) {
-                throw new IllegalStateException("MONEY field or default mismatch");
+            if (amount.getType() != DataType.MONEY || amount.isVariableLength() != variableSlot ||
+                    amount.getLength() != Long.BYTES || !DEFAULT.equals(amount.getProperties().getValue("DefaultValue"))) {
+                throw new IllegalStateException("MONEY field, layout or default mismatch");
             }
             boolean[] seen = new boolean[TICKS.length];
             int count = 0;
@@ -73,7 +79,8 @@ class JetCurrencyReference {
             throw new IllegalArgumentException("Output directory required");
         }
         Path directory = Files.createDirectories(Path.of(args[0]));
-        writeAndVerify(directory.resolve("currency-probe.mdb"), Database.FileFormat.V2000);
-        writeAndVerify(directory.resolve("currency-probe.accdb"), Database.FileFormat.V2010);
+        // Jet4 can store an eight-byte MONEY value in a variable row slot.
+        writeAndVerify(directory.resolve("currency-probe.mdb"), Database.FileFormat.V2000, true);
+        writeAndVerify(directory.resolve("currency-probe.accdb"), Database.FileFormat.V2010, false);
     }
 }
