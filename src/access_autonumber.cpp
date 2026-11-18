@@ -112,9 +112,10 @@ void nextAccessCounter(sqlite3_context* context,int count,sqlite3_value** values
             Statement exists(raw,&sqlite3_finalize);if(sqlite3_step(exists.get())==SQLITE_ROW) {counterError(context,3251);return;}
         }
         step.reset();raw=nullptr;
-        // Source-backed Jet Long counters wrap in signed32; legacy SQLite-only
-        // generators keep their existing64-bit contract.
-        const auto jetPrepare=sqlite3_prepare_v2(connection,"UPDATE main._la_counter32_sequences SET value=CASE WHEN value+?3>2147483647 THEN value+?3-4294967296 ELSE value+?3 END WHERE table_name=?1 AND column_name=?2 RETURNING value",-1,&raw,nullptr);
+        // Access2003 proves signed32 wrap for increment1 only. Custom steps
+        // may advance within Long range, but their overflow rule is unproven.
+        // Guard the write itself so refusal cannot consume a frontier.
+        const auto jetPrepare=sqlite3_prepare_v2(connection,"UPDATE main._la_counter32_sequences SET value=CASE WHEN value+?3>2147483647 THEN value+?3-4294967296 ELSE value+?3 END WHERE table_name=?1 AND column_name=?2 AND (?3=1 OR value+?3<=2147483647) RETURNING value",-1,&raw,nullptr);
         Statement jet(raw,&sqlite3_finalize);
         if(jetPrepare==SQLITE_OK) {
             for(int i=0;i<2;++i) if(sqlite3_bind_text(jet.get(),i+1,reinterpret_cast<const char*>(sqlite3_value_text(values[i])),sqlite3_value_bytes(values[i]),SQLITE_TRANSIENT)!=SQLITE_OK) {counterError(context,3251);return;}
@@ -127,6 +128,14 @@ void nextAccessCounter(sqlite3_context* context,int count,sqlite3_value** values
                 sqlite3_result_int64(context,value);return;
             }
             if(result!=SQLITE_DONE) {counterError(context,result==SQLITE_INTERRUPT ? 3035 : 3251);return;}
+            if(increment>1) {
+                jet.reset();raw=nullptr;
+                if(sqlite3_prepare_v2(connection,"SELECT 1 FROM main._la_counter32_sequences WHERE table_name=? AND column_name=?",-1,&raw,nullptr)!=SQLITE_OK) {counterError(context,3251);return;}
+                Statement exists(raw,&sqlite3_finalize);
+                for(int i=0;i<2;++i) if(sqlite3_bind_text(exists.get(),i+1,reinterpret_cast<const char*>(sqlite3_value_text(values[i])),sqlite3_value_bytes(values[i]),SQLITE_TRANSIENT)!=SQLITE_OK) {counterError(context,3251);return;}
+                // A guarded Long generator must never fall through to legacy64.
+                if(sqlite3_step(exists.get())!=SQLITE_DONE) {counterError(context,3251);return;}
+            }
         } else {
             jet.reset();raw=nullptr;
             if(sqlite3_prepare_v2(connection,"SELECT 1 FROM main.sqlite_schema WHERE name='_la_counter32_sequences'",-1,&raw,nullptr)!=SQLITE_OK) {counterError(context,3251);return;}
@@ -274,7 +283,10 @@ AccessCounterReservation reserveAccessCounter(QSqlDatabase db,const QString& req
         }
         if(jetLong) {
             query.prepare("SELECT linaccess_next_counter(?,?)");query.addBindValue(table);query.addBindValue(column);
-            if(!query.exec() || !query.next()) throw VbaRuntimeError(3146,"Jet Long counter reservation failed");
+            if(!query.exec() || !query.next()) {
+                const auto error=jetSqlFunctionErrorNumber(query.lastError().text().toLower().toStdString());
+                throw VbaRuntimeError(error.value_or(3146),"Jet Long counter reservation failed");
+            }
             value=query.value(0).toLongLong();query.finish();
             retainAccessCounterReservation(db,{table,column,value,native!=0,true});
         } else if(native) {

@@ -1158,7 +1158,37 @@ CREATE INDEX `label` ON `source` (`a``b`);
     makeDaoDatabase(file)->member("Execute",{VbaValue::string("CREATE TABLE durable_step(n COUNTER(100,7))")});
     auto durableStep=makeDaoDatabase(file)->member("OpenRecordset",{VbaValue::string("durable_step")}).object;
     durableStep->member("AddNew",{});assert(durableStep->item("n").asNumber()==100);durableStep->member("CancelUpdate",{});durableStep->member("Close",{});durableStep.reset();
+    // The Access2003 reference proves increment1 wrap, not custom-step overflow.
+    // Refusal preserves both the stored frontier and rows, including after reopen.
+    makeDaoDatabase(file)->member("Execute",{VbaValue::string("CREATE TABLE bounded_step(n COUNTER(2147483640,7))")});
+    assert(write.exec("INSERT INTO bounded_step DEFAULT VALUES"));
+    assert(write.exec("INSERT INTO bounded_step DEFAULT VALUES"));
+    // Imported managed generators can retain a legacy catalog entry as well.
+    // Give fallback a usable value so the test detects accidental legacy use.
+    assert(write.exec("INSERT INTO _la_counter_sequences VALUES('bounded_step','n',17)"));
+    const auto refuseCustomOverflow=[&] {
+        assert(!write.exec("SELECT linaccess_next_counter('bounded_step','n')"));
+        assert(jetSqlFunctionErrorNumber(write.lastError().text().toCaseFolded().toStdString())==3251);write.finish();
+        assert(!write.exec("INSERT INTO bounded_step DEFAULT VALUES"));
+        assert(jetSqlFunctionErrorNumber(write.lastError().text().toCaseFolded().toStdString())==3251);write.finish();
+        auto cursor=makeDaoDatabase(file)->member("OpenRecordset",{VbaValue::string("bounded_step")}).object;
+        bool refused=false;
+        try {cursor->member("AddNew",{});}catch(const VbaRuntimeError& error){refused=error.number==3251;}
+        assert(refused);cursor->member("Close",{});
+        assert(write.exec("SELECT value FROM _la_counter32_sequences WHERE table_name='bounded_step'") && write.next() && write.value(0).toLongLong()==2147483647);write.finish();
+        assert(write.exec("SELECT value FROM _la_counter_sequences WHERE table_name='bounded_step'") && write.next() && write.value(0).toInt()==17);write.finish();
+        assert(write.exec("SELECT COUNT(*),MIN(n),MAX(n) FROM bounded_step") && write.next() && write.value(0).toInt()==2 && write.value(1).toLongLong()==2147483640 && write.value(2).toLongLong()==2147483647);write.finish();
+    };
+    refuseCustomOverflow();
+    makeDaoDatabase(file)->member("Execute",{VbaValue::string("CREATE TABLE proven_wrap(n COUNTER)")});
+    assert(write.exec("INSERT INTO proven_wrap(n) VALUES(2147483646)"));
+    assert(write.exec("INSERT INTO proven_wrap DEFAULT VALUES"));
+    assert(write.exec("INSERT INTO proven_wrap DEFAULT VALUES"));
+    auto wrap=makeDaoDatabase(file)->member("OpenRecordset",{VbaValue::string("proven_wrap")}).object;
+    wrap->member("AddNew",{});assert(wrap->item("n").asNumber()==-2147483647);wrap->member("CancelUpdate",{});wrap->member("Close",{});wrap.reset();
+    assert(write.exec("SELECT value FROM _la_counter32_sequences WHERE table_name='proven_wrap'") && write.next() && write.value(0).toLongLong()==-2147483647);write.finish();
     write.clear();file.close();assert(file.open());installJetSqlFunctions(file);write=QSqlQuery(file);
+    refuseCustomOverflow();
     durableStep=makeDaoDatabase(file)->member("OpenRecordset",{VbaValue::string("durable_step")}).object;
     durableStep->member("AddNew",{});assert(durableStep->item("n").asNumber()==107);durableStep->member("Update",{});durableStep->member("Close",{});
     durable=makeDaoDatabase(file)->member("OpenRecordset",{VbaValue::string("durable_jet_counter")}).object;

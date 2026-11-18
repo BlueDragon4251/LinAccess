@@ -86,6 +86,14 @@ including existing32-bit project state without the optional steps table. DROP
 also removes step metadata. This does not decode custom increments from arbitrary
 original Jet binaries or provide all ALTER/field-property/reseed operations.
 
+The reference proves signed32 overflow only for increment1. A configured increment
+greater than1 that would cross2147483647 is refused with3251 by SQL defaults and
+DAO AddNew, leaving the frontier and rows unchanged. This guard persists across
+reopen and does not fall back to legacy64-bit allocation. Custom-step wrapping,
+collision skipping and Random/replication allocation are not inferred from the
+increment1 observation. A seed whose encoded predecessor requires such a custom
+step wrap is subject to the same refusal.
+
 ALTER TABLE t ALTER COLUMN c COUNTER(seed,increment) can reseed an existing empty
 managed32-bit generator atomically. It preserves storage, constraints and data;
 nonempty tables, ordinary fields and physical SQLite rowid aliases are explicitly
