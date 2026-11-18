@@ -74,7 +74,7 @@ std::optional<QMap<QString,AccessSourceFieldDisplay>> checkedAccessSourceFieldDi
         if(aceNumeric) {
             if(object.size()==1) continue;
             if(!decimalTypes.contains(name)) fail();
-            for(auto property=object.cbegin();property!=object.cend();++property)
+            for(auto property=object.constBegin();property!=object.constEnd();++property)
                 if(!aceKeys.contains(property.key())) fail();
             if(object.contains("format_proven")!=object.contains("format")) fail();
         }
