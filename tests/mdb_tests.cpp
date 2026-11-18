@@ -1,10 +1,15 @@
 #include "access_catalog.hpp"
+#include "access_index_metadata.hpp"
 #include "access_table_import.hpp"
 #include "csv.hpp"
+#include "dao_database.hpp"
 
 #include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QTemporaryDir>
@@ -27,10 +32,96 @@ int scalar(QSqlDatabase db, const QString& sql) {
     assert(query.next());
     return query.value(0).toInt();
 }
+
+void verifyNumericDisplay(const QString& path) {
+    using namespace linaccess;
+    const auto before=digest(path);
+    const AccessCatalog catalog(path);
+    const bool ace=catalog.formatVersion()=="ACE14";
+    assert(ace || catalog.formatVersion()=="JET4");
+    const QString table="decimal_probe";
+    const auto schema=parseMdbSchema(catalog.tableSchema(table));
+    const QStringList columns{"id","large","small"};
+    const auto display=checkedAccessSourceFieldDisplayProperties(schema.sourceIndexMetadata,columns);
+    assert(display);
+    const auto numeric=display->value("large");
+    assert(numeric.caption==QString("Exact decimal"));
+    assert(numeric.description==QString("Prüfwert für Dezimalstellen"));
+    assert(numeric.format==QString("0.0000;[Red]-0.0000") && numeric.formatProven);
+    if(ace) {
+        assert(display->size()==1 && !display->contains("id") && !display->contains("small"));
+    } else {
+        assert(display->size()==3 && display->value("id").caption==QString("Fixture identifier"));
+        assert(display->value("small").formatProven && !display->value("small").format);
+    }
+
+    auto db=QSqlDatabase::addDatabase("QSQLITE","numeric-display-probe");
+    db.setDatabaseName(":memory:");
+    assert(db.open());
+    QSqlQuery query(db);
+    assert(query.exec("CREATE TABLE _la_import_log(source_file,kind,name,status,details)"));
+    assert(importAccessDatabase(db,path)==1);
+    assert(scalar(db,"SELECT COUNT(*) FROM decimal_probe")==5);
+    const auto fields=makeDaoDatabase(db)->member("TableDefs",{VbaValue::string("decimal_probe")}).object;
+    const auto property=[&](const char* column,const char* name) {
+        const auto field=fields->member("Fields",{VbaValue::string(column)}).object;
+        return field->member("Properties",{VbaValue::string(name)}).object->member("Value",{}).asText();
+    };
+    assert(property("large","Caption")=="Exact decimal");
+    assert(property("large","Description")=="Prüfwert für Dezimalstellen");
+    assert(property("large","Format")=="0.0000;[Red]-0.0000");
+    if(ace) {
+        for(const char* column:{"id","small"}) {
+            int error=0;
+            try { (void)property(column,"Caption"); }
+            catch(const VbaRuntimeError& failure) { error=failure.number; }
+            assert(error==3251);
+        }
+
+        const auto root=QJsonDocument::fromJson(schema.sourceIndexMetadata).object();
+        const auto csv=AccessCatalog::exportTable(path,table);
+        const auto rows=parseCsvDetailed(std::string_view(csv.constData(),csv.size()));
+        const auto rejects=[&](const QJsonObject& modified) {
+            auto candidate=schema;
+            candidate.sourceIndexMetadata=QJsonDocument(modified).toJson(QJsonDocument::Compact);
+            bool refused=false;
+            try { importAccessTable(db,path,"invalid_display",candidate,rows,
+                                    AccessBinaryEncoding::Unsupported,AccessFloatingSource::NativeMdbBits); }
+            catch(const std::exception&) { refused=true; }
+            assert(refused && !db.tables().contains("invalid_display"));
+        };
+        auto modified=root;
+        auto properties=root.value("field_properties").toArray();
+        auto field=properties[0].toObject();
+        field.insert("caption","Unproven Long caption");
+        properties[0]=field;
+        modified.insert("field_properties",properties);
+        rejects(modified);
+
+        properties=root.value("field_properties").toArray();
+        field=properties[1].toObject();
+        field.insert("format","0.00");
+        properties[1]=field;
+        modified.insert("field_properties",properties);
+        rejects(modified);
+
+        modified=root;
+        modified.insert("source_sha256",QString(64,QChar('0')));
+        rejects(modified);
+    } else {
+        assert(property("id","Caption")=="Fixture identifier");
+    }
+    assert(digest(path)==before);
+    std::cout<<"Numeric display properties verified: "<<(ace ? "ACE 2010" : "Jet 4")<<'\n';
+}
 }
 
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
+    if(argc==3 && app.arguments()[1]=="--numeric-display") {
+        verifyNumericDisplay(app.arguments()[2]);
+        return 0;
+    }
     assert(argc == 2);
     const QString path = QString::fromLocal8Bit(argv[1]);
     const auto before = digest(path);

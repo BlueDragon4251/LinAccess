@@ -1,4 +1,5 @@
 #include "access_index_metadata.hpp"
+#include "access_floating_metadata.hpp"
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -41,9 +42,70 @@ QVector<AccessSourceIndex> checkedAccessSourceIndexes(const QByteArray& json,con
     return result;
 }
 std::optional<QMap<QString,AccessSourceFieldDisplay>> checkedAccessSourceFieldDisplayProperties(const QByteArray& json,const QStringList& columns) {
-    const auto fail=[] {throw std::runtime_error("Originale Spaltenbeschriftungen sind nicht eindeutig nachgewiesen");};if(json.isEmpty()) return {};if(json.size()>1024*1024) fail();const auto document=QJsonDocument::fromJson(json);if(!document.isObject()) fail();const auto root=document.object();if(!root.contains("field_properties")) return {};if(root.value("field_properties_format").toString()!="JET4" || root.value("version").toDouble(-1)!=1 || !root.value("source_table").isString() || !root.value("library").isString() || !root.value("source_sha256").isString() || root.value("source_sha256").toString().size()!=64 || !root.value("field_properties").isArray()) fail();
-    const auto digest=root.value("source_sha256").toString().toLatin1();for(const auto character:digest) if(!((character>='0' && character<='9') || (character>='a' && character<='f'))) fail();(void)checkedAccessSourceIndexes(json,columns);const auto entries=root.value("field_properties").toArray();if(entries.size()!=columns.size()) fail();QMap<QString,AccessSourceFieldDisplay> result;
-    for(int index=0;index<columns.size();++index) {if(!entries[index].isObject()) fail();const auto object=entries[index].toObject();if(!object.value("name").isString() || object.value("name").toString()!=columns[index] || result.contains(columns[index].toCaseFolded())) fail();AccessSourceFieldDisplay properties;if(object.contains("format_proven")) {if(!object.value("format_proven").isBool()) fail();properties.formatProven=object.value("format_proven").toBool();}if(object.contains("format") && !properties.formatProven) fail();for(const auto& name:{QString("caption"),QString("description"),QString("format")}) if(object.contains(name)) {const auto value=object.value(name);const auto text=value.toString();if(!value.isString() || text.size()>4096 || !text.isValidUtf16() || text.contains(QChar(0))) fail();if(name=="caption") properties.caption=text;else if(name=="description") properties.description=text;else properties.format=text;}for(const auto& key:{QString("required"),QString("allow_zero_length")}) if(object.contains(key)) {if(!object.value(key).isBool()) fail();if(key=="required") properties.required=object.value(key).toBool();else properties.allowZeroLength=object.value(key).toBool();}result.insert(columns[index].toCaseFolded(),properties);}return result;
+    const auto fail=[] {throw std::runtime_error("Originale Spaltenbeschriftungen sind nicht eindeutig nachgewiesen");};
+    if(json.isEmpty()) return {};
+    if(json.size()>1024*1024) fail();
+    const auto document=QJsonDocument::fromJson(json);
+    if(!document.isObject()) fail();
+    const auto root=document.object();
+    if(!root.contains("field_properties")) return {};
+    const auto format=root.value("field_properties_format").toString();
+    const bool aceNumeric=format=="ACE2010";
+    if((format!="JET4" && !aceNumeric) || root.value("version").toDouble(-1)!=1
+        || !root.value("source_table").isString() || !root.value("library").isString()
+        || !root.value("source_sha256").isString() || root.value("source_sha256").toString().size()!=64
+        || !root.value("field_properties").isArray()) fail();
+    if((aceNumeric || root.contains("source_format")) && root.value("source_format").toString()!=format) fail();
+    const auto digest=root.value("source_sha256").toString().toLatin1();
+    for(const auto character:digest)
+        if(!((character>='0' && character<='9') || (character>='a' && character<='f'))) fail();
+    (void)checkedAccessSourceIndexes(json,columns);
+    const auto entries=root.value("field_properties").toArray();
+    if(entries.size()!=columns.size()) fail();
+    const auto decimalTypes=aceNumeric ? checkedAccessDecimalColumnTypes(json,columns) : QMap<QString,QPair<int,int>>{};
+    if(aceNumeric && decimalTypes.isEmpty()) fail();
+    const QSet<QString> aceKeys{"name","caption","description","format","format_proven"};
+    QMap<QString,AccessSourceFieldDisplay> result;
+    for(int index=0;index<columns.size();++index) {
+        if(!entries[index].isObject()) fail();
+        const auto object=entries[index].toObject();
+        const auto name=columns[index].toCaseFolded();
+        if(!object.value("name").isString() || object.value("name").toString()!=columns[index]) fail();
+        if(aceNumeric) {
+            if(object.size()==1) continue;
+            if(!decimalTypes.contains(name)) fail();
+            for(auto property=object.cbegin();property!=object.cend();++property)
+                if(!aceKeys.contains(property.key())) fail();
+            if(object.contains("format_proven")!=object.contains("format")) fail();
+        }
+
+        AccessSourceFieldDisplay properties;
+        if(object.contains("format_proven")) {
+            if(!object.value("format_proven").isBool()) fail();
+            properties.formatProven=object.value("format_proven").toBool();
+        }
+        if(object.contains("format") && !properties.formatProven) fail();
+        const auto getText=[&](const char* key) -> std::optional<QString> {
+            if(!object.contains(key)) return {};
+            const auto value=object.value(key);
+            const auto text=value.toString();
+            if(!value.isString() || text.size()>4096 || !text.isValidUtf16() || text.contains(QChar(0))) fail();
+            return text;
+        };
+        const auto getBoolean=[&](const char* key) -> std::optional<bool> {
+            if(!object.contains(key)) return {};
+            const auto value=object.value(key);
+            if(!value.isBool()) fail();
+            return value.toBool();
+        };
+        properties.caption=getText("caption");
+        properties.description=getText("description");
+        properties.format=getText("format");
+        properties.required=getBoolean("required");
+        properties.allowZeroLength=getBoolean("allow_zero_length");
+        result.insert(name,properties);
+    }
+    return result;
 }
 
 }

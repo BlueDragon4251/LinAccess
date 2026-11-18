@@ -279,6 +279,28 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
     std::optional<AccessCurrencyValues> exactCurrency;
     QByteArray currencyDigest;
     const auto& floatingReadPath=sourceReadPath.isEmpty() ? sourceFile : sourceReadPath;
+    QByteArray aceDisplayDigest;
+    if(sourceDisplay && !sourceDisplay->isEmpty()) {
+        const auto metadata=QJsonDocument::fromJson(schema.sourceIndexMetadata).object();
+        if(metadata.value("field_properties_format").toString()=="ACE2010") {
+            const auto table=metadata.value("source_table").toString();
+            aceDisplayDigest=metadata.value("source_sha256").toString().toLatin1();
+            const auto original=AccessCatalog::tool("linaccess-mdb-metadata",{floatingReadPath,table});
+            const auto catalog=QJsonDocument::fromJson(original).object();
+            const auto declaredTypes=checkedAccessDecimalColumnTypes(schema.sourceIndexMetadata,actualNames);
+            const auto originalTypes=checkedAccessDecimalColumnTypes(original,actualNames);
+            if(catalog.value("field_properties_format").toString()!="ACE2010"
+                || catalog.value("source_sha256").toString().toLatin1()!=aceDisplayDigest
+                || originalTypes!=declaredTypes || checkedAccessSourceFieldDisplayProperties(original,actualNames)!=sourceDisplay)
+                throw fail("ACE 2010 Numeric-Spaltenbeschriftungen widersprechen der Originaldatei");
+            for(const auto& column:columns) {
+                const auto name=column.name.toCaseFolded();
+                if(!sourceDisplay->contains(name)) continue;
+                if(column.sqliteType!="DECIMAL_EXACT" || originalTypes.value(name)!=qMakePair(column.sourcePrecision,column.sourceScale))
+                    throw fail("ACE 2010 Numeric-Spaltenbeschriftungen widersprechen dem Schema");
+            }
+        }
+    }
     if(floatingSource==AccessFloatingSource::NativeMdbBits) {
         QStringList names;
         for(auto& column:columns) {
@@ -570,7 +592,7 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
                 {"source_precision",col.sourcePrecision},{"source_scale",col.sourceScale},
                 {"has_default", col.hasDefault}, {"source_default", col.sourceDefault}, {"default_sql", col.sqlDefault},
                 {"default_native", col.hasDefault && !col.autoNumber}};
-                if(sourceDisplay) {entry.insert("source_display_properties_proven",true);const auto properties=sourceDisplay->value(col.name.toCaseFolded());if(properties.formatProven) entry.insert("source_format_properties_proven",true);if(properties.format) {entry.insert("source_format",*properties.format);entry.insert("source_format_id",QUuid::createUuid().toString(QUuid::WithoutBraces));}if(properties.required) entry.insert("source_required",*properties.required);if(properties.allowZeroLength) entry.insert("source_allow_zero_length",*properties.allowZeroLength);if(properties.caption) {entry.insert("source_caption",*properties.caption);entry.insert("source_caption_id",QUuid::createUuid().toString(QUuid::WithoutBraces));}if(properties.description) {entry.insert("source_description",*properties.description);entry.insert("source_description_id",QUuid::createUuid().toString(QUuid::WithoutBraces));}}metadata.append(entry);}
+                if(sourceDisplay && sourceDisplay->contains(col.name.toCaseFolded())) {entry.insert("source_display_properties_proven",true);const auto properties=sourceDisplay->value(col.name.toCaseFolded());if(properties.formatProven) entry.insert("source_format_properties_proven",true);if(properties.format) {entry.insert("source_format",*properties.format);entry.insert("source_format_id",QUuid::createUuid().toString(QUuid::WithoutBraces));}if(properties.required) entry.insert("source_required",*properties.required);if(properties.allowZeroLength) entry.insert("source_allow_zero_length",*properties.allowZeroLength);if(properties.caption) {entry.insert("source_caption",*properties.caption);entry.insert("source_caption_id",QUuid::createUuid().toString(QUuid::WithoutBraces));}if(properties.description) {entry.insert("source_description",*properties.description);entry.insert("source_description_id",QUuid::createUuid().toString(QUuid::WithoutBraces));}}metadata.append(entry);}
 
             query.prepare("INSERT INTO _la_table_schema VALUES (?,?)");
             query.addBindValue(tableName);
@@ -596,6 +618,7 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
         if(!counterDigest.isEmpty() && accessSourceDigest(floatingReadPath)!=counterDigest) throw fail("AutoWert-Quelle wurde während des Imports verändert");
         if(exactSingles && accessSourceDigest(floatingReadPath)!=exactSingles->sourceDigest) throw fail("Single-Quelle wurde während des Imports verändert");
         if(exactDoubles && accessSourceDigest(floatingReadPath)!=exactDoubles->sourceDigest) throw fail("Double-Quelle wurde während des Imports verändert");
+        if(!aceDisplayDigest.isEmpty() && accessSourceDigest(floatingReadPath)!=aceDisplayDigest) throw fail("ACE 2010 Numeric-Quelle wurde während des Imports verändert");
         if(!currencyDigest.isEmpty() && accessSourceDigest(floatingReadPath)!=currencyDigest) throw fail("Currency-Quelle wurde während des Imports verändert");
         if (!scope.exec("RELEASE la_table_import")) throw fail(scope.lastError().text());
     } catch (...) {

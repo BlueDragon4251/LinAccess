@@ -4,6 +4,12 @@ import java.nio.file.*;
 import java.math.BigDecimal;
 import java.util.*;
 class JetDecimalReference {
+ private static final List<Map.Entry<String,String>> NUMERIC_DISPLAY=List.of(
+  Map.entry("Caption","Exact decimal"),
+  Map.entry("Description","Prüfwert für Dezimalstellen"),
+  Map.entry("Format","0.0000;[Red]-0.0000"));
+ private static final String ID_CAPTION="Fixture identifier";
+
  public static void main(String[] args) throws Exception {
   if(args.length<1 || args.length>2) throw new IllegalArgumentException("Output directory and optional V2000/V2010 format required");
   Database.FileFormat format=args.length==2?Database.FileFormat.valueOf(args[1]):Database.FileFormat.V2000;
@@ -21,17 +27,29 @@ class JetDecimalReference {
    // to null insert inputs when the property already exists.
    table.getColumn("large").getProperties().put("DefaultValue",DataType.TEXT,"9007199254740993.0001");table.getColumn("large").getProperties().save();
    table.getColumn("small").getProperties().put("DefaultValue",DataType.TEXT,"0.0000000000000000000000000001");table.getColumn("small").getProperties().save();
+   var numericProperties=table.getColumn("large").getProperties();
+   for(var property:NUMERIC_DISPLAY) numericProperties.put(property.getKey(),DataType.TEXT,property.getValue());
+   numericProperties.save();
+   var idProperties=table.getColumn("id").getProperties();
+   idProperties.put("Caption",DataType.TEXT,ID_CAPTION);
+   idProperties.save();
   }
   int count=0;
   try(Database db=new DatabaseBuilder(file.toFile()).setReadOnly(true).open()) {
    Table table=db.getTable("decimal_probe");if(table.getColumn("large").getPrecision()!=28 || table.getColumn("large").getScale()!=4 || table.getColumn("small").getScale()!=28) throw new IllegalStateException("Precision/scale mismatch");
    if(!"9007199254740993.0001".equals(table.getColumn("large").getProperties().getValue("DefaultValue")) || !"0.0000000000000000000000000001".equals(table.getColumn("small").getProperties().getValue("DefaultValue"))) throw new IllegalStateException("Exact default property mismatch");
+   var numericProperties=table.getColumn("large").getProperties();
+   for(var property:NUMERIC_DISPLAY) {
+    if(!property.getValue().equals(numericProperties.getValue(property.getKey()))) throw new IllegalStateException("Numeric display property mismatch: "+property.getKey());
+    if(table.getColumn("small").getProperties().getValue(property.getKey())!=null) throw new IllegalStateException("Unexpected display property on small");
+   }
+   if(!ID_CAPTION.equals(table.getColumn("id").getProperties().getValue("Caption"))) throw new IllegalStateException("Non-Numeric caption mismatch");
    for(Row row:table) {int i=((Number)row.get("id")).intValue()-1;
     for(String name:new String[]{"large","small"}) {String expected=(name.equals("large")?large:small)[i];BigDecimal actual=(BigDecimal)row.get(name);if(expected==null ? actual!=null : actual==null || actual.compareTo(new BigDecimal(expected))!=0) throw new IllegalStateException("Exact Numeric mismatch");}
     ++count;
    }
   }
   if(count!=large.length) throw new IllegalStateException("Row count mismatch");
-  System.out.println("Independent Numeric values, precision/scale, literal defaults and NULL verified: "+format);
+  System.out.println("Independent Numeric values, precision/scale, literal defaults, NULL and display properties verified: "+format);
  }
 }

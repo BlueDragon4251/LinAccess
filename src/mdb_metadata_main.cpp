@@ -30,6 +30,37 @@ void output(const QJsonObject& root,qsizetype limit) {
     const auto bytes=QJsonDocument(root).toJson(QJsonDocument::Compact); if(bytes.size()>limit) throw 1;
     QFile out; if(!out.open(stdout,QIODevice::WriteOnly) || out.write(bytes)!=bytes.size() || !out.flush()) throw 1;
 }
+QJsonObject displayProperties(MdbColumn* column,const QString& name,bool jet4,bool aceNumeric) {
+    QJsonObject properties{{"name",name}};
+    if(!jet4 && !aceNumeric) return properties;
+
+    if(jet4) properties.insert("format_proven",true);
+    for(const auto* key:{"Caption","Description","Format"}) {
+        const auto* value=mdb_col_get_prop(column,key);
+        if(!value) continue;
+        const auto size=strnlen(value,16385);
+        if(size>16384) throw 1;
+        const QByteArray bytes(value,size);
+        const auto text=QString::fromUtf8(bytes);
+        if(text.size()>4096 || !text.isValidUtf16() || text.toUtf8()!=bytes || text.contains(QChar(0))) throw 1;
+        properties.insert(QString::fromLatin1(key).toLower(),text);
+    }
+    // ACE Numeric provenance covers an observed Format value only.
+    if(aceNumeric && properties.contains("format")) properties.insert("format_proven",true);
+    if(!jet4) return properties;
+
+    const auto addBoolean=[&](const char* key,const char* outputKey) {
+        if(const auto* value=mdb_col_get_prop(column,key)) {
+            const QByteArray bytes(value);
+            if(bytes!="yes" && bytes!="no") throw 1;
+            properties.insert(QString::fromLatin1(outputKey),bytes=="yes");
+        }
+    };
+    addBoolean("Required","required");
+    if(column->col_type==MDB_TEXT || column->col_type==MDB_MEMO)
+        addBoolean("AllowZeroLength","allow_zero_length");
+    return properties;
+}
 }
 int main(int argc,char** argv) {
     QCoreApplication app(argc,argv);
@@ -54,7 +85,8 @@ int main(int argc,char** argv) {
         // the actual populated array, never use that return value as success.
         mdb_read_indices(table.get());
         if(!table->indices || table->indices->len!=table->num_idxs) throw 1;
-        const bool displaySupported=!readValues && mdb->f->jet_version==MDB_VER_JET4;
+        const bool jet4Display=!readValues && mdb->f->jet_version==MDB_VER_JET4;
+        const bool aceDisplay=!readValues && mdb->f->jet_version==MDB_VER_ACCDB_2010;
         const QString currencyFormat=mdb->f->jet_version==MDB_VER_JET4 ? "JET4" :
             mdb->f->jet_version==MDB_VER_ACCDB_2010 ? "ACE2010" : "";
         if(currency && currencyFormat.isEmpty()) throw 1;
@@ -62,14 +94,10 @@ int main(int argc,char** argv) {
         QVector<const MdbColumn*> currencyFields;
         QJsonArray columns,indexes,singleColumns,doubleColumns,decimalColumns,decimalNames,counterColumns,fieldProperties; QVector<const MdbColumn*> singleFields,doubleFields,decimalFields; QSet<QString> columnNames,indexNames;
         for(unsigned i=0;i<table->columns->len;++i) {
-            const auto* column=static_cast<MdbColumn*>(g_ptr_array_index(table->columns,i)); if(!column) throw 1;
+            auto* column=static_cast<MdbColumn*>(g_ptr_array_index(table->columns,i)); if(!column) throw 1;
             const auto name=checkedName(column->name,sizeof(column->name));
             if(columnNames.contains(name.toCaseFolded())) throw 1;
             columnNames.insert(name.toCaseFolded()); columns.append(name);
-            if(displaySupported) {QJsonObject properties{{"name",name},{"format_proven",true}};for(const auto* key:{"Caption","Description","Format"}) if(const auto* value=mdb_col_get_prop(column,key)) {const auto size=strnlen(value,16385);if(size>16384) throw 1;const QByteArray bytes(value,size);const auto text=QString::fromUtf8(bytes);if(text.size()>4096 || !text.isValidUtf16() || text.toUtf8()!=bytes || text.contains(QChar(0))) throw 1;properties.insert(QString::fromLatin1(key).toLower(),text);}for(const auto* key:{"Required","AllowZeroLength"}) {
-                if(QString::fromLatin1(key)=="AllowZeroLength" && column->col_type!=MDB_TEXT && column->col_type!=MDB_MEMO) continue;
-                if(const auto* value=mdb_col_get_prop(column,key)) {const QByteArray bytes(value);if(bytes!="yes" && bytes!="no") throw 1;properties.insert(QString::fromLatin1(key)=="Required" ? "required" : "allow_zero_length",bytes=="yes");}
-            }fieldProperties.append(properties);}
             if(column->col_type==MDB_FLOAT) { singleColumns.append(name); singleFields.append(column); }
             if(column->col_type==MDB_DOUBLE) { doubleColumns.append(name); doubleFields.append(column); }
             if(column->col_type==MDB_MONEY) {
@@ -85,6 +113,8 @@ int main(int argc,char** argv) {
                 if((mdb->f->jet_version!=MDB_VER_JET4 && mdb->f->jet_version!=MDB_VER_ACCDB_2010) || column->col_size!=17 || precision<1 || precision>28 || scale<0 || scale>precision) throw 1;
                 decimalNames.append(name);decimalFields.append(column);decimalColumns.append(QJsonObject{{"name",name},{"precision",precision},{"scale",scale}});
             }
+            if(jet4Display || aceDisplay)
+                fieldProperties.append(displayProperties(column,name,jet4Display,aceDisplay && column->col_type==MDB_NUMERIC));
         }
         if(readValues) {
             const auto& selected=currency ? currencyFields : decimals ? decimalFields : doubles ? doubleFields : singleFields;
@@ -157,7 +187,10 @@ int main(int argc,char** argv) {
         QJsonObject root{{"version",1},{"source_table",args[tablePosition]},{"library",QString::fromUtf8(mdb_get_version())},{"columns",columns},{"indexes",indexes},{"single_columns",singleColumns},{"double_columns",doubleColumns},{"decimal_columns",decimalColumns},{"counter_columns",counterColumns},{"source_sha256",QString::fromLatin1(before)}};
         root.insert("currency_columns",currencyColumns);
         if(!currencyFormat.isEmpty()) root.insert("source_format",currencyFormat);
-        if(displaySupported) {root.insert("field_properties",fieldProperties);root.insert("field_properties_format","JET4");}
+        if(jet4Display || (aceDisplay && !decimalColumns.isEmpty())) {
+            root.insert("field_properties",fieldProperties);
+            root.insert("field_properties_format",currencyFormat);
+        }
         if(digest(args[filePosition])!=before) throw 1;
         output(root,1024*1024);
         return 0;
