@@ -12,7 +12,9 @@ Avg accepts finite native Number values (Integer/Long/Single/Double), including
 supported numeric IIf/arithmetic expressions, and uses an online long-double mean
 returning Double. Min/Max accept homogeneous Number, Date or Currency observations
 and retain the selected native value. Currency compares signed scaled integer
-units directly; Date compares finite serial values. NULL observations are skipped.
+units directly. Date compares chronological day and time, including times on
+negative OLE Automation dates, and preserves the selected Date value. NULL
+observations are skipped.
 Mixed kinds, text, Boolean and other types are explicitly refused. Actual SQL-row
 CCur/CDate expressions are checked through control Value identities and PDF output.
 Full Access result typing, exact Windows floating rounding, locale text ordering,
@@ -33,7 +35,8 @@ SQL comparisons; the six original compound calls still lack prepared context.
 No original Avg/Min/Max output oracle is claimed.
 
 References: [Avg](https://support.microsoft.com/en-us/access/functions/avg-function),
-[Min/Max](https://support.microsoft.com/en-us/access/functions/min-max-functions).
+[Min/Max](https://support.microsoft.com/en-us/access/functions/min-max-functions),
+[OLE Automation date representation](https://learn.microsoft.com/en-us/dotnet/api/system.datetime.fromoadate).
 Statistical variance/deviation cardinality edge cases remain separate work.
 
 ## First/Last over the actual report source

@@ -1,6 +1,7 @@
 #pragma once
 #include "vba_expression.hpp"
 #include "vba_decimal.hpp"
+#include "vba_calendar.hpp"
 #include <cmath>
 #include <optional>
 #include <limits>
@@ -38,10 +39,12 @@ public:
                 throw VbaRuntimeError(3251,"Mixed report extremum types unsupported");
             if(value.kind!=VbaValue::Kind::Currency && value.kind!=VbaValue::Kind::Decimal && !std::isfinite(value.number))
                 throw VbaRuntimeError(6,"Aggregate overflow");
-            const int order=!extremum_ ? 0 : value.kind==VbaValue::Kind::Decimal ? decimalCompare(value,*extremum_) : value.kind==VbaValue::Kind::Currency
-                ? (value.currencyUnits>extremum_->currencyUnits)-(value.currencyUnits<extremum_->currencyUnits)
-                : (value.number>extremum_->number)-(value.number<extremum_->number);
-            if(!extremum_ || (function_=="min" ? order<0 : order>0)) extremum_=value;
+            if(!extremum_) {
+                extremum_=value;
+            } else {
+                const int order=compareExtremum(value,*extremum_);
+                if(function_=="min" ? order<0 : order>0) extremum_=value;
+            }
             ++count_;
             return;
         }
@@ -100,6 +103,13 @@ public:
         return VbaValue::numeric(value);
     }
 private:
+    static int compareExtremum(const VbaValue& left,const VbaValue& right) {
+        if(left.kind==VbaValue::Kind::Date) return compareVbaDateSerials(left.number,right.number);
+        if(left.kind==VbaValue::Kind::Decimal) return decimalCompare(left,right);
+        if(left.kind==VbaValue::Kind::Currency)
+            return (left.currencyUnits>right.currencyUnits)-(left.currencyUnits<right.currencyUnits);
+        return (left.number>right.number)-(left.number<right.number);
+    }
     std::string function_;
     bool allowTextSum_{};
     std::size_t count_{};

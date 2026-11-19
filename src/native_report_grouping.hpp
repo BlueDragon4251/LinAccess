@@ -2,6 +2,7 @@
 #include "access_form_import.hpp"
 #include "vba_qt_value.hpp"
 #include "vba_decimal.hpp"
+#include "vba_calendar.hpp"
 #include <QSet>
 #include <algorithm>
 #include <cmath>
@@ -22,8 +23,9 @@ inline int nativeReportGroupCompare(const VbaValue& a,const VbaValue& b) {
     if(a.kind==VbaValue::Kind::Currency) return (a.currencyUnits>b.currencyUnits)-(a.currencyUnits<b.currencyUnits);
     if(a.kind==VbaValue::Kind::Decimal) return decimalCompare(a,b);
     if(a.kind==VbaValue::Kind::Date) {
-        const auto civil=[](double value) {if(!std::isfinite(value)) throw VbaRuntimeError(3251,"Non-finite report Date group key");const auto day=std::trunc(value);return day+std::abs(value-day);};
-        const auto x=civil(a.number),y=civil(b.number);return (x>y)-(x<y);
+        if(!std::isfinite(a.number) || !std::isfinite(b.number))
+            throw VbaRuntimeError(3251,"Non-finite report Date group key");
+        return compareVbaDateSerials(a.number,b.number);
     }
     if(a.kind==VbaValue::Kind::Number || a.kind==VbaValue::Kind::Boolean) {
         const auto x=a.asNumber(),y=b.asNumber();if(!std::isfinite(x) || !std::isfinite(y)) throw VbaRuntimeError(3251,"Non-finite report group key");return (x>y)-(x<y);

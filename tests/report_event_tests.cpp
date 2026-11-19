@@ -497,14 +497,22 @@ End Sub
             const auto control=makePreviewControlsObject(stats)->member("Item",{linaccess::VbaValue::string(("Stat_"+function).toStdString())});
             assert(control.object->member("Value",{}).kind==linaccess::VbaValue::Kind::Null);
         }
+        assert(query.exec("ALTER TABLE native_report_stats ADD COLUMN date_serial REAL"));
+        // December 29, 1899: midnight, 06:00, noon and 18:00 use decreasing serials.
+        assert(query.exec("UPDATE native_report_stats SET date_serial=CASE id "
+                          "WHEN 1 THEN -1.5 WHEN 2 THEN -1.75 WHEN 4 THEN -1.0 WHEN 5 THEN -1.25 END"));
+        query.finish();
         QStringList typedLines{"Begin Report","Width =9000",
             "RecordSource =\"SELECT * FROM native_report_stats WHERE value IS NOT NULL ORDER BY id\"",
-            "Begin Section","Height =300","End","Begin FormFooter","Height =1200"};
-        const QStringList typedNames{"mincash","maxcash","mindate","maxdate"};
+            "Begin Section","Height =300","End","Begin FormFooter","Height =1800"};
+        const QStringList typedNames{"mincash","maxcash","mindate","maxdate","minhistorical","maxhistorical"};
+        const QStringList typedExpressions{
+            "Min(CCur([value]))","Max(CCur([value]))",
+            "Min(CDate([value]))","Max(CDate([value]))",
+            "Min(CDate([date_serial]))","Max(CDate([date_serial]))"};
+        const double expectedValues[]{10,40,10,40,-1.0,-1.75};
         for(int index=0;index<typedNames.size();++index) {
-            const auto expression=QString(index%2 ? "Max(" : "Min(")
-                +(index<2 ? "CCur([value]))" : "CDate([value]))");
-            typedLines<<"Begin TextBox"<<"Name =\""+typedNames[index]+"\""<<"ControlSource =\"="+expression+"\""
+            typedLines<<"Begin TextBox"<<"Name =\""+typedNames[index]+"\""<<"ControlSource =\"="+typedExpressions[index]+"\""
                 <<"Top ="+QString::number(index*300)<<"Width =4000"<<"Height =270"<<"End";
         }
         typedLines<<"End"<<"End";
@@ -512,11 +520,18 @@ End Sub
         for(int index=0;index<typedNames.size();++index) {
             const auto control=makePreviewControlsObject(typedStats)->member("Item",{linaccess::VbaValue::string(typedNames[index].toStdString())});
             const auto value=control.object->member("Value",{});
-            const int expected=index%2 ? 40 : 10;
+            const auto expected=expectedValues[index];
             if(index<2) assert(value.kind==linaccess::VbaValue::Kind::Currency && value.currencyUnits==expected*10000);
             else assert(value.kind==linaccess::VbaValue::Kind::Date && value.number==expected);
         }
-        assert(typedStats.exportReportPdf(output.filePath("typed-extrema.pdf")));
+        const auto typedPdf=output.filePath("typed-extrema.pdf");
+        assert(typedStats.exportReportPdf(typedPdf));
+        if(!reader.isEmpty()) {
+            QProcess textReader; textReader.start(reader,{"-layout",typedPdf,"-"});
+            assert(textReader.waitForFinished(10000) && textReader.exitCode()==0);
+            const auto text=QString::fromUtf8(textReader.readAllStandardOutput());
+            assert(QRegularExpression(R"(1899-12-29[^\S\n]*\n+\s*1899-12-29 18:00:00)").match(text).hasMatch());
+        }
         assert(typedStats.close());
         assert(query.exec("CREATE TABLE native_currency_sums(id INTEGER PRIMARY KEY,amount TEXT)"));
         assert(query.exec("INSERT INTO native_currency_sums VALUES(1,'922337203685477.5806'),(2,'0.0001')")); query.finish();

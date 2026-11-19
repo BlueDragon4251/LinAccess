@@ -67,6 +67,14 @@ std::string vbaDateText(double serial) {
     }
     return text.str();
 }
+int compareVbaDateSerials(double first,double second) {
+    const auto chronologicalValue=[](double serial) {
+        const auto day=std::trunc(serial);
+        return day+std::abs(serial-day);
+    };
+    const auto left=chronologicalValue(first),right=chronologicalValue(second);
+    return (left>right)-(left<right);
+}
 VbaValue vbaCalendarFunction(std::string_view name,const std::vector<VbaValue>& arguments) {
     if(name=="datevalue" || name=="timevalue") {
         if(arguments.size()!=1) throw VbaRuntimeError(450,"Date/time value requires one argument");
