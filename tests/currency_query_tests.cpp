@@ -13,6 +13,7 @@
 #undef NDEBUG
 #endif
 #include <cassert>
+#include <limits>
 #include <optional>
 
 int main(int argc,char** argv) {
@@ -131,6 +132,44 @@ End Function
             assert(money ? value.kind==VbaValue::Kind::Currency && value.currencyUnits==-1000 : value.kind==VbaValue::Kind::Number && value.asNumber()==60);
             cursor->member("Close",{});
         }
+        assert(sql.exec("CREATE TABLE cross_ticks(row_key INTEGER4,category TEXT,amount CURRENCY_TICKS)"));
+        assert(sql.exec("INSERT INTO cross_ticks VALUES"
+                        "(1,'A',9007199254740992),(1,'A',1),(1,'B',NULL),(1,'C',9223372036854775807),"
+                        "(2,'A',-9223372036854775808),(2,'B',9007199254740993),(2,'B',-9007199254740992)"));
+        sql.finish();
+        const QString tickSumQuery="TRANSFORM Sum(t.amount) SELECT t.row_key FROM cross_ticks AS t "
+                                   "GROUP BY t.row_key ORDER BY t.row_key PIVOT t.category IN ('A','B','C','missing')";
+        const auto tickSumPlan=linaccess::compileAccessQuery(tickSumQuery);
+        const auto tickSums=linaccess::executeAccessQueryPlan(db,tickSumPlan,{});
+        const QVector<QString> tickTypes{"INTEGER4","CURRENCY_TICKS","CURRENCY_TICKS","CURRENCY_TICKS","CURRENCY_TICKS"};
+        assert(tickSums.columns==QStringList({"row_key","A","B","C","missing"}) && tickSums.columnTypes==tickTypes);
+        assert(tickSums.rows.size()==2);
+        assert(tickSums.rows[0][1].toLongLong()==9007199254740993LL && tickSums.rows[0][2].isNull()
+               && tickSums.rows[0][3].toLongLong()==std::numeric_limits<qint64>::max() && tickSums.rows[0][4].isNull());
+        assert(tickSums.rows[1][1].toLongLong()==std::numeric_limits<qint64>::min()
+               && tickSums.rows[1][2].toLongLong()==1 && tickSums.rows[1][3].isNull() && tickSums.rows[1][4].isNull());
+        QVector<QString> describedTickTypes;
+        assert(linaccess::accessQueryColumns(db,tickSumPlan,&describedTickTypes)==tickSums.columns && describedTickTypes==tickTypes);
+        auto tickDefinition=database->member("CreateQueryDef",{VbaValue::string("fixed_tick_sum"),VbaValue::string(tickSumQuery.toStdString())}).object;
+        assert(tickDefinition->member("Type",{}).number==16);
+        auto tickCursor=open("fixed_tick_sum");
+        const auto tickField=tickCursor->member("Fields",{VbaValue::string("A")}).object;
+        const auto tickValue=tickField->member("Value",{});
+        assert(tickField->member("Type",{}).number==5 && tickValue.kind==VbaValue::Kind::Currency
+               && tickValue.currencyUnits==9007199254740993LL);
+        tickCursor->member("Close",{});
+        assert(sql.exec("INSERT INTO cross_ticks VALUES(1,'C',1)"));
+        sql.finish();
+        int tickOverflow=0;
+        try { (void)linaccess::executeAccessQueryPlan(db,tickSumPlan,{}); }
+        catch(const linaccess::VbaRuntimeError& failure) { tickOverflow=failure.number; }
+        assert(tickOverflow==6);
+        assert(sql.exec("UPDATE cross_ticks SET amount=1.5 WHERE row_key=1 AND category='C' AND amount=1"));
+        sql.finish();
+        int tickMismatch=0;
+        try { (void)linaccess::executeAccessQueryPlan(db,tickSumPlan,{}); }
+        catch(const linaccess::VbaRuntimeError& failure) { tickMismatch=failure.number; }
+        assert(tickMismatch==13);
         int integerSum=0;try{(void)linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("TRANSFORM Sum(cell) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category IN ('A')"),{});}catch(const linaccess::VbaRuntimeError& failure){integerSum=failure.number;}assert(integerSum==3251);
         auto statisticDefinition=database->member("CreateQueryDef",{VbaValue::string(""),VbaValue::string(("PARAMETERS wanted LONG; "+QString(statisticalSource).replace("GROUP BY","WHERE s.row_key=[wanted] GROUP BY")).toStdString())}).object;
         assert(statisticDefinition->member("Type",{}).number==16);

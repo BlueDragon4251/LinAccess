@@ -180,10 +180,11 @@ bool expressionBoundary(const QVector<Token>& tokens,qsizetype index) {
 // physical input type; numeric statistics return Double, and crosstabs reuse
 // the existing checked exact Currency accumulator for money sums.
 struct FixedCrosstab {int rowHeadings{},pivotHeadings{};QString type,table,alias,argument;bool extrema{},statistics{},summation{};};
+const QSet<QString> fixedCrosstabSumInputs{"REAL","DOUBLE","CURRENCY_REAL","CURRENCY_TICKS"};
 FixedCrosstab expandFixedCrosstab(QVector<Token>& tokens,qsizetype start,const QMap<QString,QString>& fields={}) {
     const auto word=[&](qsizetype i,const char* value) {return i>=0 && i<tokens.size() && tokens[i].kind==Token::Word && tokens[i].value.compare(value,Qt::CaseInsensitive)==0;};
     if(!word(start,"TRANSFORM")) return {};
-    const auto fail=[] {throw VbaRuntimeError(3251,"Jet SQL: supported crosstabs require Count/typed Min/Max/numeric statistics, simple row fields and fixed literal headings");};
+    const auto fail=[] {throw VbaRuntimeError(3251,"Jet SQL: supported crosstabs require Count, typed aggregates, simple row fields and fixed literal headings");};
     const auto field=[](const QVector<Token>& part) {
         const auto name=[](const Token& token) {return token.kind==Token::Word || token.kind==Token::Identifier;};
         return (part.size()==1 && name(part[0])) || (part.size()==3 && name(part[0]) && symbol(part[1],".") && name(part[2]));
@@ -214,9 +215,12 @@ FixedCrosstab expandFixedCrosstab(QVector<Token>& tokens,qsizetype start,const Q
     const auto inputType=extrema ? fields.value(key) : QString("INTEGER4");
     if(statistics && !inputType.isEmpty() && !QSet<QString>{"REAL","DOUBLE","SINGLE_REAL","INTEGER1","INTEGER2","INTEGER4"}.contains(inputType)) fail();
     const bool summation=function=="sum";
-    if(summation && !inputType.isEmpty() && !QSet<QString>{"REAL","DOUBLE","CURRENCY_REAL"}.contains(inputType)) fail();
-    const auto valueType=statistics || (summation && inputType!="CURRENCY_REAL") ? QString("DOUBLE") : inputType;
-    const auto aggregateFunction=summation && inputType=="CURRENCY_REAL" ? QString("linaccess_jet_currency_sum") : function;
+    if(summation && !inputType.isEmpty() && !fixedCrosstabSumInputs.contains(inputType)) fail();
+    const bool currencySum=summation && (inputType=="CURRENCY_REAL" || inputType=="CURRENCY_TICKS");
+    const bool tickSum=currencySum && inputType=="CURRENCY_TICKS";
+    const auto valueType=statistics || (summation && !currencySum) ? QString("DOUBLE") : inputType;
+    const auto aggregateFunction=tickSum ? QString("linaccess_jet_currency_sum_ticks")
+        : currencySum ? QString("linaccess_jet_currency_sum") : function;
     const bool selector=function=="first" || function=="last";
     QVector<QVector<Token>> rowFields;QSet<QString> outputNames;
     qsizetype first=select+1;
@@ -270,7 +274,7 @@ FixedCrosstab expandFixedCrosstab(QVector<Token>& tokens,qsizetype start,const Q
         output.append({Token::Other,","});output.append({Token::Word,aggregateFunction});output.append({Token::Other,"("});
         if(!selector) {output.append({Token::Word,"CASE"});output.append({Token::Word,"WHEN"});output+=pivotField;output.append({Token::Other,"="});output.append(heading.literal);output.append({Token::Word,"THEN"});}
         if(star) output.append({Token::Other,"1"});
-        else if(extrema && !inputType.isEmpty()) {
+        else if(extrema && !inputType.isEmpty() && !tickSum) {
             output.append({Token::Word,inputType=="CURRENCY_REAL" ? "linaccess_jet_currency_store" : "linaccess_jet_field_store"});output.append({Token::Other,"("});
             if(inputType!="CURRENCY_REAL") {output.append({Token::String,inputType});output.append({Token::Other,","});}
             output+=argument;output.append({Token::Other,")"});
@@ -432,7 +436,7 @@ void preserveComputedProjectionNames(QVector<Token>& tokens,qsizetype start) {
         tokens.insert(it->first,{Token::Word,"AS"}); tokens.insert(it->first+1,{Token::Identifier,it->second});
     }
 }
-QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype start,const QVector<AccessQueryParameter>& parameters,const QMap<QString,QString>& fields,const QMap<QString,QString>& functions,bool numericOnly=false,bool predicateContext=false,bool strictActionDates=false) {
+QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype start,const QVector<AccessQueryParameter>& parameters,const QMap<QString,QString>& fields,const QMap<QString,QString>& functions,bool numericOnly=false,bool predicateContext=false,bool strictActionDates=false,const FixedCrosstab& crosstab={}) {
     const auto word=[&](qsizetype i,const char* text) { return i<tokens.size() && tokens[i].kind==Token::Word && tokens[i].value.compare(text,Qt::CaseInsensitive)==0; };
     if(!word(start,"SELECT")) return {};
     int depth=0;
@@ -972,7 +976,10 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
             auto expression=tokens.mid(first,i-first); QVector<Token> alias;
             if(expression.size()>=3 && expression[expression.size()-2].kind==Token::Word && expression[expression.size()-2].value.compare("AS",Qt::CaseInsensitive)==0 && name(expression.back())) { alias=expression.mid(expression.size()-2); expression.resize(expression.size()-2); }
             if((expression.size()==1 && symbol(expression.front(),"*")) || (expression.size()>=3 && symbol(expression.back(),"*") && symbol(expression[expression.size()-2],"."))) return {};
-            auto parsed=parse(expression,0);
+            // Expansion already validated the exact input and selected the checked
+            // aggregate. Keep its generated CASE intact and bind the output type.
+            const bool generatedTickSum=crosstab.summation && crosstab.type=="CURRENCY_TICKS" && result.size()>=crosstab.rowHeadings;
+            auto parsed=generatedTickSum ? Expression{crosstab.type,expression} : parse(expression,0);
             if(parsed.type=="DECIMAL_EXACT" && alias.size()==2) {
                 const auto key=alias.back().value.toCaseFolded();if(resolvedFields.contains(key)) throw VbaRuntimeError(3251,"Decimal result alias collides with a source field or earlier alias");resolvedFields.insert(key,parsed.type);
             }
@@ -1794,7 +1801,7 @@ static AccessQueryPlan compileCurrencyQuery(const QString& source,const QMap<QSt
         }
     }
     preserveComputedProjectionNames(tokens,pos);
-    plan.resultTypes=typedProjectionExpressions(tokens,pos,plan.parameters,fields,functions,false,false,strictActionDates);
+    plan.resultTypes=typedProjectionExpressions(tokens,pos,plan.parameters,fields,functions,false,false,strictActionDates,crosstab);
     auto clauseFields=fields;
     {
         static const QSet<QString> nativeAliasTypes{"DECIMAL_EXACT","DATETIME","BOOL","BOOLEAN","SINGLE_REAL","CURRENCY_REAL","CURRENCY_TICKS","INTEGER1","INTEGER2","INTEGER4","DOUBLE"};
@@ -2062,7 +2069,7 @@ static AccessQueryPlan resolveCurrencyQuery(QSqlDatabase db,const AccessQueryPla
         physical.addBindValue(shape.table);physical.addBindValue(shape.table);
         if(!physical.exec() || !physical.next()) throw VbaRuntimeError(3251,"Typed crosstab aggregates require an unshadowed physical table");
         const QSet<QString> supported=shape.statistics ? QSet<QString>{"REAL","DOUBLE","SINGLE_REAL","INTEGER1","INTEGER2","INTEGER4"}
-            : shape.summation ? QSet<QString>{"REAL","DOUBLE","CURRENCY_REAL"} : QSet<QString>{"CURRENCY_REAL","SINGLE_REAL","INTEGER1","INTEGER2","INTEGER4","BOOL","BOOLEAN","DATE","DATETIME"};
+            : shape.summation ? fixedCrosstabSumInputs : QSet<QString>{"CURRENCY_REAL","SINGLE_REAL","INTEGER1","INTEGER2","INTEGER4","BOOL","BOOLEAN","DATE","DATETIME"};
         QMap<QString,QString> fields;
         const auto types=sqliteColumnTypes(db,shape.table);
         for(auto it=types.cbegin();it!=types.cend();++it) if(supported.contains(it.value())) {
