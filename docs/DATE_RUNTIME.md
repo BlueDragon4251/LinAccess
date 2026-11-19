@@ -57,8 +57,8 @@ weitere Date-Literal-Schreibweisen, regionale DateValue/TimeValue-Eingaben, säm
 Untersekundenspeicherung, der vollständige Kalender-Control-Adapter sowie alle
 SQL-Operatoren, Filter-/Aktions-/CASE-/CAST-/Aggregat- und komplexen Quelltypen.
 DatePart/DateDiff haben weiterhin die in COMPATIBILITY.md dokumentierten
-Intervall-/Wochen-/Systemeinstellungsgrenzen. Direkte negative gebrochene
-Date-Arithmetik bleibt begrenzt; DateAdd ist davon getrennt implementiert.
+Intervall-/Wochen-/Systemeinstellungsgrenzen. Die folgenden Access-2003-Messwerte
+beschreiben die VBA-Operatoren mit negativen OLE-Bruchteilen.
 
 Verifikation: bestehende Core-, DAO-, Qt-Feld- und Query-Modell-Ziele prüfen echte
 Werte und SQL-Speicherung. Der letzte gemeinsame Stand a8d3061 bestand 48/48
@@ -105,3 +105,47 @@ Eingabe und Ausgabe, Untersekundenspeicherung und komplexe Quellen gelten
 weiter. Die gemeinsamen SQL-Scalar-Adapter lehnen ungültiges UTF-8 vor einer
 ersetzenden Textkonvertierung ab. Dies ist ein nativer Implementierungsbeleg,
 kein neuer Windows-/Access-Ergebnisvergleich.
+
+## VBA-Arithmetik mit negativen OLE-Bruchteilen (2026-11-19)
+
+Access 2003 (11.0, MSACCESS.EXE 11.0.8166) führte die Ausdrücke in einem
+VBA-Standardmodul einer frischen temporären Jet4-Datenbank aus. Die versteckte
+32-Bit-COM-Sitzung rief die Funktion über `Application.Run` auf. Die Funktion
+wies das Ergebnis einem Variant zu und erfasste `VarType`, `TypeName`, den
+numerischen Serienwert über `CDbl` und bei Fehlern `Err.Number`. Die Datenbank
+enthielt ausschließlich das synthetische Probe-Modul. `dateVariant` war als
+Variant deklariert und enthielt `CDate(-1.25)`. `dt` und `epochDt` waren als
+Date deklariert und enthielten `CDate(-1.25)` und `CDate(-1.75)`.
+
+| Access-2003-Ausdruck | Ergebnis | Serienwert |
+| --- | --- | ---: |
+| `CDate(-1.25)+0.25` | Date (7) | -1 |
+| `CDate(-1.25)+0.5` | Date (7) | -0.75 |
+| `CDate(-1.25)-0.25` | Date (7) | -1.5 |
+| `CDate(-1.25)+1` | Date (7) | -0.25 |
+| `CDate(-0.25)+0.25` | Date (7) | 0 |
+| `CDate(0)-0.25` | Date (7) | -0.25 |
+| `0.5-CDate(-1.25)` | Date (7) | 1.75 |
+| `CDate(-1.25)+CDate(-0.25)` | Date (7) | -1.5 |
+| `CDate(-1.25)-CDate(-1.75)` | Double (5) | 0.5 |
+| `CDate(-0.25)-CDate(0.25)` | Double (5) | -0.5 |
+| `dt+0.5` | Date (7) | -0.75 |
+| `dt-epochDt` | Double (5) | 0.5 |
+| `dateVariant+Empty` | Date (7) | -1.25 |
+| `dateVariant+Null` | Null (1) | |
+| `dateVariant-CVErr(5)` | Fehler 13 | |
+| `CDate(-657434)-0.25` | Date (7) | -657434.25 |
+| `CDate(-657434.25)-0.75` | Fehler 6 | |
+| `CVDate(-657434.25)-0.75` | Double (5) | -657435 |
+| `DateAdd("d",1,CDate(-1.25))` | Date (7) | 0.25 |
+
+LinAccess verwendet für die geprüften VBA-Operatoren jetzt die OLE-Serienwerte
+direkt. `Date - Date` ergibt die numerische Differenz als Double. `DateAdd`
+verschiebt das Kalenderdatum und behält bei einer Verschiebung um einen Tag
+die Uhrzeit. Beide Ergebnisse im Beispiel mit einem Tag zeigen 06:00 Uhr am
+30.12.1899 an und haben unterschiedliche Serienwerte.
+
+Die Core-Regression prüft auch deklarierte Date-Werte, Varianten,
+Ergebnisdarstellung und den unteren Datumsbereich. Regionale
+String/Date-Konvertierung, allgemeine Variant-Koerzierung und Jet-SQL-Operatoren
+bleiben außerhalb dieser VBA-Messung. F041 bleibt offen.

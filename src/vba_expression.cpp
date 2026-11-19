@@ -670,9 +670,8 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
     }
     if((left.kind==VbaValue::Kind::Date || right.kind==VbaValue::Kind::Date) && (op=="+" || op=="-")) {
         if(left.kind==VbaValue::Kind::Text || right.kind==VbaValue::Kind::Text) throw error("Text/Date arithmetic coercion is not implemented",3251);
+        // VBA operators use the raw OLE serials, including negative fractions.
         const auto a=left.asNumber(),b=right.asNumber();
-        if((left.kind==VbaValue::Kind::Date && a<0 && a!=std::trunc(a)) || (right.kind==VbaValue::Kind::Date && b<0 && b!=std::trunc(b)))
-            throw error("Negative fractional Date arithmetic is not validated",3251);
         if(op=="-" && left.kind==VbaValue::Kind::Date && right.kind==VbaValue::Kind::Date) return finish(VbaValue::numeric(a-b));
         const auto result=op=="+" ? a+b : a-b;
         if(!std::isfinite(result)) throw error("Date arithmetic overflow",6);
@@ -680,7 +679,6 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
             if(binding==Binding::Static) throw error("Declared Date arithmetic overflow",6);
             return finish(VbaValue::numeric(result));
         }
-        if(result<0 && result!=std::trunc(result)) throw error("Negative fractional Date arithmetic is not validated",3251);
         return finish(VbaValue::dateSerial(result));
     }
     const auto a = left.asNumber(), b = right.asNumber();
