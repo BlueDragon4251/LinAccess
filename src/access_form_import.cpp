@@ -376,7 +376,8 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
             }
         } else if (current.type == "Form" || current.type == "Report") {
             static const QSet<QString> events{"beforeinsert","afterinsert","ondelete","beforedelconfirm","afterdelconfirm","onopen","onload","oncurrent","ondirty","beforeupdate","afterupdate","onunload","onclose","onactivate","ondeactivate","onnodata","onerror","onpage","onkeydown","onkeypress","onkeyup","ontimer"};
-            if (events.contains(key.toCaseFolded())) form.events.insert(key.toCaseFolded(),value);
+            const auto event=key.toCaseFolded();
+            if (events.contains(event) || (current.type=="Form" && event=="onresize")) form.events.insert(event,value);
             if (key == "DataEntry") form.dataEntry=accessBoolean(value,false);
             if (key == "AllowAdditions") form.allowAdditions = accessBoolean(value,true);
             if (key == "AllowEdits") form.allowEdits = accessBoolean(value,true);

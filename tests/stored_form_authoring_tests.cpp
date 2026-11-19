@@ -99,6 +99,62 @@ struct sqlite3_value;
 
 namespace {
 void disposeStoredFormEvents() {QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete);QApplication::processEvents();}
+void exerciseFormResize(QSqlDatabase db) {
+    using linaccess::VbaExecutionStatus;
+    const QString module=R"VBA(
+Private Sub Form_Open(Cancel As Integer)
+    Me.Tag = "open"
+    If Me.Name = "Cancelled Resize" Then Cancel = True
+End Sub
+Private Sub Form_Load()
+    Me.Tag = Me.Tag & "|load"
+End Sub
+Private Sub Form_Resize()
+    Me.Tag = Me.Tag & "|resize"
+End Sub
+Private Sub Form_Activate()
+    Me.Tag = Me.Tag & "|activate"
+End Sub
+Private Sub Form_Current()
+    Me.Tag = Me.Tag & "|current"
+End Sub
+Public Function ResizeExpression()
+    Me.Tag = Me.Tag & "|expression"
+End Function
+)VBA";
+    QJsonObject definition{{"table",""},{"fields",QJsonArray{}},{"vba",module}};
+    const auto stored=linaccess::nativeStoredForm("Resize Lifecycle",definition,db);
+    const auto parsed=linaccess::parseAccessFormLayout(QString::fromUtf8(stored.layout));
+    assert(parsed.events.value("onresize")=="[Event Procedure]");
+
+    AccessFormPreview form(stored.name,stored.layout,stored.code,db);
+    const auto trace=[&] { return form.property("la_access_tag").toString(); };
+    assert(trace()=="open|load|resize");
+    const auto outcome=form.eventResult("OnResize");
+    assert(outcome && outcome->status==VbaExecutionStatus::Completed);
+
+    form.show();
+    QApplication::setActiveWindow(&form);
+    QApplication::processEvents();
+    assert(trace()=="open|load|resize|activate|current");
+    form.resize(form.size()+QSize(24,16));
+    QApplication::processEvents();
+    assert(trace()=="open|load|resize|activate|current|resize");
+    form.resize(form.size());
+    form.move(form.pos()+QPoint(8,8));
+    QApplication::processEvents();
+    assert(trace()=="open|load|resize|activate|current|resize");
+    assert(form.close());
+
+    AccessFormPreview cancelled("Cancelled Resize",stored.layout,stored.code,db);
+    assert(cancelled.cancelledByOpen() && !cancelled.eventResult("OnResize"));
+    definition.insert("events",QJsonObject{{"onResize","=ResizeExpression()"}});
+    const auto expression=linaccess::nativeStoredForm("Resize Expression",definition,db);
+    AccessFormPreview expressionForm(expression.name,expression.layout,expression.code,db);
+    assert(expressionForm.property("la_access_tag").toString()=="open|load|expression");
+    assert(expressionForm.close());
+}
+
 void testNativeBoundPrefixes(QSqlDatabase db) {
     QSqlQuery query(db);
     assert(query.exec(R"SQL(CREATE TABLE prefix_fields(
@@ -221,6 +277,7 @@ End Sub
 }
 }
 void exerciseStoredForm(MainWindow& window,QSqlDatabase db) {
+    exerciseFormResize(db);
     testNativeBoundPrefixes(db);
     QSqlQuery sql(db);
     assert(sql.exec("CREATE TABLE native_designed_records(id INTEGER PRIMARY KEY,first TEXT,\"second value\" TEXT)"));

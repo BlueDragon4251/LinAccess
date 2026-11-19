@@ -103,7 +103,7 @@ inline NativeStoredForm nativeStoredForm(QString name,const QJsonObject& definit
         "    RecordSource = "+quoted(table),"    Width = "+QString::number(formWidth)};
     if(definition.contains("timer_interval")) lines<<"    TimerInterval = "+QString::number(timerInterval);
     if(!table.isEmpty() && !writableTable) lines<<"    AllowAdditions =0"<<"    AllowEdits =0"<<"    AllowDeletions =0";
-    for(const auto* event:{"OnOpen","OnLoad","OnCurrent","OnActivate","OnDeactivate","OnUnload","OnClose","BeforeInsert","AfterInsert","BeforeUpdate","AfterUpdate","OnDirty","OnError","OnTimer"}) {
+    for(const auto* event:{"OnOpen","OnLoad","OnResize","OnCurrent","OnActivate","OnDeactivate","OnUnload","OnClose","BeforeInsert","AfterInsert","BeforeUpdate","AfterUpdate","OnDirty","OnError","OnTimer"}) {
         const QString property=QString::fromLatin1(event);
         auto procedure=property.startsWith("On") ? property.mid(2) : property;
         if(formEvents.contains(property)) {if(!formEvents.value(property).isEmpty()) lines<<"    "+property+" = "+quoted(formEvents.value(property));}

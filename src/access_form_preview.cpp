@@ -1330,6 +1330,10 @@ AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
     (void)formEvent("OnLoad","Form_Load");
     if(stopped()) return;
     opened_ = true;
+    if (!report && layout_.events.contains("onresize")) {
+        dispatchFormResize();
+        if (closed_ || stopped()) return;
+    }
     if (nativeActivationPending_) activateDocument();
     if (!initialCurrentDeferred_) initialCurrent();
     if(stopped()) return;
@@ -1386,6 +1390,7 @@ void AccessFormPreview::initialCurrent() {
 bool AccessFormPreview::event(QEvent* event) {
     const auto type=event->type();
     const auto result=QDialog::event(event);
+    if (type==QEvent::Resize && layout_.events.contains("onresize")) dispatchFormResize();
     if(type==QEvent::Hide && isWindow() && isHidden() && opened_ && !closed_ && !closing_ && !openCancelled_ && activeDocument()==this) {
         ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
         activeDocument().clear();
@@ -1396,6 +1401,15 @@ bool AccessFormPreview::event(QEvent* event) {
         if (opened_) activateDocument();
     }
     return result;
+}
+
+void AccessFormPreview::dispatchFormResize() {
+    if (!opened_ || closing_ || closed_ || openCancelled_ || size()==lastFormResizeSize_) return;
+    // Qt can deliver the opening geometry again when the form first becomes visible.
+    lastFormResizeSize_=size();
+    ++nativeExecutionDepth();
+    const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
+    (void)formEvent("OnResize","Form_Resize");
 }
 
 bool AccessFormPreview::databaseWindowActive(QWidget* window) { return databaseWindowContext().window && (!window || databaseWindowContext().window==window); }
@@ -3350,7 +3364,7 @@ void PreviewVbaHost::openProjectDocument(QSqlDatabase database,QWidget* projectW
         if(!where.trimmed().isEmpty() && !nested->layout_.recordSource.trimmed().isEmpty()
             && !nested->hasDataSource() && !nested->cancelledByOpen() && !nested->closed_)
             throw linaccess::VbaRuntimeError(nested->dataSourceErrorNumber_ ? nested->dataSourceErrorNumber_ : 3078,"Document WhereCondition record source unavailable");
-        for (const auto* event:{"OnOpen","OnLoad","OnActivate","OnCurrent","OnNoData"})
+        for (const auto* event:{"OnOpen","OnLoad","OnResize","OnActivate","OnCurrent","OnNoData"})
             if (const auto outcome=nested->eventResult(event);outcome && failed(*outcome))
                 throw linaccess::VbaRuntimeError(outcome->errorNumber ? outcome->errorNumber : 3251,"Document initialization failed: "+outcome->explanation,outcome->errorSource,outcome->errorHelpFile,outcome->errorHelpContext);
         if (nested->cancelledByOpen() || nested->closed_) throw linaccess::VbaRuntimeError(2501,"Document open action cancelled");

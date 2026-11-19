@@ -133,6 +133,7 @@ private:
     void setDocumentVisible(bool visible);
     static bool closeDocuments(const QVector<AccessFormPreview*>& roots,AccessFormPreview* closingRoot=nullptr);
     bool event(QEvent* event) override;
+    void dispatchFormResize();
     void activateDocument();
     void initialCurrent();
     void closeEvent(QCloseEvent* event) override;
@@ -220,6 +221,7 @@ private:
     struct FindState { QString text,field,formatControl; int mode{-1},direction{2}; bool sensitive{},advance{},formatted{},wildcards{}; std::optional<linaccess::VbaValue> value; } findState_;
     QTimer* formTimer_{};
     bool timerDispatching_{};
+    QSize lastFormResizeSize_;
     QLineEdit* filterEditor_{};
     QCheckBox* filterToggle_{};
     QString filter_;

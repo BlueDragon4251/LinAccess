@@ -3,7 +3,7 @@
 #include <QMap>
 namespace linaccess {
 inline const QStringList& nativeFormMacroEvents() {
-    static const QStringList events{"OnOpen","OnLoad","OnCurrent","OnActivate","OnDeactivate","OnUnload","OnClose","BeforeInsert","AfterInsert","BeforeUpdate","AfterUpdate","OnDirty","OnTimer"};return events;
+    static const QStringList events{"OnOpen","OnLoad","OnResize","OnCurrent","OnActivate","OnDeactivate","OnUnload","OnClose","BeforeInsert","AfterInsert","BeforeUpdate","AfterUpdate","OnDirty","OnTimer"};return events;
 }
 inline const QStringList& nativeFieldMacroEvents() {
     static const QStringList events{"OnClick","OnDblClick","OnChange","BeforeUpdate","AfterUpdate","OnMouseDown","OnMouseUp","OnMouseMove"};return events;
