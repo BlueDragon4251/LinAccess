@@ -230,11 +230,11 @@ void configureNewAccessCounters(QSqlDatabase db,const QString& table) {
     query.finish();
     for(const auto& column:names) {createJetLongCounter(db,table,column);protectAccessCounterUpdates(db,table,column);}
 }
-void createJetLongCounter(QSqlDatabase db,const QString& table,const QString& column) {
+void createJetLongCounter(QSqlDatabase db,const QString& table,const QString& column,qint32 lastAssigned) {
     QSqlQuery query(db);
     if(!query.exec("CREATE TABLE IF NOT EXISTS main._la_counter32_sequences(table_name TEXT NOT NULL,column_name TEXT NOT NULL,value INTEGER NOT NULL CHECK(typeof(value)='integer' AND value BETWEEN -2147483648 AND 2147483647),PRIMARY KEY(table_name,column_name))"))
         throw VbaRuntimeError(3146,"Jet Long counter storage unavailable");
-    query.prepare("INSERT INTO main._la_counter32_sequences VALUES(?,?,0)");query.addBindValue(table);query.addBindValue(column);
+    query.prepare("INSERT INTO main._la_counter32_sequences VALUES(?,?,?)");query.addBindValue(table);query.addBindValue(column);query.addBindValue(lastAssigned);
     if(!query.exec()) throw VbaRuntimeError(3146,"Jet Long counter initialization failed");
     QByteArray identity=table.toUtf8();identity.append('\0');identity+=column.toUtf8();
     const auto name="_la_counter32_"+QString::fromLatin1(QCryptographicHash::hash(identity,QCryptographicHash::Sha256).toHex());

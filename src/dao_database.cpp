@@ -385,7 +385,7 @@ using NativeFieldSetter=std::function<TableSchemaReader(const QString&,std::stri
 std::shared_ptr<VbaObject> makeNativeFieldProperties(TableSchemaReader reader,QString field,NativeFieldSetter setter={},std::function<VbaValue(std::string_view)> intrinsic={});
 std::optional<QString> nativeFieldDefaultExpression(const TableSchemaColumn& field) {
     if(provenDaoFieldType(field.type)==11 || field.sourceType==11) return {};
-    if(!field.hasDefault) return QString{};
+    if(!field.hasDefault || (field.generatorAttributes==17 && field.nativeAttributes && (*field.nativeAttributes&16))) return QString{};
     if(field.type=="CURRENCY_TICKS") {
         if(field.sourceType && field.sourceType!=5) return {};
         const auto stored=field.storedDefault.trimmed();
@@ -2793,9 +2793,46 @@ std::shared_ptr<VbaObject> createExistingTableField(QSqlDatabase db,const QStrin
     if(args.size()>2 && args[2].kind!=VbaValue::Kind::Missing) size=static_cast<int>(coerceVbaModuleValue(scalarVbaValue(args[2]),"long").number);
     return std::make_shared<DetachedField>(owner,name,type,size);
 }
+class NativeSchemaSettings {
+public:
+    explicit NativeSchemaSettings(QSqlDatabase db):db_(std::move(db)),query_(db_) {}
+    ~NativeSchemaSettings() {if(changed_) (void)restore();}
+    void begin(bool requireForeignKeys) {
+        const auto workspace=workspaceState(db_);workspace->check();
+        if(!sqlite3_get_autocommit(workspace->connection)) throw VbaRuntimeError(3251,"DAO: Native schema reconstruction requires no active transaction");
+        foreignKeys_=pragma("foreign_keys");legacy_=pragma("legacy_alter_table");
+        if(requireForeignKeys && foreignKeys_!=1) throw VbaRuntimeError(3251,"DAO: Enforced relation migration requires foreign_keys enabled");
+        changed_=true;
+        if(!query_.exec("PRAGMA foreign_keys=OFF") || !query_.exec("PRAGMA legacy_alter_table=ON") || pragma("foreign_keys")!=0 || pragma("legacy_alter_table")!=1) throw VbaRuntimeError(3251,"DAO: Native schema migration settings unavailable");
+    }
+    bool restore() noexcept {
+        if(!changed_) return true;
+        query_.finish();const bool first=query_.exec("PRAGMA legacy_alter_table="+QString::number(legacy_));const bool second=query_.exec("PRAGMA foreign_keys="+QString::number(foreignKeys_));
+        bool checked=false;if(first && second && query_.exec("PRAGMA foreign_keys") && query_.next()) checked=query_.value(0).toInt()==foreignKeys_;query_.finish();
+        if(checked && query_.exec("PRAGMA legacy_alter_table") && query_.next()) checked=query_.value(0).toInt()==legacy_;else checked=false;query_.finish();
+        changed_=false;if(!checked && db_.driver()) db_.driver()->setProperty("la_schema_restore_failed",true);return checked;
+    }
+private:
+    int pragma(const QString& name) {if(!query_.exec("PRAGMA "+name) || !query_.next()) queryFailure(query_);const int result=query_.value(0).toInt();query_.finish();return result;}
+    QSqlDatabase db_;QSqlQuery query_;int foreignKeys_{},legacy_{};bool changed_{};
+};
+void appendNativeCounter(QSqlDatabase db,const QString& table,const QString& column);
+
 void mutateExistingTableField(QSqlDatabase db,const QString& table,const VbaValue& value,bool erase) {
     checkReservedCounterSchemaAction(db);
-    auto& fieldRevision=workspaceState(db)->tableFieldRevisions[table.toCaseFolded()];
+    const auto workspace=workspaceState(db);
+    std::shared_ptr<DetachedField> builder;
+    if(!erase) {
+        if(value.kind!=VbaValue::Kind::Object) throw VbaRuntimeError(450,"DAO: Detached field required");
+        builder=std::dynamic_pointer_cast<DetachedField>(value.object);
+        if(!builder || builder->owner_->workspace!=workspace || !builder->owner_->existing || builder->owner_->name.compare(table,Qt::CaseInsensitive)!=0 || builder->appended_ || builder->owner_->attached)
+            throw VbaRuntimeError(3219,"DAO: Field belongs to a different or attached table");
+        if(!builder->owner_->existing->valid()) throw VbaRuntimeError(3420,"DAO: Field builder table invalidated");
+    }
+    const bool addCounter=builder && (builder->attributes_&16);
+    NativeSchemaSettings settings(db);
+    if(addCounter) settings.begin(false);
+    auto& fieldRevision=workspace->tableFieldRevisions[table.toCaseFolded()];
     if(fieldRevision==std::numeric_limits<quint64>::max()) throw VbaRuntimeError(6,"DAO: Field schema revision overflow");
     QSqlQuery query(db);const auto savepoint="la_field_mutation_"+QUuid::createUuid().toString(QUuid::Id128);
     if(!query.exec("SAVEPOINT "+savepoint)) queryFailure(query);
@@ -2815,7 +2852,7 @@ void mutateExistingTableField(QSqlDatabase db,const QString& table,const VbaValu
         if(query.next()) {const auto encoded=query.value(0).toString().toUtf8();if(query.next()) throw VbaRuntimeError(3251,"DAO: Index metadata ambiguous");indexMetadata=QJsonDocument::fromJson(encoded).object();}query.finish();
         if(indexMetadata) (void)readNativeIndexCatalog(db,table);
     }
-    QString fieldName;std::shared_ptr<DetachedField> builder;
+    QString fieldName;
     if(erase) {
         const auto scalar=scalarVbaValue(value);if(scalar.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null field name");
         const auto requested=text(scalar.asText());for(const auto& name:names) if(name.compare(requested,Qt::CaseInsensitive)==0) {fieldName=name;break;}
@@ -2842,13 +2879,11 @@ void mutateExistingTableField(QSqlDatabase db,const QString& table,const VbaValu
         executeAction(db,compileAccessQuery("ALTER TABLE "+schemaJetName(table)+" DROP COLUMN "+schemaJetName(fieldName)),{});
         names.removeAll(fieldName);QJsonArray retained;for(const auto& entry:metadata) if(entry.toObject().value("name").toString().compare(fieldName,Qt::CaseInsensitive)!=0) retained.append(entry);metadata=retained;
     } else {
-        if(value.kind!=VbaValue::Kind::Object) throw VbaRuntimeError(450,"DAO: Detached field required");builder=std::dynamic_pointer_cast<DetachedField>(value.object);
-        if(!builder || builder->owner_->workspace!=workspaceState(db) || !builder->owner_->existing || builder->owner_->name.compare(table,Qt::CaseInsensitive)!=0 || builder->appended_ || builder->owner_->attached) throw VbaRuntimeError(3219,"DAO: Field belongs to a different or attached table");
-        if(!builder->owner_->existing->valid()) throw VbaRuntimeError(3420,"DAO: Field builder table invalidated");
         if(names.size()>=255) throw VbaRuntimeError(3190,"DAO: Too many fields defined");
-        if(builder->attributes_&16) throw VbaRuntimeError(3251,"DAO: Adding AutoNumber requires dedicated schema migration");
         fieldName=builder->name_;if(names.contains(fieldName,Qt::CaseInsensitive)) throw VbaRuntimeError(3191,"DAO: Duplicate field name");
-        executeAction(db,compileAccessQuery("ALTER TABLE "+schemaJetName(table)+" ADD COLUMN "+builder->definition()),{});
+        const auto definition=builder->definition();
+        if(addCounter) appendNativeCounter(db,table,fieldName);
+        else executeAction(db,compileAccessQuery("ALTER TABLE "+schemaJetName(table)+" ADD COLUMN "+definition),{});
         names.append(fieldName);metadata.append(builder->metadata());
     }
     if(!query.exec("CREATE TABLE IF NOT EXISTS main._la_table_schema(table_name TEXT PRIMARY KEY,definition TEXT NOT NULL)")) queryFailure(query);
@@ -2864,6 +2899,7 @@ void mutateExistingTableField(QSqlDatabase db,const QString& table,const VbaValu
     if(builder) {attached=std::make_shared<TableDefinition>(db,table);fieldBinding=attached->member("Fields",{VbaValue::string(fieldName.toStdString())}).object;}
     if(!query.exec("RELEASE "+savepoint)) queryFailure(query);completed=true;++fieldRevision;
     if(builder) {builder->appended_=true;builder->owner_->attached=std::move(attached);builder->attachedField_=std::move(fieldBinding);}
+    if(!settings.restore()) throw DaoStoredSchemaChange("DAO: Counter field stored; connection settings failed to restore, reopen the project");
 }
 
 std::shared_ptr<VbaObject> createExistingTableIndex(QSqlDatabase db,const QString& table,const QString& name) {
@@ -3224,29 +3260,6 @@ public:
     }
     std::shared_ptr<DetachedRelationState> state_;std::shared_ptr<DetachedRelationFields> fields_;
 };
-class NativeSchemaSettings {
-public:
-    explicit NativeSchemaSettings(QSqlDatabase db):db_(std::move(db)),query_(db_) {}
-    ~NativeSchemaSettings() {if(changed_) (void)restore();}
-    void begin(bool requireForeignKeys) {
-        const auto workspace=workspaceState(db_);workspace->check();
-        if(!sqlite3_get_autocommit(workspace->connection)) throw VbaRuntimeError(3251,"DAO: Native schema reconstruction requires no active transaction");
-        foreignKeys_=pragma("foreign_keys");legacy_=pragma("legacy_alter_table");
-        if(requireForeignKeys && foreignKeys_!=1) throw VbaRuntimeError(3251,"DAO: Enforced relation migration requires foreign_keys enabled");
-        changed_=true;
-        if(!query_.exec("PRAGMA foreign_keys=OFF") || !query_.exec("PRAGMA legacy_alter_table=ON") || pragma("foreign_keys")!=0 || pragma("legacy_alter_table")!=1) throw VbaRuntimeError(3251,"DAO: Native schema migration settings unavailable");
-    }
-    bool restore() noexcept {
-        if(!changed_) return true;
-        query_.finish();const bool first=query_.exec("PRAGMA legacy_alter_table="+QString::number(legacy_));const bool second=query_.exec("PRAGMA foreign_keys="+QString::number(foreignKeys_));
-        bool checked=false;if(first && second && query_.exec("PRAGMA foreign_keys") && query_.next()) checked=query_.value(0).toInt()==foreignKeys_;query_.finish();
-        if(checked && query_.exec("PRAGMA legacy_alter_table") && query_.next()) checked=query_.value(0).toInt()==legacy_;else checked=false;query_.finish();
-        changed_=false;if(!checked && db_.driver()) db_.driver()->setProperty("la_schema_restore_failed",true);return checked;
-    }
-private:
-    int pragma(const QString& name) {if(!query_.exec("PRAGMA "+name) || !query_.next()) queryFailure(query_);const int result=query_.value(0).toInt();query_.finish();return result;}
-    QSqlDatabase db_;QSqlQuery query_;int foreignKeys_{},legacy_{};bool changed_{};
-};
 struct NativeFieldChange {std::optional<bool> required,allowZeroLength;std::optional<int> size,type;std::optional<QString> defaultValue,validationRule,validationText;};
 
 QPair<qint64,QByteArray> nativeTableValueDigest(QSqlDatabase db,const QString& table,const QStringList& columns,const QSet<QString>& numericColumns={}) {
@@ -3273,7 +3286,7 @@ void checkNativeForeignKeys(QSqlDatabase db) {
     QSqlQuery query(db);if(!query.exec("PRAGMA main.foreign_key_check")) queryFailure(query);
     if(query.next()) throw VbaRuntimeError(3251,"DAO: Existing rows violate a foreign-key constraint");if(query.lastError().isValid()) queryFailure(query);
 }
-void rebuildNativeRelationTable(QSqlDatabase db,const QString& table,const QVector<NativeRelationData>& before,const QVector<NativeRelationData>& after,const QMap<QString,NativeFieldChange>& changes={},const std::optional<QVector<AccessSourceIndex>>& replacementIndexes={},const QString& counterDestination={},const QStringList& reorderedColumns={}) {
+void rebuildNativeRelationTable(QSqlDatabase db,const QString& table,const QVector<NativeRelationData>& before,const QVector<NativeRelationData>& after,const QMap<QString,NativeFieldChange>& changes={},const std::optional<QVector<AccessSourceIndex>>& replacementIndexes={},const QString& counterDestination={},const QStringList& reorderedColumns={},const QString& appendedCounter={}) {
     SqliteExecutionBudget budget(db,100000000,30000);
     checkNativeForeignKeys(db);
     const auto columns=readTableSchemaColumns(db,table);const auto indexes=readNativeIndexCatalog(db,table);
@@ -3302,6 +3315,8 @@ void rebuildNativeRelationTable(QSqlDatabase db,const QString& table,const QVect
         auto modified=definition(field,nextRequired);if((field.attributes_&16) && !counterDestination.isEmpty()) modified=schemaJetName(column.name)+" INT NOT NULL DEFAULT ("+accessCounterDefault(counterDestination,column.name)+")";modifiedDefinitions.append(modified);names.append(column.name);
     }
     if(!reorderedColumns.isEmpty()) {if(reorderedColumns.size()!=names.size()) throw VbaRuntimeError(3251,"DAO: Incomplete field reorder");QStringList ordered;QSet<QString> seen;for(const auto& name:reorderedColumns) {const int index=names.indexOf(name);if(index<0 || seen.contains(name.toCaseFolded())) throw VbaRuntimeError(3251,"DAO: Invalid field reorder");seen.insert(name.toCaseFolded());ordered.append(modifiedDefinitions[index]);}modifiedDefinitions=ordered;}
+    if(!appendedCounter.isEmpty())
+        modifiedDefinitions.append(schemaJetName(appendedCounter)+" INT NOT NULL DEFAULT ("+accessCounterDefault(table,appendedCounter)+")");
     const auto primaryClause=[](const AccessSourceIndex& index) {QStringList fields;for(int i=0;i<index.columns.size();++i) fields.append(schemaJetName(index.columns[i])+(index.descending[i] ? " DESC" : " ASC"));return "PRIMARY KEY ("+fields.join(',')+")";};
     for(const auto& index:indexes) if(index.source.kind==1) definitions.append(primaryClause(index.source));
     for(const auto& index:following) if(index.kind==1) modifiedDefinitions.append(primaryClause(index));
@@ -3323,12 +3338,48 @@ void rebuildNativeRelationTable(QSqlDatabase db,const QString& table,const QVect
     const auto temporary="_la_relation_rebuild_"+QUuid::createUuid().toString(QUuid::Id128);
     if(!query.exec(makeSql(temporary,after,modifiedDefinitions))) queryFailure(query);
     QStringList quoted{"rowid"};for(const auto& name:names) quoted.append(quote(name));
-    if(!query.exec("INSERT INTO main."+quote(temporary)+" ("+quoted.join(',')+") SELECT "+quoted.join(',')+" FROM main."+quote(table))) queryFailure(query);
+    const auto oldProjection=quoted.join(',');
+    auto newProjection=oldProjection,copyProjection=oldProjection;
+    if(!appendedCounter.isEmpty()) {
+        newProjection+=","+quote(appendedCounter);
+        // Backfill the new field in physical row order without consuming any
+        // reservations or running the table's user insert triggers.
+        copyProjection+=",row_number() OVER (ORDER BY rowid)";
+    }
+    if(!query.exec("INSERT INTO main."+quote(temporary)+" ("+newProjection+") SELECT "+copyProjection+" FROM main."+quote(table))) queryFailure(query);
     if(nativeTableValueDigest(db,temporary,names,numericColumns)!=original) throw VbaRuntimeError(3251,"DAO: Relation migration changed row identities or values");
     if(!query.exec("DROP TABLE main."+quote(table)) || !query.exec("ALTER TABLE main."+quote(temporary)+" RENAME TO "+quote(table))) queryFailure(query);
     for(const auto& sql:objects) if(!query.exec(sql)) queryFailure(query);
     if(nativeTableValueDigest(db,table,names,numericColumns)!=original) throw VbaRuntimeError(3251,"DAO: Relation migration final value verification failed");
-    if(counterDestination.isEmpty() && reorderedColumns.isEmpty()) {if(!replacementIndexes) (void)readNativeIndexCatalog(db,table);if(changes.isEmpty()) (void)readTableSchemaColumns(db,table);}checkNativeForeignKeys(db);
+    if(!appendedCounter.isEmpty()) {
+        createJetLongCounter(db,table,appendedCounter,static_cast<qint32>(original.first));
+        protectAccessCounterUpdates(db,table,appendedCounter);
+    } else if(counterDestination.isEmpty() && reorderedColumns.isEmpty()) {
+        if(!replacementIndexes) (void)readNativeIndexCatalog(db,table);
+        if(changes.isEmpty()) (void)readTableSchemaColumns(db,table);
+    }
+    checkNativeForeignKeys(db);
+}
+
+void appendNativeCounter(QSqlDatabase db,const QString& table,const QString& column) {
+    if(!generatedAccessColumns(db,table).isEmpty()) throw VbaRuntimeError(3090,"DAO: Table already has an AutoNumber field");
+    const auto normalized=column.toCaseFolded();
+    if(normalized=="rowid" || normalized=="_rowid_" || normalized=="oid")
+        throw VbaRuntimeError(3251,"DAO: AutoNumber cannot shadow row identity");
+    QSqlQuery query(db);
+    query.prepare("SELECT 1 FROM temp.sqlite_schema WHERE type='trigger' AND tbl_name=? COLLATE NOCASE");
+    query.addBindValue(table);
+    if(!query.exec()) queryFailure(query);
+    if(query.next()) throw VbaRuntimeError(3251,"DAO: Temporary triggers prevent safe AutoNumber reconstruction");
+    query.finish();
+    if(db.tables().contains("_la_counter32_steps",Qt::CaseInsensitive)) {
+        query.prepare("SELECT 1 FROM main._la_counter32_steps WHERE table_name=? COLLATE NOCASE AND column_name=? COLLATE NOCASE");
+        query.addBindValue(table);query.addBindValue(column);
+        if(!query.exec()) queryFailure(query);
+        if(query.next()) throw VbaRuntimeError(3251,"DAO: AutoNumber step catalog already contains this field");
+    }
+    const auto relations=NativeRelationCatalog(db).read(table);
+    rebuildNativeRelationTable(db,table,relations,relations,{},{},{},{},column);
 }
 
 quint64 nativeSchemaVersion(QSqlDatabase db) {

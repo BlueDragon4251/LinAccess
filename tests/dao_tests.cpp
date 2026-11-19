@@ -2847,6 +2847,7 @@ End Sub)VBA","AlterSchema",host);
     auto requiredField=alterable->member("CreateField",{VbaValue::string("RequiredNoDefault"),VbaValue::integer(4)}).object;requiredField->assign("Required",VbaValue::logical(true));
     error([&] {alterable->member("Fields",{}).object->member("Append",{VbaValue::reference(requiredField)});},3314);
     auto counterField=alterable->member("CreateField",{VbaValue::string("Counter"),VbaValue::integer(4)}).object;counterField->assign("Attributes",VbaValue::longInteger(16));
+    counterField->assign("DefaultValue",VbaValue::string("5"));
     error([&] {alterable->member("Fields",{}).object->member("Append",{VbaValue::reference(counterField)});},3251);
     auto reversible=alterable->member("CreateField",{VbaValue::string("Reverted"),VbaValue::integer(2)}).object;
     workspace->member("BeginTrans",{});alterable->member("Fields",{}).object->member("Append",{VbaValue::reference(reversible)});workspace->member("Rollback",{});
@@ -2879,6 +2880,129 @@ End Sub)VBA","AlterSchema",host);
     auto replacement=database->member("CreateTableDef",{VbaValue::string("Alterable")}).object;
     replacement->member("Fields",{}).object->member("Append",{replacement->member("CreateField",{VbaValue::string("Original"),VbaValue::integer(4)})});tables->member("Append",{VbaValue::reference(replacement)});
     error([&] {heldFields->member("Refresh",{});},3420);error([&] {heldIndexes->member("Refresh",{});},3420);
+}
+
+void testAppendNativeAutoNumber() {
+    using linaccess::VbaValue;
+    QTemporaryDir directory;
+    assert(directory.isValid());
+    auto db=QSqlDatabase::addDatabase("QSQLITE","dao-append-counter");
+    db.setDatabaseName(directory.filePath("counter.linaccess"));
+    assert(db.open());
+    Host host(db);
+    const auto setup=linaccess::executeVbaProcedure(R"VBA(Sub BuildCounterTable()
+Dim table As DAO.TableDef, index As DAO.Index, field As DAO.Field
+Set table=CurrentDb.CreateTableDef("CounterAppend")
+table.Fields.Append table.CreateField("K",dbLong)
+table.Fields.Append table.CreateField("Payload",dbLongBinary)
+Set index=table.CreateIndex("PrimaryKey")
+index.Primary=True
+Set field=index.CreateField("K")
+field.Attributes=dbDescending
+index.Fields.Append field
+table.Indexes.Append index
+CurrentDb.TableDefs.Append table
+End Sub)VBA","BuildCounterTable",host);
+    assert(setup.status==linaccess::VbaExecutionStatus::Completed);
+    const auto error=[](const auto& operation,int expected) {
+        int number=0;
+        try {operation();} catch(const linaccess::VbaRuntimeError& failure) {
+            number=failure.number;
+            if(number!=expected) std::cerr<<"AutoNumber error "<<number<<": "<<failure.what()<<'\n';
+        }
+        assert(number==expected);
+    };
+    QSqlQuery sql(db);
+    assert(sql.exec("PRAGMA foreign_keys=ON"));
+    assert(sql.exec("INSERT INTO CounterAppend(rowid,K,Payload) VALUES(7,200,X'00FF'),(12,20,NULL),(20,100,X'AB')"));
+    assert(sql.exec("CREATE VIEW CounterAppendView AS SELECT K,Payload FROM CounterAppend"));
+    assert(sql.exec("CREATE TABLE CounterAudit(K INTEGER)"));
+    assert(sql.exec("CREATE TRIGGER CounterAppendAudit AFTER INSERT ON CounterAppend BEGIN INSERT INTO CounterAudit VALUES(new.K); END"));
+    auto database=host.currentDatabase();
+    auto workspace=host.databaseEngine()->member("Workspaces",{VbaValue::integer(0)}).object;
+    auto table=database->member("TableDefs",{VbaValue::string("CounterAppend")}).object;
+    auto existingFields=table->member("Fields",{}).object;
+    auto cursor=database->member("OpenRecordset",{VbaValue::string("CounterAppend")}).object;
+    const auto newCounter=[&](const char* name) {
+        auto field=table->member("CreateField",{VbaValue::string(name),VbaValue::integer(4)}).object;
+        field->assign("Attributes",VbaValue::longInteger(16));
+        return field;
+    };
+    const auto field=newCounter("Seq");
+    const auto append=[&] {existingFields->member("Append",{VbaValue::reference(field)});};
+
+    workspace->member("BeginTrans",{});
+    error(append,3251);
+    workspace->member("Rollback",{});
+    existingFields->member("Refresh",{});
+    cursor->member("Requery",{});
+
+    // Fail after reconstruction and trigger/sequence creation. Reuse the same
+    // field builder to prove that a failed append leaves it unattached.
+    assert(sql.exec("CREATE TRIGGER BlockCounterAppend BEFORE UPDATE ON _la_table_schema "
+                    "WHEN old.table_name='CounterAppend' BEGIN SELECT RAISE(ABORT,'blocked'); END"));
+    existingFields->member("Refresh",{});
+    error(append,3146);
+    assert(existingFields->member("Count",{}).asNumber()==2);
+    assert(sql.exec("SELECT count(*) FROM main.sqlite_schema WHERE name='_la_counter32_sequences' OR name LIKE '_la_counter32_%'") && sql.next() && sql.value(0).toInt()==0);
+    sql.finish();
+    assert(sql.exec("DROP TRIGGER BlockCounterAppend"));
+    existingFields->member("Refresh",{});
+    append();
+
+    error([&] {existingFields->member("Count",{});},3420);
+    error([&] {cursor->member("EOF",{});},3420);
+    cursor->member("Requery",{});
+    assert(cursor->member("Fields",{}).object->member("Count",{}).asNumber()==3);
+    assert(field->member("Type",{}).asNumber()==4 && field->member("Size",{}).asNumber()==4);
+    assert(field->member("Attributes",{}).asNumber()==17 && field->member("OrdinalPosition",{}).asNumber()==2);
+    assert(!field->member("Required",{}).truthy() && field->member("DefaultValue",{}).asText().empty());
+    assert(table->member("Indexes",{}).object->member("Count",{}).asNumber()==1);
+    assert(sql.exec("SELECT rowid,K,Payload,Seq FROM CounterAppend ORDER BY rowid"));
+    assert(sql.next() && sql.value(0).toInt()==7 && sql.value(1).toInt()==200 && sql.value(2).toByteArray()==QByteArray::fromHex("00ff") && sql.value(3).toInt()==1);
+    assert(sql.next() && sql.value(0).toInt()==12 && sql.value(1).toInt()==20 && sql.value(2).isNull() && sql.value(3).toInt()==2);
+    assert(sql.next() && sql.value(0).toInt()==20 && sql.value(1).toInt()==100 && sql.value(2).toByteArray()==QByteArray::fromHex("ab") && sql.value(3).toInt()==3);
+    assert(!sql.next());
+    assert(sql.exec("SELECT count(*) FROM CounterAudit") && sql.next() && sql.value(0).toInt()==0);sql.finish();
+    assert(sql.exec("SELECT count(*) FROM CounterAppendView") && sql.next() && sql.value(0).toInt()==3);sql.finish();
+    assert(sql.exec("PRAGMA foreign_keys") && sql.next() && sql.value(0).toInt()==1);sql.finish();
+    assert(sql.exec("PRAGMA legacy_alter_table") && sql.next() && sql.value(0).toInt()==0);sql.finish();
+    const auto another=newCounter("Another");
+    error([&] {table->member("Fields",{}).object->member("Append",{VbaValue::reference(another)});},3090);
+    error([&] {database->member("Execute",{VbaValue::string("UPDATE CounterAppend SET Seq=99 WHERE K=20")});},3113);
+
+    workspace->member("BeginTrans",{});
+    cursor->member("AddNew",{});
+    assert(cursor->item("Seq").asNumber()==4);
+    cursor->assignItem("K",VbaValue::longInteger(400));
+    cursor->member("Update",{});
+    workspace->member("Rollback",{});
+    assert(sql.exec("SELECT count(*) FROM CounterAppend WHERE K=400") && sql.next() && sql.value(0).toInt()==0);sql.finish();
+    sql.clear();
+    db.close();
+    assert(db.open());
+    database=host.currentDatabase();
+    sql=QSqlQuery(db);
+    database->member("Execute",{VbaValue::string("INSERT INTO CounterAppend(K) VALUES(500)")});
+    assert(sql.exec("SELECT Seq FROM CounterAppend WHERE K=500") && sql.next() && sql.value(0).toInt()==5);sql.finish();
+    assert(sql.exec("SELECT K FROM CounterAudit") && sql.next() && sql.value(0).toInt()==500 && !sql.next());
+    sql.finish();
+
+    assert(sql.exec("CREATE TABLE CounterUnproven(K INT)"));
+    auto unproven=database->member("TableDefs",{VbaValue::string("CounterUnproven")}).object;
+    auto unprovenField=unproven->member("CreateField",{VbaValue::string("Seq"),VbaValue::integer(4)}).object;
+    unprovenField->assign("Attributes",VbaValue::longInteger(16));
+    error([&] {unproven->member("Fields",{}).object->member("Append",{VbaValue::reference(unprovenField)});},3251);
+    assert(unproven->member("Fields",{}).object->member("Count",{}).asNumber()==1);
+
+    auto empty=database->member("CreateTableDef",{VbaValue::string("CounterEmpty")}).object;
+    empty->member("Fields",{}).object->member("Append",{empty->member("CreateField",{VbaValue::string("K"),VbaValue::integer(4)})});
+    database->member("TableDefs",{}).object->member("Append",{VbaValue::reference(empty)});
+    auto emptyField=empty->member("CreateField",{VbaValue::string("Seq"),VbaValue::integer(4)}).object;
+    emptyField->assign("Attributes",VbaValue::longInteger(16));
+    empty->member("Fields",{}).object->member("Append",{VbaValue::reference(emptyField)});
+    database->member("Execute",{VbaValue::string("INSERT INTO CounterEmpty DEFAULT VALUES")});
+    assert(sql.exec("SELECT Seq FROM CounterEmpty") && sql.next() && sql.value(0).toInt()==1);
 }
 
 void testDetachedRelationCreation() {
@@ -3525,6 +3649,7 @@ int main(int argc, char** argv) {
     testEnforcedNativeRelations();
     testDetachedRelationCreation();
     testDetachedTableCreation();
+    testAppendNativeAutoNumber();
     testVariantArraysDao();
     testAccessEvalNumericOracle();
     testOwnedQueryRename();

@@ -31,7 +31,7 @@ AccessCounterReservation currentAccessCounterReservation(QSqlDatabase db,AccessC
 void configureNewAccessCounterStep(QSqlDatabase db,const QString& table,const QString& column,qint32 seed,qint32 increment,bool reseed=false);
 void configureNewAccessCounters(QSqlDatabase db,const QString& table);
 QSet<QString> jetLongAccessColumns(QSqlDatabase db,const QString& table);
-void createJetLongCounter(QSqlDatabase db,const QString& table,const QString& column);
+void createJetLongCounter(QSqlDatabase db,const QString& table,const QString& column,qint32 lastAssigned=0);
 void retainAccessCounterReservation(QSqlDatabase db,const AccessCounterReservation& reservation);
 QString accessCounterDefault(const QString& table,const QString& column);
 void createAccessCounter(QSqlDatabase db,const QString& table,const QString& column);
