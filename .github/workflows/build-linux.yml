@@ -74,7 +74,8 @@ jobs:
       - name: Bootstrap Debian build environment
         run: |
           apt-get update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y git ca-certificates \
+          # Stored-form typography tests require a real bold-italic font face.
+          DEBIAN_FRONTEND=noninteractive apt-get install -y git ca-certificates fonts-dejavu-extra \
             build-essential libboost-dev cmake qt6-base-dev libqt6sql6-sqlite mdbtools mdbtools-dev pkg-config dpkg-dev file xz-utils unzip curl default-jdk-headless
       - uses: actions/checkout@v4
       - name: Record MDBTools CLI and library metadata
