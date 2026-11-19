@@ -2601,11 +2601,14 @@ void testScreenActiveReport(MainWindow& window,QSqlDatabase db) {
     auto screen=application->member("Screen",{}).object;
     auto reports=application->member("Reports",{}).object;
     auto commands=application->member("DoCmd",{}).object;
-    const auto expectUnavailable=[&] {
+    const auto expectError=[](int expected,const auto& action) {
         int error=0;
-        try { (void)screen->member("ActiveReport",{}); }
+        try { action(); }
         catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; }
-        assert(error==2450);
+        assert(error==expected);
+    };
+    const auto expectUnavailable=[&] {
+        expectError(2450,[&] { (void)screen->member("ActiveReport",{}); });
     };
     const auto select=[&](int type,const char* name) {
         commands->member("SelectObject",{VbaValue::integer(type),VbaValue::string(name),VbaValue::logical(false)});
@@ -2616,6 +2619,7 @@ void testScreenActiveReport(MainWindow& window,QSqlDatabase db) {
     const QByteArray unloadCode=R"VBA(Sub Report_Unload(Cancel As Integer)
 Dim activeReportObject As Report
 On Error Resume Next
+Err.Clear
 Set activeReportObject=Screen.ActiveReport
 If Err.Number<>2450 Then Cancel=1
 End Sub)VBA";
@@ -2633,6 +2637,8 @@ End Sub)VBA";
     select(3,"ScreenFirstReport");
     auto held=screen->member("ActiveReport",{}).object;
     assert(held==reports->item("ScreenFirstReport").object && held->isNativeType("access.report"));
+    expectError(450,[&] { (void)screen->member("ActiveReport",{VbaValue::integer(0)}); });
+    expectError(383,[&] { screen->assign("ActiveReport",VbaValue::reference(held)); });
     const auto result=linaccess::executeVbaProcedure(R"VBA(Public Function IsActiveReport() As Boolean
 Dim activeReportObject As Report
 Set activeReportObject=Screen.ActiveReport
@@ -2645,11 +2651,14 @@ End Function)VBA","IsActiveReport",host);
     select(3,"ScreenSecondReport");
     assert(screen->member("ActiveReport",{}).object==reports->item("ScreenSecondReport").object);
     assert(held->member("Name",{}).asText()=="ScreenFirstReport");
+    assert(form.close());
+    select(3,"ScreenSecondReport");
+    expectError(2450,[&] { (void)formScreen->member("ActiveReport",{}); });
+    assert(screen->member("ActiveReport",{}).object==reports->item("ScreenSecondReport").object);
 
     window.focusDatabaseWindow();
     expectUnavailable();
     first.hide();
-    form.hide();
     select(3,"ScreenSecondReport");
     second.hide();
     // Inactive reports can remain loaded while there is no active document.
@@ -2678,11 +2687,8 @@ End Function)VBA","IsActiveReport",host);
     const auto unload=first.eventResult("OnUnload");
     assert(unload && unload->status==linaccess::VbaExecutionStatus::Completed);
     expectUnavailable();
-    int error=0;
-    try { (void)held->member("Name",{}); }
-    catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; }
-    assert(error==2450);
-    assert(second.close() && form.close());
+    expectError(2450,[&] { (void)held->member("Name",{}); });
+    assert(second.close());
     window.focusDatabaseWindow();
     expectUnavailable();
 }
