@@ -501,15 +501,26 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
                 else if(symbol(expression[i],")") && --nesting==0) { close=i; break; }
             }
             if(close==expression.size()-1) {
+                // A scalar SELECT has its own scope. Wrapping an inner predicate
+                // with the outer expression would put SELECT inside a scalar function.
+                if(expression[1].kind==Token::Word && expression[1].value.compare("SELECT",Qt::CaseInsensitive)==0)
+                    return unknown();
                 auto inner=parse(expression.mid(1,expression.size()-2),recursion+1);
                 QVector<Token> code{{Token::Other,"("}}; code+=inner.code; code.append({Token::Other,")"}); return {inner.type,code};
             }
         }
-        qsizetype operation=-1; int lowest=100,nesting=0;bool betweenBound=false;
+        qsizetype operation=-1; int lowest=100,nesting=0,caseDepth=0;bool betweenBound=false;
         for(qsizetype i=0;i<expression.size();++i) {
             if(symbol(expression[i],"(")) { ++nesting; continue; }
             if(symbol(expression[i],")")) { --nesting; continue; }
             if(nesting) continue;
+            // Generated crosstabs use CASE to select the aggregate input. Its
+            // WHEN comparison does not determine the type of the whole CASE.
+            if(expression[i].kind==Token::Word) {
+                if(expression[i].value.compare("CASE",Qt::CaseInsensitive)==0) { ++caseDepth; continue; }
+                if(caseDepth && expression[i].value.compare("END",Qt::CaseInsensitive)==0) { --caseDepth; continue; }
+            }
+            if(caseDepth) continue;
             if(expression[i].kind==Token::Word && expression[i].value.compare("Between",Qt::CaseInsensitive)==0) betweenBound=true;
             else if(betweenBound && expression[i].kind==Token::Word && expression[i].value.compare("And",Qt::CaseInsensitive)==0) {betweenBound=false;continue;}
             const auto rank=precedence(expression[i]); if(!rank) continue;
