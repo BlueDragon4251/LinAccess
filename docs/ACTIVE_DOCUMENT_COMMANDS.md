@@ -12,7 +12,9 @@ Implemented command paths:
   selects editable text. Both DoCmd and Application.DoCmd use that object path.
 - RunCommand acCmdSaveRecord saves the active native record. Next, Last and New
   navigate the active document's actual record selector; Maximize changes its
-  native window and blank Requery reloads its real record source.
+  native window. Blank Requery reloads the focused native combo or list box's
+  row source when that control belongs to the active form. Without that focus,
+  the command reloads the real form record source.
 - The corresponding Application.DoCmd object paths share the native host
   operations, with supported omitted GoToRecord positions and numeric Access
   constants. Unsupported commands/options are rejected, not treated as no-ops.
@@ -67,8 +69,15 @@ including combo/list row sources, subform sources and calculated controls.
 Bound non-list data controls requery the form, preserving save validation.
 Me.control.Requery retains the instance context. Table/query/report navigation
 and RunSQL's UseTransaction option remain explicitly unsupported. Active subform/record-command edge cases,
-end-of-record behavior, unavailable-command error parity, control-specific
-Requery and complete OS/window activation scheduling are not established here.
+end-of-record behavior, unavailable-command error parity, other focused-control
+Requery routes and complete OS/window activation scheduling remain open.
+
+The focused combo/list route uses the same native row-source refresh as named
+Requery. The main-window integration runs both VBA spellings with live Qt
+focus on a second form. It checks the refreshed rows, an unsaved form change,
+explicit named routing, and the record-source fallback from a text box. The
+scope is directly hosted combos and list boxes in native forms. Windows Access
+behavior for an omitted name and focused controls remains unverified.
 
 Access SetWarnings, confirmation options and full action-dialog semantics remain
 open; this increment adds no LinAccess-specific SQL approval policy. Original

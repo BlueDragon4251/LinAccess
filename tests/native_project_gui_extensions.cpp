@@ -24,6 +24,7 @@
 #include <QSqlRecord>
 #include <QTabWidget>
 #include <QTableWidget>
+#include <QTreeView>
 #include <QTreeWidget>
 #include <QTextBlock>
 #include <QTextBrowser>
@@ -443,7 +444,107 @@ void testNativeConditionCoercions(MainWindow& window,QSqlDatabase db) {
     commands->member("RunMacro",{VbaValue::string("ConditionCoercion"),VbaValue::longInteger(2),VbaValue::string("\"False\"")});assert(query.exec("SELECT COUNT(*) FROM condition_audit") && query.next() && query.value(0).toInt()==4);query.finish();
 }
 
+void testNativeFocusedRequery(MainWindow& window,QSqlDatabase db) {
+    using linaccess::VbaValue;
+    QSqlQuery sql(db);
+    assert(sql.exec("CREATE TABLE focus_requery_records(id INTEGER PRIMARY KEY,label TEXT)"));
+    assert(sql.exec("INSERT INTO focus_requery_records VALUES(1,'stored')"));
+    assert(sql.exec("CREATE TABLE focus_requery_rows(id INTEGER PRIMARY KEY,label TEXT)"));
+    assert(sql.exec("INSERT INTO focus_requery_rows VALUES(1,'initial')"));
+    const QByteArray source=R"FORM(Begin Form
+RecordSource ="focus_requery_records"
+Begin Section
+Begin TextBox
+Name ="editLabel"
+ControlSource ="label"
+Width =1800
+Height =300
+End
+Begin ComboBox
+Name ="pick"
+RowSource ="SELECT id,label FROM focus_requery_rows ORDER BY id"
+ColumnCount =2
+ColumnWidths ="0;1440"
+Top =400
+Width =1800
+Height =300
+End
+Begin ListBox
+Name ="listing"
+RowSource ="SELECT id,label FROM focus_requery_rows ORDER BY id"
+ColumnCount =2
+ColumnWidths ="0;1440"
+Top =800
+Width =1800
+Height =1000
+End
+End
+End
+)FORM";
+    const QByteArray code=R"VBA(Sub RequeryFocused()
+DoCmd.Requery
+End Sub
+Sub RequeryFocusedApplication()
+Application.DoCmd.Requery
+End Sub
+Sub RequeryNamed()
+DoCmd.Requery "pick"
+End Sub
+)VBA";
+    AccessFormPreview caller("FocusRequeryCaller",source,code,db,&window);
+    AccessFormPreview target("FocusRequeryTarget",source,{},db,&window);
+    caller.show();
+    target.show();
+    QApplication::setActiveWindow(&target);
+    QApplication::processEvents();
+    assert(activePreviewDocument()==&target);
+
+    auto callerForm=makePreviewFormObject(caller);
+    auto targetForm=makePreviewFormObject(target);
+    auto* callerCombo=caller.findChild<QComboBox*>("access-control-pick");
+    auto* combo=target.findChild<QComboBox*>("access-control-pick");
+    auto* list=target.findChild<QTreeView*>("access-control-listing");
+    auto* editLabel=target.findChild<QLineEdit*>("access-control-editLabel");
+    assert(callerCombo && combo && combo->lineEdit() && list && editLabel);
+    assert(callerForm->objectMember("pick",{}).object->member("ListCount",{}).asNumber()==1);
+    assert(targetForm->objectMember("pick",{}).object->member("ListCount",{}).asNumber()==1);
+    assert(list->model()->rowCount()==1);
+
+    const auto run=[&](const char* procedure) {
+        std::vector<VbaValue> arguments;
+        assert(caller.executeProcedure(procedure,arguments).status==linaccess::VbaExecutionStatus::Completed);
+    };
+    combo->lineEdit()->setFocus();
+    assert(combo->lineEdit()->hasFocus());
+    targetForm->assignItem("editLabel",VbaValue::string("pending"));
+    assert(sql.exec("INSERT INTO focus_requery_rows VALUES(2,'combo update')"));
+    run("RequeryFocused");
+    assert(combo->count()==2 && callerCombo->count()==1 && list->model()->rowCount()==1);
+    assert(target.hasUnsavedChanges() && editLabel->text()=="pending");
+
+    assert(sql.exec("INSERT INTO focus_requery_rows VALUES(3,'list update')"));
+    list->setFocus();
+    assert(list->hasFocus());
+    run("RequeryFocusedApplication");
+    assert(list->model()->rowCount()==3 && list->model()->index(2,1).data().toString()=="list update");
+    assert(combo->count()==2 && callerCombo->count()==1 && target.hasUnsavedChanges());
+
+    run("RequeryNamed");
+    assert(combo->count()==3 && callerCombo->count()==1 && target.hasUnsavedChanges());
+    assert(sql.exec("SELECT label FROM focus_requery_records WHERE id=1") && sql.next() && sql.value(0).toString()=="stored");
+    sql.finish();
+    targetForm->member("Undo",{});
+
+    assert(sql.exec("UPDATE focus_requery_records SET label='outside' WHERE id=1"));
+    editLabel->setFocus();
+    assert(editLabel->hasFocus());
+    run("RequeryFocused");
+    assert(editLabel->text()=="outside" && !target.hasUnsavedChanges());
+    assert(target.close() && caller.close());
+}
+
 void testNativeProjectGuiExtensions(MainWindow& window,QSqlDatabase db) {
+    testNativeFocusedRequery(window,db);
     testNativeRepaintObject(window,db);
     testNativeSetValueDoubleEvaluation(window,db);
     testNativeFormRecordFields(window,db);

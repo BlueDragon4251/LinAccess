@@ -904,7 +904,10 @@ public:
                 }
             }
         }
-        (void)makePreviewFormObject(commandDocument())->member("Requery",{});
+        auto& document=commandDocument();
+        if (document.layout_.kind==linaccess::AccessDocumentKind::Form
+            && document.requeryFocusedListControl()) return;
+        (void)makePreviewFormObject(document)->member("Requery",{});
     }
     void requeryNamedControl(std::string_view name) { commandDocument().requeryControl(name); }
     std::string memberControlName(std::string_view name) override {
@@ -3017,6 +3020,22 @@ void AccessFormPreview::setFieldValue(std::string_view name,const linaccess::Vba
     refreshCalculatedControls();
 }
 
+bool AccessFormPreview::requeryFocusedListControl() {
+    const auto* focus=QApplication::focusWidget();
+    if (!focus) return false;
+    for (const auto& control:layout_.controls) {
+        auto* widget=controls_.value(control.name.toCaseFolded()).data();
+        const auto* combo=qobject_cast<QComboBox*>(widget);
+        const auto* list=dynamic_cast<AccessListBox*>(widget);
+        if ((combo && (focus==combo || focus==combo->lineEdit()))
+            || (list && (focus==list || focus==list->viewport()))) {
+            requeryControl(control.name.toUtf8().toStdString());
+            return true;
+        }
+    }
+    return false;
+}
+
 void AccessFormPreview::requeryControl(std::string_view name) {
     const auto target = QString::fromUtf8(name.data(),name.size());
     if (auto* child=subforms_.value(target.toCaseFolded()).data()) {
@@ -3776,13 +3795,7 @@ bool AccessFormPreview::handleDocumentKey(QKeyEvent* event) {
         }
         if (event->key()==Qt::Key_F9 && modifiers==Qt::NoModifier) {
             ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
-            const auto* focus=QApplication::focusWidget();
-            for(const auto& control:layout_.controls) {
-                auto* widget=controls_.value(control.name.toCaseFolded()).data();
-                if(auto* list=dynamic_cast<AccessListBox*>(widget); list && (focus==list || focus==list->viewport())) { requeryControl(control.name.toUtf8().toStdString()); break; }
-                auto* combo=qobject_cast<QComboBox*>(widget);
-                if(combo && (focus==combo || focus==combo->lineEdit())) { requeryControl(control.name.toUtf8().toStdString()); break; }
-            }
+            requeryFocusedListControl();
             if(!closed_ && !openCancelled_) refreshCalculatedControls();
             return true;
         }

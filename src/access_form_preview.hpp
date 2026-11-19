@@ -188,6 +188,7 @@ private:
     friend class PreviewControlsObject;
     friend class PreviewControlObject;
     friend class PreviewItemsSelectedObject;
+    bool requeryFocusedListControl();
     void requeryControl(std::string_view name);
 
     std::weak_ptr<linaccess::VbaObject> formObject_, formsObject_, reportsObject_, controlsObject_;
