@@ -10,6 +10,51 @@
 #include <cassert>
 #include <cstdio>
 
+namespace {
+void testPeerOpenDuringClose(QSqlDatabase db, const QByteArray& layout) {
+    const QByteArray targetCode=R"VBA(Sub Form_Unload(Cancel As Integer)
+If Me.Tag="cancel" Then
+DoEvents
+Cancel=True
+End If
+End Sub
+Sub Form_Close()
+DoEvents
+End Sub
+)VBA";
+    const QByteArray peerCode=R"VBA(Sub OpenTarget()
+DoCmd.OpenForm "closing_target", , , "[id]=1", , acHidden
+End Sub
+)VBA";
+    AccessFormPreview target("closing_target",layout,targetCode,db);
+    AccessFormPreview peer("opening_peer","Begin Form\nEnd\n",peerCode,db);
+    target.show();
+    const auto targetObject=makePreviewFormObject(target);
+
+    const auto openFromPeerDuringClose=[&](bool cancel) {
+        bool attempted=false;
+        QTimer::singleShot(0,&target,[&] {
+            attempted=true;
+            std::vector<linaccess::VbaValue> arguments;
+            const auto result=peer.executeProcedure("OpenTarget",arguments);
+            assert(result.status==linaccess::VbaExecutionStatus::Error && result.errorNumber==2501);
+        });
+        const bool closed=target.close();
+        assert(attempted && closed!=cancel);
+    };
+
+    targetObject->assign("Tag",linaccess::VbaValue::string("cancel"));
+    openFromPeerDuringClose(true);
+    assert(target.isVisible() && targetObject->member("Filter",{}).asText().isEmpty());
+    assert(!targetObject->member("FilterOn",{}).truthy());
+
+    targetObject->assign("Tag",linaccess::VbaValue::string("allow"));
+    openFromPeerDuringClose(false);
+    assert(target.isHidden());
+    assert(makePreviewFormsObject(peer)->member("Count",{}).asNumber()==1);
+}
+}
+
 void testDocumentLifetimes() {
     using linaccess::VbaValue;
     auto db=QSqlDatabase::addDatabase("QSQLITE","document-lifetimes"); db.setDatabaseName(":memory:"); assert(db.open());
@@ -19,6 +64,7 @@ void testDocumentLifetimes() {
     assert(query.exec("CREATE TABLE events(value TEXT)"));
     assert(query.exec("CREATE TABLE _la_access_artifacts(id INTEGER PRIMARY KEY,kind TEXT,name TEXT,source_bytes BLOB)"));
     const QByteArray layout="Begin Form\nRecordSource =\"records\"\nOnUnload =\"[Event Procedure]\"\nOnClose =\"[Event Procedure]\"\nBegin Section\nBegin TextBox\nName =\"value\"\nControlSource =\"value\"\nEnd\nEnd\nEnd\n";
+    testPeerOpenDuringClose(db,layout);
     const QByteArray code=R"VBA(Sub Form_Unload(Cancel As Integer)
 If Me.Tag="block" Then Cancel=1
 If Me.Tag="reenter" Then

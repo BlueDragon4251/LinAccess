@@ -3268,6 +3268,7 @@ void PreviewVbaHost::openProjectDocument(QSqlDatabase database,QWidget* projectW
         existing=document;
     }
     if (existing) {
+        if(existing->closing_) throw linaccess::VbaRuntimeError(2501,"Document is closing");
         if(dataMode!=-1) throw linaccess::VbaRuntimeError(3251,"Changing data mode of an open document is not implemented");
         if(windowMode==3) throw linaccess::VbaRuntimeError(3251,"acDialog reuse of an open document is not implemented");
         if(openArgs && existing->openArgs_!=openArgs) throw linaccess::VbaRuntimeError(3251,"Changing OpenArgs of an open document is not implemented");
