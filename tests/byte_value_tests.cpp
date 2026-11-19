@@ -81,11 +81,10 @@ End Sub
 Sub StoreByte(ByVal value As Byte)
 CurrentDb.Execute "INSERT INTO byte_audit VALUES(" & CStr(value) & ")"
 End Sub
-Sub RejectByteLoop()
+Sub CaptureByteLoop()
 Dim value As Byte
-CurrentDb.Execute "INSERT INTO byte_audit VALUES(98)"
 For value=1 To 2
-CurrentDb.Execute "INSERT INTO byte_audit VALUES(97)"
+CurrentDb.Execute "INSERT INTO byte_audit VALUES(" & CStr(value) & ")"
 Next value
 End Sub
 )VBA";
@@ -104,13 +103,15 @@ End Sub
     for(const auto& name:{"RejectByte","RejectByteArgument","RejectNotRange"}) {
         const auto failure=form.executeProcedure(name,none); assert(failure.status==linaccess::VbaExecutionStatus::Error && failure.errorNumber==6);
     }
-    const auto loop=form.executeProcedure("RejectByteLoop",none); assert(loop.status==linaccess::VbaExecutionStatus::Unsupported && loop.errorNumber==3251);
+    assert(form.executeProcedure("CaptureByteLoop",none).status==linaccess::VbaExecutionStatus::Completed);
     int error=0; try { model->assign("tracked",VbaValue::numeric(256)); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; }
     assert(error==6 && model->member("tracked",{}).number==4);
     assert(sql.exec("SELECT value,typeof(value) FROM byte_audit ORDER BY rowid"));
     assert(sql.next() && sql.value(0).toInt()==12 && sql.value(1).toString()=="integer");
     assert(sql.next() && sql.value(0).toInt()==4 && sql.value(1).toString()=="integer");
     assert(sql.next() && sql.value(0).toInt()==251 && sql.value(1).toString()=="integer");
+    assert(sql.next() && sql.value(0).toInt()==2 && sql.value(1).toString()=="integer");
+    assert(sql.next() && sql.value(0).toInt()==1 && sql.value(1).toString()=="integer");
     assert(sql.next() && sql.value(0).toInt()==2 && sql.value(1).toString()=="integer" && !sql.next()); sql.finish();
     assert(sql.exec("SELECT amount FROM byte_source WHERE id=1") && sql.next() && sql.value(0).toDouble()==12.5); sql.finish();
     model->assign("Dirty",VbaValue::logical(false));
