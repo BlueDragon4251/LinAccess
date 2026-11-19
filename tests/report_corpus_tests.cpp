@@ -636,11 +636,25 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
                 const auto source="SELECT "+match.captured(1)+" FROM "+domain+(match.captured(3).isEmpty() ? QString{} : " WHERE "+match.captured(3));
                 const auto plan=linaccess::compileAccessQuery(source);
                 const auto rows=linaccess::executeAccessQueryPlan(db,plan,linaccess::bindAccessQueryParameters(plan,{}));
-                double expected=0; int nonnull=0;
-                for (const auto& row : rows.rows) if (!row.front().isNull()) { expected+=row.front().toDouble(); ++nonnull; }
+                const bool exactCurrency=rows.columnTypes.value(0)=="CURRENCY_TICKS";
+                __int128 expectedTicks=0;
+                double expected=0;
+                int nonnull=0;
+                for (const auto& row : rows.rows) {
+                    const auto& value=row.front();
+                    if (value.isNull()) continue;
+                    if (exactCurrency) {
+                        assert(value.userType()==QMetaType::LongLong);
+                        expectedTicks+=value.toLongLong();
+                    } else expected+=value.toDouble();
+                    ++nonnull;
+                }
                 const auto actual=makePreviewFormObject(initialized)->item(control.name.toUtf8().toStdString());
-                if (nonnull) assert(std::abs(actual.asNumber()-expected)<=1e-8*std::max(1.0,std::abs(expected)));
-                else assert(actual.kind==linaccess::VbaValue::Kind::Null);
+                if (!nonnull) assert(actual.kind==linaccess::VbaValue::Kind::Null);
+                else if (exactCurrency) {
+                    assert(expectedTicks>=std::numeric_limits<std::int64_t>::min() && expectedTicks<=std::numeric_limits<std::int64_t>::max());
+                    assert(actual.kind==linaccess::VbaValue::Kind::Currency && actual.currencyUnits==expectedTicks);
+                } else assert(std::abs(actual.asNumber()-expected)<=1e-8*std::max(1.0,std::abs(expected)));
                 ++originalDomainSums;
             }
             assert(originalDomainSums==2);
