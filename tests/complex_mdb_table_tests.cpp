@@ -28,6 +28,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <limits>
 #include <set>
 
 class EnumerationHost final : public linaccess::VbaHost {
@@ -69,7 +70,7 @@ int main(int argc, char** argv) {
     int trueBooleans = 0;
     int typedBooleans = 0;
     int longColumns=0,typedLongValues=0;
-    int currencyColumns=0,doubleColumns=0,typedCurrencyValues=0,currencySums=0,unsupportedCurrencySums=0;
+    int currencyColumns=0,doubleColumns=0,typedCurrencyValues=0,currencySums=0,currencySumOverflows=0;
     int formattedDates = 0;
     int sourceTextSizes=0,sourceMemos=0;
     int sourceDefaults=0,nativeDefaults=0;
@@ -100,6 +101,7 @@ int main(int argc, char** argv) {
                 if(column.hasDefault) { ++sourceDefaults; if(!column.autoNumber) ++nativeDefaults; }
             }
             linaccess::importAccessTable(db, source, table, schema, rows,linaccess::AccessBinaryEncoding::Unsupported,linaccess::AccessFloatingSource::NativeMdbBits);
+            const auto copiedTypes=linaccess::sqliteColumnTypes(db,table);
             QSqlQuery storedIndexes(db); storedIndexes.prepare("SELECT definition FROM main._la_access_indexes WHERE table_name=?"); storedIndexes.addBindValue(table);
             assert(storedIndexes.exec() && storedIndexes.next() && storedIndexes.value(0).toString().toUtf8()==schema.sourceIndexMetadata); storedIndexes.finish();
             const auto indexTable=linaccess::makeDaoDatabase(db)->member("TableDefs",{linaccess::VbaValue::string(table.toStdString())}).object;
@@ -139,7 +141,10 @@ int main(int argc, char** argv) {
                     records->member("AddNew",{});
                     for(const auto& column:schema.columns) if(column.hasDefault && !column.autoNumber) {
                         QSqlQuery value(db); assert(value.exec("SELECT "+column.sqlDefault) && value.next());
-                        const auto expected=linaccess::qtFieldValue(value.value(0),linaccess::sqliteColumnTypes(db,table).value(column.name.toCaseFolded()));
+                        const auto type=copiedTypes.value(column.name.toCaseFolded());
+                        const auto expected=type=="CURRENCY_TICKS" && !value.value(0).isNull()
+                            ? linaccess::convertCurrency(linaccess::VbaValue::string(column.sqlDefault.toStdString()))
+                            : linaccess::qtFieldValue(value.value(0),type);
                         const auto field=records->member("Fields",{linaccess::VbaValue::string(column.name.toStdString())}).object;
                         const auto expression=field->member("DefaultValue",{});
                         assert(expression.kind==linaccess::VbaValue::Kind::Text && !expression.text.empty());
@@ -157,6 +162,7 @@ int main(int argc, char** argv) {
                     const auto money=linaccess::makeDaoDatabase(db)->member("OpenRecordset",{linaccess::VbaValue::string(table.toStdString())}).object;
                     std::vector<std::shared_ptr<linaccess::VbaObject>> fields;
                     for(const auto i:indices) {
+                        assert(copiedTypes.value(schema.columns[i].name.toCaseFolded())=="CURRENCY_TICKS");
                         const auto field=money->member("Fields",{linaccess::VbaValue::string(schema.columns[i].name.toStdString())}).object;
                         assert(field->member("Type",{}).number==5); fields.push_back(field);
                     }
@@ -195,14 +201,17 @@ int main(int argc, char** argv) {
                         const auto quote=[](QString value) { return '['+value.replace(']',"]]")+']'; };
                         const auto field=quote(schema.columns[i].name);
                         const auto plan=linaccess::compileAccessQuery("SELECT Sum("+field+") AS total FROM "+quote(table)+" WHERE "+field+" IS NOT NULL");
-                        if(expected<=-5497558138880000LL || expected>=5497558138880000LL) {
+                        if(expected<std::numeric_limits<std::int64_t>::min() || expected>std::numeric_limits<std::int64_t>::max()) {
                             int error=0; try { (void)linaccess::executeAccessQueryPlan(db,plan,{}); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; }
-                            assert(error==3251 || error==6); ++unsupportedCurrencySums;
+                            assert(error==6); ++currencySumOverflows;
                         } else {
                             const auto result=linaccess::executeAccessQueryPlan(db,plan,{});
-                            assert(result.rows.size()==1 && result.types.value("total")=="CURRENCY_REAL");
+                            assert(result.rows.size()==1 && result.types.value("total")=="CURRENCY_TICKS");
                             if(!any) assert(result.rows[0][0].isNull());
-                            else assert(linaccess::currencyFromRealStorage(result.rows[0][0].toDouble()).currencyUnits==static_cast<std::int64_t>(expected));
+                            else {
+                                const auto total=result.rows[0][0];
+                                assert(total.userType()==QMetaType::LongLong && total.toLongLong()==static_cast<std::int64_t>(expected));
+                            }
                             ++currencySums;
                         }
                     }
@@ -335,6 +344,8 @@ End Function
                         values.append(truth ? "-1" : "0"); if (truth) ++trueBooleans;
                     }
                     else if (schema.columns[col].sqliteType == "INTEGER") values.append(QString::number(text.toLongLong()));
+                    else if (schema.columns[col].sourceType == "CURRENCY")
+                        values.append(QString::number(linaccess::convertCurrency(linaccess::VbaValue::string(cell.value)).currencyUnits));
                     else if(schema.columns[col].sourceType=="DOUBLE" && originalDoubles) values.append(QString::number(originalDoubles->columns.value(schema.columns[col].name.toCaseFolded())[static_cast<qsizetype>(row-1)].value(),'g',17));
                     else if (schema.columns[col].sqliteType == "REAL") values.append(QString::number(text.toDouble(), 'g', 17));
                     else values.append(text);
@@ -347,6 +358,10 @@ End Function
                     const auto cell = copied.value(col);
                     if (cell.isNull()) values.append(QJsonValue::Null);
                     else if (schema.columns[col].sqliteType == "INTEGER") values.append(QString::number(cell.toLongLong()));
+                    else if (schema.columns[col].sourceType == "CURRENCY") {
+                        assert(cell.userType()==QMetaType::LongLong);
+                        values.append(QString::number(cell.toLongLong()));
+                    }
                     else if (schema.columns[col].sqliteType == "REAL") values.append(QString::number(cell.toDouble(), 'g', 17));
                     else values.append(cell.toString());
                 }
@@ -425,8 +440,8 @@ End Function
     assert(sourceTextSizes>0);
     std::cout<<"Verified source text capacities: "<<sourceTextSizes<<", confirmed Memo declarations: "<<sourceMemos<<'\n';
     assert(currencyColumns==43 && doubleColumns==57 && typedCurrencyValues>0);
-    assert(currencySums+unsupportedCurrencySums==43);
-    std::cout<<"Original Currency sums: "<<currencySums<<", outside supported backing: "<<unsupportedCurrencySums<<'\n';
+    assert(currencySums+currencySumOverflows==43);
+    std::cout<<"Original Currency sums: "<<currencySums<<", signed tick overflows: "<<currencySumOverflows<<'\n';
     std::cout<<"Original Currency column metadata: "<<currencyColumns<<", Double columns: "<<doubleColumns<<", typed Currency non-NULL values: "<<typedCurrencyValues<<'\n';
     assert(longColumns==127 && typedLongValues>0);
     std::cout<<"Original Long columns: "<<longColumns<<", typed non-NULL field values: "<<typedLongValues<<'\n';
