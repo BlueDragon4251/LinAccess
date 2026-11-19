@@ -120,6 +120,8 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
     QHash<QString, int> sections;
     QHash<QString,AccessControlFont> templateFonts;
     QHash<QString,QString> templateDefaults;
+    QHash<QString,QString> templateValidationRules;
+    QHash<QString,QString> templateValidationTexts;
     QHash<QString,int> templateAlignments;
     QHash<QString,qint32> templateForeColors;
     QHash<QString,qint32> templateBackColors;
@@ -167,6 +169,8 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
                 item.cancelButton=templateCancelButtons.value(type,false);
                 item.font = templateFonts.value(type);
                 item.defaultValue = templateDefaults.value(type);
+                item.validationRule = templateValidationRules.value(type);
+                item.validationText = templateValidationTexts.value(type);
                 item.textAlign = templateAlignments.value(type);
                 item.multiSelect = templateMultiSelect.value(type);
                 item.columnHeads = templateColumnHeads.value(type);
@@ -319,6 +323,8 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
         }
         if (key=="DefaultValue" && value.size()>255) throw std::runtime_error("Imported default expression exceeds 255 code units");
         if (current.controlTemplate && key=="DefaultValue") { templateDefaults[current.type]=value; continue; }
+        if (current.controlTemplate && key=="ValidationRule") { templateValidationRules[current.type]=value; continue; }
+        if (current.controlTemplate && key=="ValidationText") { templateValidationTexts[current.type]=value; continue; }
         if (current.controlTemplate && fontProperty(templateFonts[current.type],key,value)) continue;
         if (current.control >= 0) {
             auto& control = form.controls[current.control];
@@ -329,6 +335,8 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
             else if (key == "Tag") control.tag = value;
             else if (key == "ControlSource") control.controlSource = value;
             else if (key == "DefaultValue") control.defaultValue = value;
+            else if (key == "ValidationRule") control.validationRule = value;
+            else if (key == "ValidationText") control.validationText = value;
             else if (key == "InputMask") control.inputMask = value;
             else if (key == "Format") control.format = value;
             else if (key == "OptionValue") control.optionValue = integer();

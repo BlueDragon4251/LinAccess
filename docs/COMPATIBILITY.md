@@ -434,6 +434,11 @@ future metadata changes, failed-default recovery and ID nonconsumption are teste
 Original probes retain 34 entries and initialize 15 unbound literals. Computed/
 Jet table defaults and full new-record typing/timing remain open (CONTROL_DEFAULT_RUNTIME.md).
 
+Imported form controls preserve ValidationRule and ValidationText from Access
+SaveAsText, including inherited control templates and explicit empty overrides.
+VBA can read the imported strings on eligible form controls. Rule evaluation
+and property editing remain open under F015. [Access 2003 ValidationText reference](https://learn.microsoft.com/en-us/previous-versions/office/developer/office-2003/aa173475%28v%3Doffice.11%29)
+
 Native TextBox/Label TextAlign now preserves imported templates and explicit
 General/Left/Center/Right settings, with instance VBA setters and typed General
 alignment. Native Qt/SQL tests preserve input buffers and read-only permissions;

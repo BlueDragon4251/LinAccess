@@ -24,7 +24,81 @@
 #endif
 #include <cassert>
 #include <iostream>
+
+namespace {
+void exerciseControlValidationMetadata(QSqlDatabase db) {
+    using linaccess::VbaRuntimeError;
+    using linaccess::VbaValue;
+    const QByteArray layout=R"LAYOUT(Begin Form
+Begin
+Begin TextBox
+ValidationRule ="Like ""A????"" "
+    "Or Is Null"
+ValidationText ="  Use ""A"" at the start  "
+End
+Begin Section
+Height =1500
+Begin TextBox
+Name ="FromTemplate"
+End
+Begin TextBox
+Name ="Overridden"
+Top =400
+ValidationRule ="< 100"
+ValidationText =""
+End
+Begin CheckBox
+Name ="NoValidation"
+Top =800
+End
+Begin Label
+Name ="LabelOnly"
+Top =1200
+End
+End
+End
+End
+)LAYOUT";
+    const QByteArray code=R"VBA(Function ReadRule() As String
+ReadRule=Me.Controls("FromTemplate").ValidationRule
+End Function
+)VBA";
+    AccessFormPreview form("Control validation metadata",layout,code,db);
+    form.show();
+    QApplication::processEvents();
+    auto object=makePreviewFormObject(form);
+    const auto getControl=[&](const char* name) {
+        return object->member("Controls",{VbaValue::string(name)}).object;
+    };
+    const auto withTemplate=getControl("FromTemplate");
+    const auto overridden=getControl("Overridden");
+    const auto absent=getControl("NoValidation");
+    const auto label=getControl("LabelOnly");
+    assert(withTemplate && overridden && absent && label);
+    assert(withTemplate->member("ValidationText",{}).asText()=="  Use \"A\" at the start  ");
+    assert(overridden->member("validationrule",{}).asText()=="< 100");
+    assert(overridden->member("ValidationText",{}).asText().empty());
+    assert(absent->member("ValidationRule",{}).asText().empty());
+    assert(absent->member("ValidationText",{}).asText().empty());
+    std::vector<VbaValue> arguments;
+    const auto result=form.executeProcedure("ReadRule",arguments);
+    assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue);
+    assert(result.typedReturnValue->asText()=="Like \"A????\" Or Is Null");
+    const auto expectError=[](int expected,auto&& call) {
+        int actual=0;
+        try { call(); } catch (const VbaRuntimeError& error) { actual=error.number; }
+        assert(actual==expected);
+    };
+    expectError(450,[&] { withTemplate->member("ValidationRule",{VbaValue::integer(0)}); });
+    expectError(438,[&] { label->member("ValidationText",{}); });
+    expectError(383,[&] { overridden->assign("ValidationRule",VbaValue::string("> 0")); });
+    assert(overridden->member("ValidationRule",{}).asText()=="< 100");
+    assert(form.close());
+}
+}
+
 void exerciseNativeProperties(QSqlDatabase db){using namespace linaccess;
+    exerciseControlValidationMetadata(db);
     const QByteArray layout="Begin Form\nBegin Section\nEnd\nEnd\n";
     AccessFormPreview form("Property technical fixture",layout,QByteArray::fromStdString(nativePropertyFixture),db);form.show();QApplication::processEvents();
     auto object=makePreviewFormObject(form);std::vector<VbaValue> arguments;

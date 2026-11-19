@@ -189,6 +189,11 @@ public:
             if (!args.empty()) throw linaccess::VbaRuntimeError(450,"Unexpected DefaultValue arguments");
             return linaccess::VbaValue::string(bytes(defaultDefinition().defaultValue));
         }
+        if (key=="validationrule" || key=="validationtext") {
+            if (!args.empty()) throw linaccess::VbaRuntimeError(450,"Validation properties take no arguments");
+            const auto& definition=validationDefinition();
+            return linaccess::VbaValue::string(bytes(key=="validationrule" ? definition.validationRule : definition.validationText));
+        }
         if (fontProperty(key)) {
             if (!args.empty()) throw linaccess::VbaRuntimeError(450,"Unexpected font property arguments");
             (void)fontDefinition();
@@ -488,6 +493,10 @@ public:
             (void)listCombo();
             throw linaccess::VbaRuntimeError(383,"ComboBox list property is read-only");
         }
+        if (key=="validationrule" || key=="validationtext") {
+            (void)validationDefinition();
+            throw linaccess::VbaRuntimeError(383,"Imported control validation properties are read-only");
+        }
         if (key=="defaultvalue") {
             auto& definition=defaultDefinition();
             const auto scalar=linaccess::scalarVbaValue(value);
@@ -743,6 +752,17 @@ private:
         if (checked().layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"DefaultValue requires a form control");
         for(auto& definition:checked().layout_.controls) if(definition.name.compare(name_,Qt::CaseInsensitive)==0) {
             if (!AccessFormPreview::supportsControlDefault(definition)) throw linaccess::VbaRuntimeError(438,"Control has no native DefaultValue adapter");
+            return definition;
+        }
+        throw linaccess::VbaRuntimeError(2465,"Control unavailable");
+    }
+    const linaccess::AccessVisualControl& validationDefinition() const {
+        const auto& layout=checked().layout_;
+        if (layout.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"Validation properties require a form control");
+        static const QStringList supportedTypes{"TextBox","ComboBox","ListBox","CheckBox","OptionButton","OptionGroup","ToggleButton"};
+        for (const auto& definition:layout.controls) {
+            if (definition.name.compare(name_,Qt::CaseInsensitive)!=0) continue;
+            if (!supportedTypes.contains(definition.type)) throw linaccess::VbaRuntimeError(438,"Control has no validation properties");
             return definition;
         }
         throw linaccess::VbaRuntimeError(2465,"Control unavailable");

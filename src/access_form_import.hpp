@@ -37,6 +37,8 @@ struct AccessVisualControl {
     QString tag;
     QString controlSource;
     QString defaultValue;
+    QString validationRule;
+    QString validationText;
     QString inputMask;
     QString format;
     AccessControlFont font;
