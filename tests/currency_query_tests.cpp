@@ -47,7 +47,9 @@ End Function
         AccessFormPreview form("currency_types",layout,code,db); form.show(); QApplication::setActiveWindow(&form); QApplication::processEvents();
         auto model=makePreviewFormObject(form); std::vector<VbaValue> none;
         assert(form.executeProcedure("CaptureReferences",none).status==linaccess::VbaExecutionStatus::Completed);
-        const auto numeric=form.executeProcedure("NumericReference",none); assert(numeric.status==linaccess::VbaExecutionStatus::Completed && numeric.typedReturnValue->number==1);
+        const auto numeric=form.executeProcedure("NumericReference",none);
+        assert(numeric.status==linaccess::VbaExecutionStatus::Completed && numeric.typedReturnValue);
+        assert(numeric.typedReturnValue->kind==VbaValue::Kind::Boolean && numeric.typedReturnValue->boolean);
         auto* editor=form.findChild<QLineEdit*>("access-control-amount"); assert(editor); editor->setFocus(); editor->selectAll(); QTest::keyClicks(editor,"0.6");
         assert(form.executeProcedure("CaptureReferences",none).status==linaccess::VbaExecutionStatus::Completed && editor->text()=="0.6" && model->item("amount").currencyUnits==1000 && form.hasUnsavedChanges());
         model->assignItem("free",VbaValue::currency(5497558138879999LL)); assert(form.executeProcedure("CaptureFree",none).status==linaccess::VbaExecutionStatus::Completed);
