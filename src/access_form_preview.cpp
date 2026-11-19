@@ -182,7 +182,8 @@ void clearDefaultError(QWidget* widget) {
         widget->setToolTip(widget->property("la_default_tooltip").toString()); widget->setProperty("la_default_tooltip",QVariant{});
     }
 }
-using NativeMouseHandler=std::function<bool(QMouseEvent*,bool)>;
+enum class NativeMousePhase { Down, Up, Move };
+using NativeMouseHandler=std::function<bool(QMouseEvent*,NativeMousePhase)>;
 class AccessTextBox : public QLineEdit {
 public:
     using QLineEdit::QLineEdit;
@@ -193,7 +194,7 @@ protected:
         pressed_=event->button()==Qt::LeftButton;
         const QPointer<QLineEdit> alive(this); const auto callback=mouse;
         QLineEdit::mousePressEvent(event);
-        if(alive && callback && !callback(event,true) && alive) pressed_=false;
+        if(alive && callback && !callback(event,NativeMousePhase::Down) && alive) pressed_=false;
     }
     void mouseDoubleClickEvent(QMouseEvent* event) override {
         pressed_=false;
@@ -204,8 +205,14 @@ protected:
         pressed_=false;
         const auto callback=clicked; const auto released=mouse; const QPointer<QLineEdit> alive(this);
         QLineEdit::mouseReleaseEvent(event);
-        if(alive && released && !released(event,false)) return;
+        if(alive && released && !released(event,NativeMousePhase::Up)) return;
         if(alive && fire && callback) callback();
+    }
+    void mouseMoveEvent(QMouseEvent* event) override {
+        const QPointer<QLineEdit> alive(this);
+        const auto callback=hasMouseTracking() ? mouse : NativeMouseHandler{};
+        QLineEdit::mouseMoveEvent(event);
+        if(alive && callback) (void)callback(event,NativeMousePhase::Move);
     }
 private:
     bool pressed_{};
@@ -335,11 +342,11 @@ protected:
     void mousePressEvent(QMouseEvent* event) override {
         const QPointer<Button> alive(this); const auto callback=mouse; const bool doublePress=doublePress_;
         Button::mousePressEvent(event);
-        if(alive && !doublePress && callback && !callback(event,true) && alive) this->setDown(false);
+        if(alive && !doublePress && callback && !callback(event,NativeMousePhase::Down) && alive) this->setDown(false);
     }
     void mouseReleaseEvent(QMouseEvent* event) override {
         const QPointer<Button> alive(this); const auto callback=mouse;
-        if(callback && !callback(event,false)) { if(alive) this->setDown(false); return; }
+        if(callback && !callback(event,NativeMousePhase::Up)) { if(alive) this->setDown(false); return; }
         if(alive) Button::mouseReleaseEvent(event);
     }
     void mouseDoubleClickEvent(QMouseEvent* event) override {
@@ -1759,19 +1766,26 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
         applyTextAlignment(widget,control);
         widget->setObjectName("access-control-" + control.name);
         widget->setProperty("la_access_tag",control.tag);
-        if(!control.onMouseDown.isEmpty() || !control.onMouseUp.isEmpty()) {
-            NativeMouseHandler handler=[this,name=control.name,down=control.onMouseDown,up=control.onMouseUp](QMouseEvent* event,bool pressed) {
+        auto* mouseEditor=dynamic_cast<AccessTextBox*>(widget);
+        const auto mouseMoveBinding=mouseEditor && layout_.kind==linaccess::AccessDocumentKind::Form ? control.onMouseMove : QString{};
+        if(!control.onMouseDown.isEmpty() || !control.onMouseUp.isEmpty() || !mouseMoveBinding.isEmpty()) {
+            NativeMouseHandler handler=[this,name=control.name,down=control.onMouseDown,up=control.onMouseUp,move=mouseMoveBinding](QMouseEvent* event,NativeMousePhase phase) {
                     if(!opened_ || closed_ || openCancelled_ || loading_ || layout_.kind!=linaccess::AccessDocumentKind::Form) return false;
-                    const auto binding=pressed ? down : up;
+                    const bool moving=phase==NativeMousePhase::Move;
+                    const bool pressed=phase==NativeMousePhase::Down;
+                    const auto& binding=moving ? move : pressed ? down : up;
                     if(binding.isEmpty()) return true;
                     ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
-                    const QString suffix=pressed ? "MouseDown" : "MouseUp";
+                    const QString suffix=moving ? "MouseMove" : pressed ? "MouseDown" : "MouseUp";
                     linaccess::VbaExecutionResult result;
                     if(eventProcedure(binding)) {
-                        const auto button=event->button()==Qt::LeftButton ? 1 : event->button()==Qt::RightButton ? 2 : event->button()==Qt::MiddleButton ? 4 : 0;
+                        const auto buttons=moving ? event->buttons() : Qt::MouseButtons(event->button());
+                        constexpr auto supported=Qt::LeftButton|Qt::RightButton|Qt::MiddleButton;
+                        const int button=(buttons.testFlag(Qt::LeftButton) ? 1 : 0)
+                            | (buttons.testFlag(Qt::RightButton) ? 2 : 0) | (buttons.testFlag(Qt::MiddleButton) ? 4 : 0);
                         const int shift=(event->modifiers().testFlag(Qt::ShiftModifier) ? 1 : 0)
                             | (event->modifiers().testFlag(Qt::ControlModifier) ? 2 : 0) | (event->modifiers().testFlag(Qt::AltModifier) ? 4 : 0);
-                        if(!button) {
+                        if((buttons & ~supported) || (!moving && !button)) {
                             result.status=linaccess::VbaExecutionStatus::Unsupported; result.errorNumber=3251;
                             result.explanation="Mouse button mapping is unsupported";
                         } else {
@@ -1785,7 +1799,10 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
                     } else result=runControlBinding(name,suffix,binding);
                     return !failed(result) && !closed_ && !openCancelled_;
                 };
-            if(auto* editor=dynamic_cast<AccessTextBox*>(widget)) editor->mouse=handler;
+            if(mouseEditor) {
+                mouseEditor->mouse=std::move(handler);
+                if(!mouseMoveBinding.isEmpty()) mouseEditor->setMouseTracking(true);
+            }
             else if(control.optionGroupIndex<0) {
                 if(auto* button=dynamic_cast<AccessPushButton*>(widget)) button->mouse=std::move(handler);
                 else if(auto* checkbox=dynamic_cast<AccessCheckBox*>(widget)) checkbox->mouse=std::move(handler);

@@ -6,7 +6,7 @@ inline const QStringList& nativeFormMacroEvents() {
     static const QStringList events{"OnOpen","OnLoad","OnCurrent","OnActivate","OnDeactivate","OnUnload","OnClose","BeforeInsert","AfterInsert","BeforeUpdate","AfterUpdate","OnDirty","OnTimer"};return events;
 }
 inline const QStringList& nativeFieldMacroEvents() {
-    static const QStringList events{"OnClick","OnDblClick","OnChange","BeforeUpdate","AfterUpdate","OnMouseDown","OnMouseUp"};return events;
+    static const QStringList events{"OnClick","OnDblClick","OnChange","BeforeUpdate","AfterUpdate","OnMouseDown","OnMouseUp","OnMouseMove"};return events;
 }
 inline QMap<QString,QString> nativeEventOverrides(const QJsonValue& value,const QStringList& allowed) {
     if(value.isUndefined()) return {};

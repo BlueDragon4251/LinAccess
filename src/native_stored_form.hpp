@@ -128,7 +128,7 @@ inline NativeStoredForm nativeStoredForm(QString name,const QJsonObject& definit
              <<"            Width = "+QString::number(rectangle[2])<<"            Height = "+QString::number(rectangle[3])<<"            TabIndex = "+QString::number(index);
         if(const auto format=formats.value(field.toCaseFolded());!format.isUndefined()) {if(!format.isString()) throw VbaRuntimeError(5,"Invalid native form field Format");lines<<"            Format = "+quoted(format.toString());}
         const auto bindings=fieldEvents.value(field.toCaseFolded());
-        for(const auto* event:{"OnClick","OnChange","BeforeUpdate","AfterUpdate","OnDblClick","OnKeyDown","OnKeyPress","OnKeyUp","OnMouseDown","OnMouseUp"}) {
+        for(const auto* event:{"OnClick","OnChange","BeforeUpdate","AfterUpdate","OnDblClick","OnKeyDown","OnKeyPress","OnKeyUp","OnMouseDown","OnMouseUp","OnMouseMove"}) {
             const QString property=QString::fromLatin1(event);
             const auto procedure=property.startsWith("On") ? property.mid(2) : property;
             if(bindings.contains(property)) {if(!bindings.value(property).isEmpty()) lines<<"            "+property+" = "+quoted(bindings.value(property));}

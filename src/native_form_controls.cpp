@@ -148,8 +148,9 @@ NativeFormControls nativeFormControls(const QJsonValue& definition,const QString
         if(object.contains("text_align")) {const int alignment=integer("text_align",0,0);if(type!="TextBox" && type!="Label") throw VbaRuntimeError(3251,"Text alignment requires a TextBox or Label");if(alignment>3) throw VbaRuntimeError(3251,"Only general/left/center/right text alignment is implemented");lines<<"            TextAlign = "+QString::number(alignment);}
         const auto click=string("onclick");QMap<QString,QString> overrides;
         if(!click.isEmpty()) overrides=nativeEventOverrides(QJsonObject{{"OnClick",click}},nativeFieldMacroEvents());
-        for(const auto* event:{"OnClick","OnChange","BeforeUpdate","AfterUpdate","OnDblClick","OnKeyDown","OnKeyPress","OnKeyUp","OnMouseDown","OnMouseUp"}) {
+        for(const auto* event:{"OnClick","OnChange","BeforeUpdate","AfterUpdate","OnDblClick","OnKeyDown","OnKeyPress","OnKeyUp","OnMouseDown","OnMouseUp","OnMouseMove"}) {
             const QString property=QString::fromLatin1(event);const auto suffix=property.startsWith("On") ? property.mid(2) : property;
+            if(property=="OnMouseMove" && type!="TextBox") continue;
             if(overrides.contains(property)) lines<<"            "+property+" = "+quoted(overrides.value(property));
             else if(procedures.contains((name+"_"+suffix).toCaseFolded())) lines<<"            "+property+" = \"[Event Procedure]\"";
         }

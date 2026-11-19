@@ -70,6 +70,7 @@
 #include <QContextMenuEvent>
 #include <QInputDialog>
 #include <QMessageBox>
+#include <QMouseEvent>
 #include <QPointer>
 #include <QMenu>
 #include <QPushButton>
@@ -139,12 +140,93 @@ void testNativeBoundPrefixes(QSqlDatabase db) {
     assert(boundControls==2);
     assert(query.exec("DROP TABLE prefix_fields"));
 }
+
+void exerciseTextBoxMouseMove(QSqlDatabase db) {
+    using linaccess::AccessDocumentKind;
+    using linaccess::VbaExecutionStatus;
+    const QString code=R"VBA(Private Sub first_MouseMove(Button As Integer, Shift As Integer, X As Single, Y As Single)
+If VarType(Button)<>2 Or VarType(Shift)<>2 Or VarType(X)<>4 Or VarType(Y)<>4 Then Err.Raise 13
+If X=75 Then Err.Raise 5
+If X=90 Then
+    DoCmd.Close acForm,Me.Name
+Else
+    Me.Tag=CStr(Button) & ":" & CStr(Shift) & ":" & CStr(X) & ":" & CStr(Y)
+End If
+End Sub
+Private Function RememberMove()
+Me.Tag="expression"
+End Function
+Private Sub Extra_MouseMove(Button As Integer, Shift As Integer, X As Single, Y As Single)
+Me.Tag="extra"
+End Sub
+Private Sub Other_MouseMove(Button As Integer, Shift As Integer, X As Single, Y As Single)
+Me.Tag="unexpected"
+End Sub
+)VBA";
+    const auto stored=linaccess::nativeStoredForm("Mouse Move Form",{
+        {"table","native_designed_records"},
+        {"fields",QJsonArray{"first","second value"}},
+        {"field_events",QJsonObject{{"second value",QJsonObject{{"onmousemove","=RememberMove()"}}}}},
+        {"controls",QJsonArray{
+            QJsonObject{{"type","TextBox"},{"name","Extra"}},
+            QJsonObject{{"type","TextBox"},{"name","Silent"}},
+            QJsonObject{{"type","CommandButton"},{"name","Other"}}
+        }},
+        {"vba",code}
+    },db);
+    const auto imported=linaccess::parseAccessFormLayout(QString::fromUtf8(stored.layout));
+    QMap<QString,QString> bindings;
+    for(const auto& control:imported.controls) bindings.insert(control.name,control.onMouseMove);
+    assert(bindings.value("first")=="[Event Procedure]" && bindings.value("second value")=="=RememberMove()");
+    assert(bindings.value("Extra")=="[Event Procedure]" && bindings.value("Silent").isEmpty() && bindings.value("Other").isEmpty());
+
+    QPointer<AccessFormPreview> form=AccessFormPreview::showDocument(AccessDocumentKind::Form,stored.name,stored.layout,stored.code,db);
+    assert(form);
+    auto* first=form->findChild<QLineEdit*>("access-control-first");
+    auto* second=form->findChild<QLineEdit*>("access-control-second value");
+    auto* extra=form->findChild<QLineEdit*>("access-control-Extra");
+    auto* silent=form->findChild<QLineEdit*>("access-control-Silent");
+    auto* other=form->findChild<QPushButton*>("access-control-Other");
+    assert(first && first->hasMouseTracking() && second && second->hasMouseTracking());
+    assert(extra && extra->hasMouseTracking() && silent && other);
+    const auto move=[](QWidget* widget,QPointF position,Qt::MouseButtons buttons=Qt::NoButton,
+        Qt::KeyboardModifiers modifiers=Qt::NoModifier) {
+        QMouseEvent event(QEvent::MouseMove,position,QPointF(widget->mapToGlobal(position.toPoint())),Qt::NoButton,buttons,modifiers);
+        QApplication::sendEvent(widget,&event);
+    };
+    const auto root=makePreviewFormObject(*form);
+    const auto tag=[&] { return root->member("Tag",{}).asText(); };
+    const QString firstEvent="control:first:MouseMove";
+    assert(!form->eventResult(firstEvent));
+    move(first,{3.5,4});
+    assert(tag()=="0:0:52.5:60" && form->eventResult(firstEvent)->status==VbaExecutionStatus::Completed);
+    move(first,{4,3},Qt::LeftButton|Qt::RightButton|Qt::MiddleButton,Qt::ShiftModifier|Qt::ControlModifier|Qt::AltModifier);
+    assert(tag()=="7:7:60:45" && !form->hasUnsavedChanges() && first->text()=="before");
+    move(silent,{3,4},Qt::LeftButton);
+    move(other,{3,4},Qt::LeftButton);
+    assert(tag()=="7:7:60:45" && !form->eventResult("control:Silent:MouseMove") && !form->eventResult("control:Other:MouseMove"));
+    move(first,{4,3},Qt::ExtraButton1);
+    assert(form->eventResult(firstEvent)->status==VbaExecutionStatus::Unsupported && form->eventResult(firstEvent)->errorNumber==3251);
+    move(first,{5,3});
+    assert(form->eventResult(firstEvent)->status==VbaExecutionStatus::Error && form->eventResult(firstEvent)->errorNumber==5);
+    move(second,{3,4});
+    assert(tag()=="expression" && form->eventResult("control:second value:MouseMove")->status==VbaExecutionStatus::Completed);
+    move(extra,{3,4});
+    assert(tag()=="extra" && !form->hasUnsavedChanges());
+    move(first,{6,3});
+    assert(form && !form->isVisible() && form->eventResult(firstEvent)->status==VbaExecutionStatus::Completed);
+    assert(!AccessFormPreview::projectObjectLoaded(db,AccessDocumentKind::Form,stored.name));
+    disposeStoredFormEvents();
+    assert(!form);
+}
 }
 void exerciseStoredForm(MainWindow& window,QSqlDatabase db) {
     testNativeBoundPrefixes(db);
     QSqlQuery sql(db);
     assert(sql.exec("CREATE TABLE native_designed_records(id INTEGER PRIMARY KEY,first TEXT,\"second value\" TEXT)"));
     assert(sql.exec("INSERT INTO native_designed_records VALUES(1,'before','initial')"));
+    sql.finish();
+    exerciseTextBoxMouseMove(db);
     const QString module=R"VBA(Private state As Long
 Private mouseTrace As String
 Private heldOwner As Access.Form
