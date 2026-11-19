@@ -45,7 +45,7 @@ End Sub
 
     targetObject->assign("Tag",linaccess::VbaValue::string("cancel"));
     openFromPeerDuringClose(true);
-    assert(target.isVisible() && targetObject->member("Filter",{}).asText().isEmpty());
+    assert(target.isVisible() && targetObject->member("Filter",{}).asText().empty());
     assert(!targetObject->member("FilterOn",{}).truthy());
 
     targetObject->assign("Tag",linaccess::VbaValue::string("allow"));
