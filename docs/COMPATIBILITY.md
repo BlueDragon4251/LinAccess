@@ -6544,7 +6544,8 @@ DAO Entwürfe bei tatsächlicher Navigation: DAO_PENDING_NAVIGATION.md dokumenti
 Verwerfen von Edit-/AddNew-Wert-/Chunkpuffern erst nach erfolgreicher Zielprüfung
 für tatsächliche Positionswechsel in Move/Positions-/Bookmark-/Find-/Seek-Pfaden.
 Keine SQL-Speicherung, Klonentwürfe getrennt; Reentranz-/Versionsprüfungen erhalten.
-Ungültige Ziele/Suchkriterien erhalten Entwürfe. No-op-Navigation bleibt3219;
+Ungültige Ziele/Suchkriterien erhalten Entwürfe. Navigation auf die aktuelle Zeile
+folgt in den geprüften Fällen dem Access-2003-Trace in DAO_PENDING_NAVIGATION.md.
 Clone/Index/Requery/GetRows und vollständige Windows-Fehlerpriorität weiter offen.
 Formular-UI-Speicher-/Cancelereignisse unverändert. App/DAO gebaut; einmaliges
 bestehendes DAO-Bündel1/1 in3,67s bestanden, echte Tabellen/Dynaset Edit-/AddNew-

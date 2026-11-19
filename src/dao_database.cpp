@@ -823,7 +823,11 @@ public:
                 throw VbaRuntimeError(3021,"DAO: No current record");
             if(fromDeleted && distance==0) throw VbaRuntimeError(3021,"DAO: Deleted position has no current record");
             const auto destination=static_cast<qlonglong>(origin)+distance-(fromDeleted && distance>0 ? 1 : 0);
-            navigate(static_cast<qsizetype>(std::clamp<qlonglong>(destination,-1,data_->rows.size())),distance>0 ? 1 : distance<0 ? -1 : 0);
+            // Jet's bare Move 0 during dynaset AddNew exposes a canceled row with Null fields.
+            const bool bareDynasetAddMove=recordsetType_==2 && mode_==Mode::Add && args.size()==1 && distance==0;
+            navigate(static_cast<qsizetype>(std::clamp<qlonglong>(destination,-1,data_->rows.size())),
+                     bareDynasetAddMove ? SamePosition::Reject : SamePosition::Discard,
+                     distance>0 ? 1 : distance<0 ? -1 : 0);
             noMatch_=false;
             return {};
         }
@@ -909,7 +913,7 @@ public:
             if (key == "movelast") target=data_->rows.empty() ? 0 : data_->rows.size()-1;
             if (key == "movenext") {if(!deleted_) {require(position_<data_->rows.size(),"DAO: Already at EOF");++target;}}
             if (key == "moveprevious") {if(!deleted_) require(position_>=0 && !data_->rows.empty(),"DAO: Already at BOF");--target;}
-            navigate(target,key=="movenext" ? 1 : key=="moveprevious" ? -1 : 0);
+            navigate(target,SamePosition::Discard,key=="movenext" ? 1 : key=="moveprevious" ? -1 : 0);
             noMatch_=false;
             return {};
         }
@@ -1008,13 +1012,14 @@ public:
             if(scalar.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Invalid Null position");
             const auto position=sqlFieldValue(scalar,"INTEGER4").toLongLong();
             if(position<0 || position>=data_->rows.size()) throw VbaRuntimeError(3021,"DAO: Position outside populated recordset");
-            navigate(static_cast<qsizetype>(position)); noMatch_=false; return;
+            navigate(static_cast<qsizetype>(position),recordsetType_==2 ? SamePosition::Discard : SamePosition::Reject);
+            noMatch_=false;return;
         }
         if (lower(name)=="editmode" || lower(name)=="updatable" || lower(name)=="lastmodified")
             throw VbaRuntimeError(438,"DAO: Recordset metadata is read-only");
         if (lower(name)=="bookmark") {
             if (closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");
-            const auto target=bookmarkPosition(value);navigate(target);noMatch_=false;return;
+            const auto target=bookmarkPosition(value);navigate(target,SamePosition::Discard);noMatch_=false;return;
         }
         set(text(name), value);
     }
@@ -1184,6 +1189,7 @@ private:
         data_->cursors.insert(this);
     }
     enum class Mode { Browse, Edit, Add };
+    enum class SamePosition { Reject, Discard };
     int column(const QString& name) const {
         for (int i = 0; i < data_->columns.size(); ++i)
             if (data_->columns[i].compare(name, Qt::CaseInsensitive) == 0) return i;
@@ -1192,10 +1198,11 @@ private:
     QString physicalField(const QString& name) const {return queryBased_ ? queryProjection_.value(column(name)) : name;}
     QString queryPredicate() const {return queryWhere_.isEmpty() ? QString{} : " AND ("+queryWhere_+")";}
     void current() const { if (deleted_ || position_<0 || position_>=data_->rows.size()) throw VbaRuntimeError(3021,"DAO: No current record"); }
-    void navigate(qsizetype target,int emptyDirection=0) {
+    void navigate(qsizetype target,SamePosition samePosition=SamePosition::Reject,int emptyDirection=0) {
         checkTransaction();if(closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");
         if(mode_!=Mode::Browse) {
-            if(target==position_ && !deleted_) throw VbaRuntimeError(3219,"DAO: Pending no-op navigation remains unvalidated");
+            if(target==position_ && !deleted_ && (samePosition==SamePosition::Reject || target<0 || target>=data_->rows.size()))
+                throw VbaRuntimeError(3219,"DAO: Pending edit prevents this same-position movement");
             pending_.clear();changed_.clear();chunkFields_.clear();mode_=Mode::Browse;
         }
         deleted_.reset();emptyBoundary_=data_->rows.empty() ? emptyDirection : 0;position_=target;
@@ -1253,7 +1260,10 @@ private:
             if (mode_!=pendingMode || data_->revision!=revision) throw VbaRuntimeError(3219,"DAO: Recordset changed during find");
             if (!fetched) fail();
             const bool match=query.value(0).toInt()!=0; query.finish();
-            if (match) { navigate(candidate); noMatch_=false; return; }
+            if (match) {
+                navigate(candidate,recordsetType_==2 ? SamePosition::Discard : SamePosition::Reject);
+                noMatch_=false;return;
+            }
         }
         navigate(backwards ? -1 : data_->rows.size()); noMatch_=true;
     }

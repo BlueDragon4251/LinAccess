@@ -87,7 +87,9 @@ void testDaoCursors() {
     sibling->assign("Bookmark",third);sibling->member("Edit",{});
     find(sibling,"FindFirst","id=1");assert(sibling->member("EditMode",{}).asNumber()==0 && sibling->item("id").asNumber()==1);
     sibling->assign("Bookmark",third);sibling->member("Edit",{});
-    expect(3219,[&] { sibling->assign("Bookmark",third); });
+    sibling->assign("Bookmark",third);
+    assert(sibling->member("EditMode",{}).asNumber()==0 && sibling->item("id").asNumber()==3);
+    sibling->member("Edit",{});
     sibling->assignItem("label",VbaValue::string("updated")); sibling->member("Update",{});
     assert(sibling->member("EditMode",{}).asNumber()==0);
     assert(source->item("id").asNumber()==3 && source->item("label").asText()=="updated");
@@ -157,6 +159,44 @@ void testDaoCursors() {
         discard([&] {rows->assign("AbsolutePosition",VbaValue::longInteger(4));},9);
         discard([&] {rows->assign("Bookmark",last);},9);
         discard([&] {find(rows,"FindFirst","id=9");},9);
+        const auto discardAtCurrent=[&](const std::function<void()>& movement,bool atLast=false,bool allowAdd=true) {
+            for(const auto* operation:{"Edit","AddNew"}) {
+                const bool adding=std::string_view(operation)=="AddNew";
+                rows->member(atLast ? "MoveLast" : "MoveFirst",{});
+                const auto bookmark=rows->member("Bookmark",{}).bytes;
+                const auto originalId=rows->item("id").asNumber();
+                const auto originalValue=rows->item("value");
+                rows->member(operation,{});
+                if(adding) rows->assignItem("id",VbaValue::longInteger(99));
+                rows->assignItem("value",VbaValue::longInteger(999));
+                if(adding && !allowAdd) {
+                    expect(3219,movement);
+                    assert(rows->member("EditMode",{}).asNumber()==2 && rows->item("value").asNumber()==999);
+                    rows->member("CancelUpdate",{});
+                    continue;
+                }
+                movement();
+                assert(rows->member("EditMode",{}).asNumber()==0);
+                assert(rows->member("Bookmark",{}).bytes==bookmark && rows->item("id").asNumber()==originalId);
+                const auto storedValue=rows->item("value");
+                assert(storedValue.kind==originalValue.kind && !rows->member("NoMatch",{}).truthy());
+                if(storedValue.kind!=VbaValue::Kind::Null) assert(storedValue.asNumber()==originalValue.asNumber());
+            }
+        };
+        const auto zero=VbaValue::longInteger(0);
+        rows->member("MoveFirst",{});
+        const auto first=rows->member("Bookmark",{});
+        discardAtCurrent([&] {rows->member("Move",{zero});},false,mode==1);
+        discardAtCurrent([&] {rows->member("Move",{zero,first});});
+        discardAtCurrent([&] {rows->member("Move",{VbaValue::longInteger(-4),last});});
+        discardAtCurrent([&] {rows->assign("Bookmark",first);});
+        discardAtCurrent([&] {rows->member("MoveFirst",{});});
+        discardAtCurrent([&] {rows->member("MoveLast",{});},true);
+        if(mode==2) {
+            discardAtCurrent([&] {rows->assign("AbsolutePosition",zero);});
+            discardAtCurrent([&] {find(rows,"FindFirst","id=1");});
+            discardAtCurrent([&] {find(rows,"FindLast","id=1");});
+        }
         if(mode==1) {rows->assign("Index",VbaValue::string(""));} // No guessed physical index name.
         rows->member("MoveFirst",{});rows->member("Edit",{});rows->assignItem("value",VbaValue::longInteger(777));
         expect(3021,[&] {rows->assign("AbsolutePosition",VbaValue::longInteger(100));});
