@@ -6,6 +6,7 @@
 #include <QApplication>
 #include <QCryptographicHash>
 #include <QFile>
+#include <QFileDialog>
 #include <QFileInfo>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -54,11 +55,15 @@ AccessInspector::AccessInspector(QString sourceFile, QSqlDatabase projectDb, QWi
     tableLayout->addLayout(row, 1);
     auto* buttons = new QHBoxLayout();
     auto* previewButton = new QPushButton("Tabelle ansehen", tableTab);
+    extractPackageButton_ = new QPushButton("OLE-Paket speichern …", tableTab);
+    extractPackageButton_->setEnabled(false);
+    extractPackageButton_->setToolTip("Wählen Sie eine Binärzelle mit einem eingebetteten OLE-Paket aus.");
     importButton_ = new QPushButton("Typisierte Kopie ins Projekt importieren", tableTab);
     auto* importAllButton = new QPushButton("Alle Tabellen in Projektkopie übernehmen", tableTab);
     importButton_->setEnabled(false);
     importAllButton->setEnabled(projectDb_.isOpen());
     buttons->addWidget(previewButton);
+    buttons->addWidget(extractPackageButton_);
     buttons->addWidget(importButton_);
     buttons->addWidget(importAllButton);
     tableLayout->addLayout(buttons);
@@ -83,13 +88,17 @@ AccessInspector::AccessInspector(QString sourceFile, QSqlDatabase projectDb, QWi
     status_->setMaximumHeight(150);
     status_->setHtml(
         "<b>Kompatibilität:</b> Datentypen und NULLs werden beim Tabellenimport nach Möglichkeit erhalten. "
-        "Primärschlüssel, exportierte Indizes, literale Tabellen-Standardwerte und bestätigte Textlängen werden übernommen; der Gesamtimport erhält auch Beziehungen. Rohbinärbytes können begrenzt kopiert werden; vollständige Standardausdrücke, OLE-Anzeige und Originalformat-Schreiben fehlen. "
+        "Primärschlüssel, exportierte Indizes, literale Tabellen-Standardwerte und bestätigte Textlängen werden übernommen; der Gesamtimport erhält auch Beziehungen. Rohbinärbytes können begrenzt kopiert werden. Aus unterstützten eingebetteten OLE-Paketen lassen sich Dateien speichern. Vollständige Standardausdrücke, OLE-Anzeige und Originalformat-Schreiben fehlen. "
         "Der Katalog zeigt Objektnamen und SQL, <b>nicht</b> VBA-Code oder GUI-Layouts. "
         "Importierte Katalogeinträge sind <b>metadata_only</b> und nicht ausführbar. "
         "Die Access-Originaldatei bleibt unverändert.");
     outer->addWidget(status_);
     connect(previewButton, &QPushButton::clicked, this, &AccessInspector::previewTable);
     connect(tables_, &QListWidget::itemDoubleClicked, this, [this] { previewTable(); });
+    connect(tables_, &QListWidget::currentItemChanged, this, &AccessInspector::updatePackageSelection);
+    connect(preview_, &QTableWidget::currentItemChanged, this, &AccessInspector::updatePackageSelection);
+    connect(preview_, &QTableWidget::itemSelectionChanged, this, &AccessInspector::updatePackageSelection);
+    connect(extractPackageButton_, &QPushButton::clicked, this, &AccessInspector::extractPackage);
     connect(importButton_, &QPushButton::clicked, this, &AccessInspector::importTable);
     connect(importAllButton, &QPushButton::clicked, this, &AccessInspector::importAllTables);
     connect(objects_, &QListWidget::currentRowChanged, this, [this] { previewObject(); });
@@ -138,6 +147,7 @@ void AccessInspector::loadTables() {
 
 void AccessInspector::previewTable() {
     if (!tables_->currentItem()) return;
+    preview_->setRowCount(0);
     selectedTable_ = tables_->currentItem()->text();
     try {
         // The control-character marker is different from an empty text field;
@@ -160,10 +170,16 @@ void AccessInspector::previewTable() {
         for (std::size_t row = 0; row < shown; ++row) {
             const auto& cells = csvRows_[row + 1];
             for (std::size_t col = 0; col < std::min(header.size(), cells.size()); ++col) {
-                const bool null=!cells[col].quoted && cells[col].value=="\x1e";
-                const auto text=null ? QStringLiteral("<NULL>") : schema.columns[static_cast<int>(col)].sqliteType=="BLOB"
+                const bool null = !cells[col].quoted && cells[col].value == "\x1e";
+                const bool binary = !null && schema.columns[static_cast<int>(col)].sqliteType == "BLOB";
+                const auto text = null ? QStringLiteral("<NULL>") : binary
                     ? QString("<Binärdaten: %1 Bytes>").arg(linaccess::decodeMdbBinaryHex(cells[col].value).size()) : toQString(cells[col].value);
-                preview_->setItem(static_cast<int>(row),static_cast<int>(col),new QTableWidgetItem(text));
+                auto* item = new QTableWidgetItem(text);
+                if (binary) {
+                    item->setData(Qt::UserRole, true);
+                    item->setFlags(item->flags() & ~Qt::ItemIsEditable);
+                }
+                preview_->setItem(static_cast<int>(row), static_cast<int>(col), item);
             }
         }
         importButton_->setEnabled(projectDb_.isOpen());
@@ -171,9 +187,50 @@ void AccessInspector::previewTable() {
                         + QString::number(csvRows_.size() - 1) + " Datenzeilen im CSV-Export; bis zu 200 sichtbar.");
     } catch (const std::exception& exc) {
         csvRows_.clear();
+        preview_->setRowCount(0);
         importButton_->setEnabled(false);
         QMessageBox::critical(this, "Access-Export fehlgeschlagen", QString::fromUtf8(exc.what()));
     }
+}
+
+void AccessInspector::updatePackageSelection() {
+    selectedPackage_.reset();
+    const auto* item = preview_->currentItem();
+    const auto* table = tables_->currentItem();
+    if (item && item->isSelected() && item->data(Qt::UserRole).toBool()
+        && table && table->text() == selectedTable_) {
+        const auto row = static_cast<std::size_t>(item->row()) + 1;
+        const auto column = static_cast<std::size_t>(item->column());
+        if (row < csvRows_.size() && column < csvRows_[row].size()) {
+            selectedPackage_ = linaccess::extractAccessOlePackage(
+                linaccess::decodeMdbBinaryHex(csvRows_[row][column].value));
+        }
+    }
+    extractPackageButton_->setEnabled(selectedPackage_.has_value());
+}
+
+void AccessInspector::extractPackage() {
+    if (!selectedPackage_) return;
+    const auto payload = selectedPackage_->payload;
+    const auto destination = QFileDialog::getSaveFileName(
+        this, "OLE-Paket als neue Datei speichern", {}, "Alle Dateien (*)", nullptr,
+        QFileDialog::DontConfirmOverwrite);
+    if (destination.isEmpty()) return;
+
+    QFile file(destination);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::NewOnly)) {
+        QMessageBox::warning(this, "OLE-Paket konnte nicht gespeichert werden", file.errorString());
+        return;
+    }
+    if (file.write(payload) != payload.size() || !file.flush()) {
+        auto error = file.errorString();
+        if (!file.remove())
+            error += "\nDie unvollständige Datei konnte nicht entfernt werden.";
+        QMessageBox::warning(this, "OLE-Paket konnte nicht gespeichert werden", error);
+        return;
+    }
+    file.close();
+    status_->append("OLE-Paket gespeichert: " + destination.toHtmlEscaped());
 }
 
 void AccessInspector::importTable() {

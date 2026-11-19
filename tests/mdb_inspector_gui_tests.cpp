@@ -10,7 +10,9 @@
 #include <QTimer>
 #include <QTableWidget>
 #include <QFile>
+#include <QFileDialog>
 #include <QFileInfo>
+#include <QLineEdit>
 #include <QDir>
 #include <QCryptographicHash>
 
@@ -19,6 +21,109 @@
 #endif
 #include <cassert>
 #include <iostream>
+
+namespace {
+
+QByteArray readFile(const QString& path) {
+    QFile file(path);
+    assert(file.open(QIODevice::ReadOnly));
+    return file.readAll();
+}
+
+void verifyOlePackageExtraction(const QString& reference, const QString& outputDirectory,
+                                QSqlDatabase db) {
+    const auto sourceHash = QCryptographicHash::hash(readFile(reference), QCryptographicHash::Sha256);
+    AccessInspector inspector(reference, db);
+    inspector.show();
+    QApplication::processEvents();
+
+    auto* grid = inspector.findChild<QTableWidget*>();
+    QPushButton* preview = nullptr;
+    QPushButton* extract = nullptr;
+    for (auto* button : inspector.findChildren<QPushButton*>()) {
+        if (button->text() == "Tabelle ansehen") preview = button;
+        if (button->text().startsWith("OLE-Paket speichern")) extract = button;
+    }
+    assert(grid && preview && extract && !extract->isEnabled());
+    for (auto* list : inspector.findChildren<QListWidget*>()) {
+        const auto matches = list->findItems("ole_package_probe", Qt::MatchExactly);
+        if (!matches.isEmpty()) list->setCurrentItem(matches.front());
+    }
+    preview->click();
+    assert(grid->rowCount() == 3 && grid->columnCount() == 2);
+
+    const auto chooseDestination = [&](const QString& destination, bool expectFailure = false) {
+        bool sawDialog = false;
+        bool sawWarning = false;
+        QTimer::singleShot(0, &inspector, [&] {
+            auto* picker = inspector.findChild<QFileDialog*>();
+            assert(picker && picker->isVisible());
+            const auto* nameEdit = picker->findChild<QLineEdit*>("fileNameEdit");
+            assert(nameEdit && nameEdit->text().isEmpty());
+            sawDialog = true;
+            if (destination.isEmpty()) {
+                picker->reject();
+                return;
+            }
+            const QFileInfo target(destination);
+            picker->setDirectory(target.absolutePath());
+            picker->selectFile(target.fileName());
+            static_cast<QDialog*>(picker)->accept();
+            if (expectFailure) {
+                QTimer::singleShot(0, &inspector, [&] {
+                    auto* warning = inspector.findChild<QMessageBox*>();
+                    if (warning && warning->isVisible()) {
+                        sawWarning = warning->icon() == QMessageBox::Warning;
+                        warning->button(QMessageBox::Ok)->click();
+                    }
+                });
+            }
+        });
+        extract->click();
+        assert(sawDialog && sawWarning == expectFailure);
+    };
+
+    grid->setCurrentCell(0, 0);
+    assert(!extract->isEnabled());
+    const QDir fixtureDirectory = QFileInfo(reference).dir();
+    const QDir output(outputDirectory);
+    int supportedRow = -1;
+    int linkedRow = -1;
+    for (int row = 0; row < grid->rowCount(); ++row) {
+        const int id = grid->item(row, 0)->text().toInt();
+        assert(id >= 1 && id <= 3);
+        grid->setCurrentCell(row, 1);
+        assert(extract->isEnabled() == (id != 3));
+        if (id == 3) {
+            linkedRow = row;
+            continue;
+        }
+        supportedRow = row;
+        const auto destination = output.filePath(QString("chosen-package-%1.bin").arg(id));
+        chooseDestination({});
+        assert(!QFileInfo::exists(destination));
+        chooseDestination(destination);
+        assert(readFile(destination) == readFile(fixtureDirectory.filePath(
+            QString("ole-content-%1.bin").arg(id))));
+        grid->clearSelection();
+        assert(!extract->isEnabled());
+    }
+
+    assert(supportedRow >= 0 && linkedRow >= 0);
+    grid->setCurrentCell(supportedRow, 1);
+    assert(extract->isEnabled());
+    chooseDestination(reference, true);
+    assert(QCryptographicHash::hash(readFile(reference), QCryptographicHash::Sha256) == sourceHash);
+    grid->setCurrentCell(linkedRow, 1);
+    assert(!extract->isEnabled());
+    grid->setCurrentCell(supportedRow, 1);
+    assert(extract->isEnabled());
+    preview->click();
+    assert(!extract->isEnabled());
+    std::cout << "Jet4 OLE inspector verified selection, cancel, exact bytes and overwrite refusal\n";
+}
+
+}
 
 int main(int argc, char** argv) {
     QApplication app(argc, argv);
@@ -96,17 +201,20 @@ int main(int argc, char** argv) {
         for(auto* list:binary.findChildren<QListWidget*>()) {
             const auto matches=list->findItems("binary_probe",Qt::MatchExactly); if(!matches.isEmpty()) list->setCurrentItem(matches.front());
         }
-        QPushButton *preview=nullptr,*copy=nullptr;
+        QPushButton *preview=nullptr,*copy=nullptr,*extract=nullptr;
         for(auto* button:binary.findChildren<QPushButton*>()) {
             if(button->text()=="Tabelle ansehen") preview=button;
             if(button->text().contains("Typisierte Kopie")) copy=button;
+            if(button->text().startsWith("OLE-Paket speichern")) extract=button;
         }
-        assert(preview && copy); preview->click();
+        assert(preview && copy && extract); preview->click();
         auto* grid=binary.findChild<QTableWidget*>(); assert(grid && grid->rowCount()==4 && grid->columnCount()==2);
         const QMap<int,int> sizes{{1,7},{3,4097},{4,65539}};
         for(int row=0;row<grid->rowCount();++row) {
             const int id=grid->item(row,0)->text().toInt();
             assert(grid->item(row,1)->text()==(id==2 ? QString("<NULL>") : QString("<Binärdaten: %1 Bytes>").arg(sizes.value(id))));
+            grid->setCurrentCell(row, 1);
+            assert(!extract->isEnabled());
         }
         assert(copy->isEnabled()); copy->click();
         assert(check.exec("SELECT id,payload,typeof(payload) FROM binary_probe ORDER BY id")); int copied=0;
@@ -121,5 +229,7 @@ int main(int argc, char** argv) {
         }
         check.finish(); assert(copied==4 && digest()==before); binary.close();
     }
+    const auto oleReference = qEnvironmentVariable("LINACCESS_JET_OLE_PACKAGE_REFERENCE");
+    if (!oleReference.isEmpty()) verifyOlePackageExtraction(oleReference, temp.path(), db);
     std::cout << "Real MDB inspector GUI test passed (11 catalog objects)\n";
 }
