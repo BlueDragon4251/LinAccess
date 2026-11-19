@@ -32,7 +32,6 @@ real-layout runner. It exercises Qt text entry/focus commits, persisted values,
 event trace order, duplicate bindings, cancelled controls/forms/Dirty/Open/Unload,
 new-record identity and a handler deliberately lacking an OnClick binding.
 Existing original keypad and DAO button regressions continue to run separately.
-This is not an instrumented Microsoft Access reference trace.
 
 Still open: complete BeforeInsert/AfterInsert/Delete sequences, key/mouse/timer
 semantics, full activation/focus variants, nested form/report events, editable joins, general property
@@ -81,3 +80,24 @@ bound mirrors also suppress Change. Actual record persistence is checked.
 Bounded focused Text/Value buffering and finite cascading Change are now tested
 (TEXT_VALUE_RUNTIME.md). LimitToList/NotInList and complete Access input/locale
 behavior remain open. See INSERT_EVENT_RUNTIME.md for pre-input timing limits.
+
+## Microsoft Access 2003 Form Resize reference
+
+Access 2003 reported version 11.0 (MSACCESS.EXE 11.0.8166). A hidden COM
+automation session opened fresh temporary DAO 3.6 Jet4 databases. Each
+contained a synthetic form, two synthetic records and VBA event procedures
+that logged their own invocation. The run used no Kassa data.
+
+- For an ordinary bound form, `DoCmd.OpenForm` completed Open → Load → Resize
+  → Activate → Current. This order held with AutoResize enabled and disabled.
+- `DoCmd.MoveSize` fired Resize once when the width, height or both dimensions
+  changed. Repeating the same dimensions and changing only the position
+  produced no Resize. Navigating to the second record logged Current alone.
+- For the popup form with AutoResize disabled, Open → Load → Resize → Current
+  completed without Activate in this hidden session. Closing the ordinary
+  form logged Unload → Deactivate → Close. The popup logged Unload → Close.
+
+The trace establishes ordering and counts for these two window modes under
+hidden COM automation. Initial client dimensions varied between configurations.
+Visible interactive dragging, maximized and minimized forms, other popup or
+modal configurations, and exact client geometry remain unverified.
