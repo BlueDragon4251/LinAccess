@@ -14,12 +14,27 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 # Jackcess 5.0.4 has no mandatory runtime dependencies for these MONEY fixtures.
-# Pin both the Maven Central URL and the downloaded bytes before executing Java.
+# Pin the Maven Central endpoints and verify the downloaded bytes before executing Java.
 jar="$scratch/jackcess-5.0.4.jar"
-curl --fail --silent --show-error --location --retry 3 --connect-timeout 30 --max-time 180 \
-    --proto '=https' --proto-redir '=https' \
-    https://repo.maven.apache.org/maven2/com/healthmarketscience/jackcess/jackcess/5.0.4/jackcess-5.0.4.jar \
-    --output "$jar"
+artifact='maven2/com/healthmarketscience/jackcess/jackcess/5.0.4/jackcess-5.0.4.jar'
+
+download_jackcess() {
+    curl --disable --fail --silent --show-error --connect-timeout 30 --max-time 180 \
+        --proto '=https' --output "$jar" --write-out '%{http_code}' "$1"
+}
+
+curl_status=0
+http_status=$(download_jackcess "https://repo.maven.apache.org/$artifact") || curl_status=$?
+if ((curl_status == 22)) && [[ $http_status == 429 ]]; then
+    echo 'Maven Central returned HTTP 429; trying repo1.maven.org for Jackcess.' >&2
+    http_status=$(download_jackcess "https://repo1.maven.org/$artifact")
+elif ((curl_status != 0)); then
+    exit "$curl_status"
+fi
+if [[ $http_status != 200 ]]; then
+    echo "Unexpected HTTP status $http_status while downloading Jackcess." >&2
+    exit 1
+fi
 if ! printf '%s  %s\n' '19a7494a56f439a57fda85c059b019b665802085cec5ae8186d1e028cc1bdfbc' "$jar" | sha256sum --check --status; then
     echo 'Jackcess SHA256 verification failed; refusing to generate fixtures.' >&2
     exit 1
