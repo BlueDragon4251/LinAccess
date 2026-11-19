@@ -44,16 +44,25 @@ QString quoted(const QString& value) {
     if(value.size()>65536 || !value.isValidUtf16() || value.contains(QChar(0)) || value.contains('\r') || value.contains('\n')) throw VbaRuntimeError(5,"Invalid native control property text");
     auto text=value;text.replace('"',"\"\"");return '"'+text+'"';
 }
-QString eventPrefix(QString name) {for(auto& c:name) if(!c.isLetterOrNumber() && c!='_') c='_';if(name.isEmpty() || name.front().isDigit()) name.prepend('_');return name.toCaseFolded();}
+}
+QString nativeFormEventPrefix(QString name) {
+    for(auto& character:name) if(!character.isLetterOrNumber() && character!='_') character='_';
+    if(name.isEmpty() || name.front().isDigit()) name.prepend('_');
+    return name;
 }
 NativeFormControls nativeFormControls(const QJsonValue& definition,const QStringList& fields,const QStringList& schema,const QSet<QString>& procedures) {
     NativeFormControls result;
     if(fields.size()>255) throw VbaRuntimeError(5,"Native form accepts at most 255 bound fields");
+    QSet<QString> used,prefixes;
+    for(const auto* name:{"btnNeu","btnSpeichern","btnAktion"}) {used.insert(QString::fromLatin1(name).toCaseFolded());prefixes.insert(QString::fromLatin1(name).toCaseFolded());}
+    for(const auto& name:fields) {
+        const auto prefix=nativeFormEventPrefix(name).toCaseFolded();
+        if(prefixes.contains(prefix)) throw VbaRuntimeError(5,"Duplicate or reserved native bound field event prefix");
+        used.insert(name.toCaseFolded());
+        prefixes.insert(prefix);
+    }
     if(definition.isUndefined()) return result;
     if(!definition.isArray() || definition.toArray().size()>128) throw VbaRuntimeError(5,"Native form accepts at most 128 additional controls");
-    QSet<QString> used,prefixes;
-    for(const auto& name:fields) {used.insert(name.toCaseFolded());prefixes.insert(eventPrefix(name));}
-    for(const auto* name:{"btnNeu","btnSpeichern","btnAktion"}) {used.insert(QString::fromLatin1(name).toCaseFolded());prefixes.insert(QString::fromLatin1(name).toCaseFolded());}
     int ordinal=fields.size();
     for(const auto& value:definition.toArray()) {
         if(!value.isObject()) throw VbaRuntimeError(5,"Native control requires an object");const auto object=value.toObject();
@@ -65,8 +74,9 @@ NativeFormControls nativeFormControls(const QJsonValue& definition,const QString
         const auto type=string("type"),name=string("name");
         static const QRegularExpression identifier("^[\\p{L}_][\\p{L}\\p{N}_]*$");
         if(!types.contains(type) || name.size()>64 || !identifier.match(name).hasMatch()) throw VbaRuntimeError(5,"Native control requires a supported type and identifier name");
-        if(used.contains(name.toCaseFolded()) || prefixes.contains(eventPrefix(name))) throw VbaRuntimeError(5,"Duplicate native control name or event prefix");
-        used.insert(name.toCaseFolded());prefixes.insert(eventPrefix(name));result.names.append(name);
+        const auto prefix=nativeFormEventPrefix(name).toCaseFolded();
+        if(used.contains(name.toCaseFolded()) || prefixes.contains(prefix)) throw VbaRuntimeError(5,"Duplicate native control name or event prefix");
+        used.insert(name.toCaseFolded());prefixes.insert(prefix);result.names.append(name);
         const auto source=string("control_source"),caption=string("caption"),rows=string("row_source"),rowType=string("row_source_type","Table/Query");
         const bool list=type=="ComboBox" || type=="ListBox";
         if((type=="Label" || type=="CommandButton") && !source.isEmpty()) throw VbaRuntimeError(5,"This control has no ControlSource");

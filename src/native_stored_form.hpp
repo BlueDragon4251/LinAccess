@@ -77,11 +77,6 @@ inline NativeStoredForm nativeStoredForm(QString name,const QJsonObject& definit
     for(const auto& procedure:analysis.procedures) procedures.insert(QString::fromStdString(procedure.name).toCaseFolded());
     const auto extra=nativeFormControls(definition.value("controls"),names,schema,procedures);
     for(const auto& name:extra.names) used.insert(name.toCaseFolded());
-    const auto prefix=[](QString value) {
-        for(auto& character:value) if(!character.isLetterOrNumber() && character!='_') character='_';
-        if(value.isEmpty() || value.front().isDigit()) value.prepend('_');
-        return value;
-    };
     const auto positions=definition.value("field_layout").toObject();
     QList<std::array<int,4>> geometry;
     int formWidth=6000,buttonTop=240+names.size()*420;
@@ -119,7 +114,7 @@ inline NativeStoredForm nativeStoredForm(QString name,const QJsonObject& definit
     if(definition.contains("field_formats") && !definition.value("field_formats").isObject()) throw VbaRuntimeError(5,"Invalid native field Format catalog");
     const auto formats=definition.value("field_formats").toObject();
     for(int index=0;index<names.size();++index) {
-        const auto& field=names[index]; const auto eventPrefix=prefix(field);
+        const auto& field=names[index]; const auto eventPrefix=nativeFormEventPrefix(field);
         const auto& rectangle=geometry[index]; const int top=rectangle[1];
         lines<<"        Begin Label"<<"            Name = "+quoted(unique("LinAccessLabel"))
              <<"            Caption = "+quoted(captions.value(field).toString(field))

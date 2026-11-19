@@ -98,8 +98,50 @@ struct sqlite3_value;
 
 namespace {
 void disposeStoredFormEvents() {QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete);QApplication::processEvents();}
+void testNativeBoundPrefixes(QSqlDatabase db) {
+    QSqlQuery query(db);
+    assert(query.exec(R"SQL(CREATE TABLE prefix_fields(
+        "Customer Name" TEXT, "customer-name" TEXT, "1st" TEXT, "_1st" TEXT,
+        "BTNneu" TEXT, "btnSpeichern" TEXT, "btnAktion" TEXT
+    ))SQL"));
+    const auto rejected=[&](const QJsonObject& definition) {
+        try { (void)linaccess::nativeStoredForm("AmbiguousPrefixes",definition,db); }
+        catch(const linaccess::VbaRuntimeError& error) {
+            assert(error.number==5);
+            return;
+        }
+        assert(false && "Expected native stored form to reject an event prefix collision");
+    };
+    rejected({{"table","prefix_fields"},{"fields",QJsonArray{"Customer Name","customer-name"}}});
+    rejected({{"table","prefix_fields"},{"fields",QJsonArray{"1st","_1st"}},{"controls",QJsonArray{}}});
+    for(const auto* name:{"BTNneu","btnSpeichern","btnAktion"})
+        rejected({{"table","prefix_fields"},{"fields",QJsonArray{QString::fromLatin1(name)}}});
+    rejected({{"table","prefix_fields"},{"fields",QJsonArray{"Customer Name"}},
+              {"controls",QJsonArray{QJsonObject{{"name","customer_name"},{"type","TextBox"}}}}});
+
+    const QJsonObject definition{{"table","prefix_fields"},{"fields",QJsonArray{"Customer Name","1st"}},
+                                 {"vba","Private Sub Customer_Name_Change()\nEnd Sub\n"}};
+    const auto native=linaccess::nativeStoredForm("DistinctPrefixes",definition,db);
+    const auto parsed=linaccess::parseAccessFormLayout(QString::fromUtf8(native.layout));
+    int boundControls=0;
+    for(const auto& control:parsed.controls) {
+        if(control.type!="TextBox") continue;
+        ++boundControls;
+        assert(control.name==control.controlSource);
+        if(control.name=="Customer Name") {
+            assert(control.eventProcPrefix=="Customer_Name");
+            assert(control.onChange=="[Event Procedure]");
+        } else {
+            assert(control.name=="1st");
+            assert(control.eventProcPrefix=="_1st");
+        }
+    }
+    assert(boundControls==2);
+    assert(query.exec("DROP TABLE prefix_fields"));
+}
 }
 void exerciseStoredForm(MainWindow& window,QSqlDatabase db) {
+    testNativeBoundPrefixes(db);
     QSqlQuery sql(db);
     assert(sql.exec("CREATE TABLE native_designed_records(id INTEGER PRIMARY KEY,first TEXT,\"second value\" TEXT)"));
     assert(sql.exec("INSERT INTO native_designed_records VALUES(1,'before','initial')"));
