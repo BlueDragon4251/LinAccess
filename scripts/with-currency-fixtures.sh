@@ -25,8 +25,8 @@ download_jackcess() {
 
 curl_status=0
 http_status=$(download_jackcess "https://repo.maven.apache.org/$artifact") || curl_status=$?
-if ((curl_status == 22)) && [[ $http_status == 429 ]]; then
-    echo 'Maven Central returned HTTP 429; trying repo1.maven.org for Jackcess.' >&2
+if ((curl_status == 22)) && [[ $http_status == 404 || $http_status == 429 ]]; then
+    echo "Maven Central returned HTTP $http_status; trying repo1.maven.org for Jackcess." >&2
     http_status=$(download_jackcess "https://repo1.maven.org/$artifact")
 elif ((curl_status != 0)); then
     exit "$curl_status"
