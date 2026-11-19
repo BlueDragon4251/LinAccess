@@ -632,8 +632,9 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
                 if (!match.hasMatch()) continue;
                 // Independently sum the actual projected records in C++; do
                 // not reuse the domain adapter's SQLite aggregate result.
-                const auto domain=db.driver()->escapeIdentifier(match.captured(2),QSqlDriver::TableName);
-                const auto source="SELECT "+match.captured(1)+" FROM "+domain+(match.captured(3).isEmpty() ? QString{} : " WHERE "+match.captured(3));
+                auto domain=match.captured(2);
+                domain.replace(']',"]]");
+                const auto source="SELECT "+match.captured(1)+" FROM ["+domain+"]"+(match.captured(3).isEmpty() ? QString{} : " WHERE "+match.captured(3));
                 const auto plan=linaccess::compileAccessQuery(source);
                 const auto rows=linaccess::executeAccessQueryPlan(db,plan,linaccess::bindAccessQueryParameters(plan,{}));
                 const bool exactCurrency=rows.columnTypes.value(0)=="CURRENCY_TICKS";
