@@ -30,6 +30,9 @@ VbaValue numericValue(const VbaValue& input,const QLocale& locale) {
 }
 struct CurrencyStyle {QString before,after;int digits{};};
 CurrencyStyle currencyStyle(const QLocale& locale) {
+    // Access 2003 prefixes the symbol in the observed Austrian German profile.
+    if(locale.language()==QLocale::German && locale.territory()==QLocale::Austria)
+        return {locale.currencySymbol()+QLatin1Char(' '),{},2};
     const auto sample=locale.toCurrencyString(1.0),one=locale.toString(1),zero=locale.toString(0);const int start=sample.indexOf(one);if(start<0 || one.isEmpty() || zero.isEmpty()) throw VbaRuntimeError(3251,"Locale currency pattern unsupported");int end=start+one.size(),digits=0;
     if(sample.mid(end).startsWith(locale.decimalPoint())) {end+=locale.decimalPoint().size();while(sample.mid(end).startsWith(zero)) {end+=zero.size();if(++digits>28) throw VbaRuntimeError(3251,"Locale currency precision unsupported");}}
     const auto spaces=[](QString text) {return text.replace(QChar(0x00a0),' ').replace(QChar(0x202f),' ');};
