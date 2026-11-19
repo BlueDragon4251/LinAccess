@@ -2,6 +2,7 @@
 #include "native_project_gui_extensions.hpp"
 #include "mainwindow.hpp"
 #include "native_standard_module_host.hpp"
+#include "native_macro_editor_draft.hpp"
 #include "native_macro_storage.hpp"
 #include "access_form_preview.hpp"
 #include "access_form_objects.hpp"
@@ -175,6 +176,94 @@ End)FORM";
     QTimer::singleShot(0,&window,[&] {auto* editor=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(editor && editor->objectName()=="native-module-editor");auto* text=editor->findChild<QPlainTextEdit*>("native-module-source");text->setPlainText("Public Sub NativeWindowDraft()\nEnd Sub");const auto draft=text->toPlainText();int failure=0;try {commands->member("Maximize",{});}catch(const linaccess::VbaRuntimeError& result) {failure=result.number;}assert(failure==3251 && editor->isWindowModified() && text->toPlainText()==draft);editor->reject();});action(window,"+ Modul")->trigger();window.showNormal();
 }
 
+void testNativeMoveSize(MainWindow& window,QSqlDatabase database) {
+    using linaccess::VbaValue;
+    const auto definition=[](const QJsonArray& arguments) {
+        return QJsonObject{{"version",1},{"actions",QJsonArray{
+            QJsonObject{{"action","MoveSize"},{"arguments",arguments}}}}};
+    };
+    const auto errorFrom=[](const auto& operation) {
+        try {operation();} catch(const linaccess::VbaRuntimeError& error) {return error.number;}
+        return 0;
+    };
+    const QJsonValue omitted(QJsonValue::Null);
+    assert(errorFrom([&] {linaccess::parseNativeMacro(definition({}));})==450);
+    assert(errorFrom([&] {linaccess::parseNativeMacro(definition({omitted,omitted,omitted,omitted}));})==450);
+    assert(errorFrom([&] {linaccess::parseNativeMacro(definition({15,15,15,15,15}));})==450);
+    assert(errorFrom([&] {linaccess::parseNativeMacro(definition({15.5}));})==13);
+    assert(errorFrom([&] {linaccess::parseNativeMacro(definition({"15"}));})==13);
+    assert(errorFrom([&] {linaccess::parseNativeMacro(definition({32768}));})==6);
+    assert(errorFrom([&] {linaccess::parseNativeMacro(definition({omitted,omitted,0}));})==5);
+
+    const auto full=definition({210,390,7500,5250});
+    const auto height=definition({omitted,omitted,omitted,6000});
+    const auto heightActions=height.value("actions").toArray();
+    assert(linaccess::nativeMacroDraftActions(linaccess::nativeMacroDraftRows(heightActions))==heightActions);
+    linaccess::storeNativeMacro(database,"ResizeProjectForm",full);
+    linaccess::storeNativeMacro(database,"ResizeFormHeight",height);
+    linaccess::storeNativeMacro(database,"ResizeFormTooSmall",definition({omitted,omitted,30}));
+    const auto persisted=linaccess::loadNativeMacro(database,"ResizeFormHeight");
+    assert(persisted.size()==1 && persisted.front().arguments.size()==4);
+    assert(persisted.front().arguments[0].kind==VbaValue::Kind::Missing && persisted.front().arguments[3].number==6000);
+
+    linaccess::NativeStandardModuleHost host(&window,database,[] {});
+    auto commands=host.applicationObject()->member("DoCmd",{}).object;
+    const auto run=[&](const auto& commandHost,const std::string& name) {
+        commandHost->member("RunMacro",{VbaValue::string(name)});
+    };
+    window.focusDatabaseWindow();
+    const auto projectGeometry=window.geometry();
+    assert(errorFrom([&] {run(commands,"ResizeProjectForm");})==2046);
+    assert(window.geometry()==projectGeometry);
+
+    QSqlQuery sql(database);
+    assert(sql.exec("CREATE TABLE native_move_size_rows(id INTEGER PRIMARY KEY,n INTEGER)"));
+    assert(sql.exec("INSERT INTO native_move_size_rows VALUES(1,10)"));
+    const QByteArray source=R"FORM(Begin Form
+RecordSource ="native_move_size_rows"
+Width =2400
+Begin Section
+Height =500
+Begin TextBox
+Name ="Value"
+ControlSource ="n"
+Width =1800
+Height =300
+End
+End
+End)FORM";
+    AccessFormPreview form("NativeMoveSizeForm",source,{},database,&window);
+    form.show();
+    QApplication::processEvents();
+    QApplication::setActiveWindow(&form);
+    auto formObject=makePreviewFormObject(form);
+    formObject->objectItem("Value").object->assign("Value",VbaValue::integer(71));
+    const auto origin=window.mapToGlobal(QPoint{});
+    run(commands,"ResizeProjectForm");
+    assert(form.geometry()==QRect(origin+QPoint(14,26),QSize(500,350)));
+    auto formCommands=makePreviewApplicationObject(form)->member("DoCmd",{}).object;
+    run(formCommands,"ResizeFormHeight");
+    const QRect expected(origin+QPoint(14,26),QSize(500,400));
+    assert(form.geometry()==expected && window.geometry()==projectGeometry);
+    form.setMinimumWidth(90);
+    assert(errorFrom([&] {run(formCommands,"ResizeFormTooSmall");})==5 && form.geometry()==expected);
+    assert(formObject->member("Dirty",{}).boolean);
+    assert(formObject->objectItem("Value").object->scalarValue().number==71);
+    assert(sql.exec("SELECT n FROM native_move_size_rows") && sql.next() && sql.value(0).toInt()==10);
+    sql.finish();
+
+    form.showMaximized();
+    QApplication::processEvents();
+    const auto maximized=form.geometry();
+    assert(errorFrom([&] {run(formCommands,"ResizeFormHeight");})==2046);
+    assert(form.isMaximized() && form.geometry()==maximized);
+    form.showNormal();
+    formObject->member("Undo",{});
+    assert(form.close());
+    window.focusDatabaseWindow();
+    assert(linaccess::loadNativeMacro(database,"ResizeFormHeight").front().arguments[3].number==6000);
+}
+
 void testNativeMacroContinuations(MainWindow& window,QSqlDatabase db) {
     using linaccess::VbaValue;QSqlQuery sql(db);assert(sql.exec("CREATE TABLE macro_continuation_gate(id INTEGER PRIMARY KEY,n INTEGER)"));assert(sql.exec("INSERT INTO macro_continuation_gate VALUES(1,0)"));assert(sql.exec("CREATE TABLE macro_continuation_audit(n INTEGER)"));
     sql.prepare("INSERT INTO _la_objects VALUES('module','MacroContinuationCode',?)");sql.addBindValue(QJsonDocument(QJsonObject{{"version",1},{"vba","Public Function MacroContinuationGate() As Boolean\nCurrentDb.Execute \"UPDATE macro_continuation_gate SET n=n+1 WHERE id=1\"\nMacroContinuationGate=(DLookup(\"n\",\"macro_continuation_gate\",\"id=1\") Mod 2)=1\nEnd Function"}}).toJson(QJsonDocument::Compact));assert(sql.exec());sql.finish();
@@ -338,6 +427,7 @@ void testNativeProjectGuiExtensions(MainWindow& window,QSqlDatabase db) {
     testNativeFormRecordFields(window,db);
     testNativeProjectFilters(window,db);
     testNativeWindowStateCommands(window,db);
+    testNativeMoveSize(window,db);
     testNativeMacroContinuations(window,db);
     testNativeSqlObjectProperties(window,db);
     testNativeModuleDebugger(window,db);

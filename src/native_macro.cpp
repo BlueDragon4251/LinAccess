@@ -6,7 +6,8 @@ const QVector<NativeMacroSignature>& nativeMacroSignatures() {
         {"Maximize",{},0},{"Minimize",{},0},{"Restore",{},0},{"ApplyFilter",{"text","text"},0},{"ShowAllRecords",{},0},{"RepaintObject",{"long","text"},0},{"SetValue",{"text","text"},2},{"GoToControl",{"text"},1},{"Hourglass",{"boolean"},1},{"SetWarnings",{"boolean"},1},{"FindRecord",{"text","long","boolean","long","boolean","long","boolean"},1},{"GoToRecord",{"long","text","long","long"},0},{"MessageBox",{"text","boolean","text","text"},1},{"RunSQL",{"text","boolean"},1},{"OpenTable",{"text","long","long"},1},
         {"OpenQuery",{"text","long","long"},1},{"OpenForm",{"text","long","text","text","long","long","text"},1},
         {"OpenReport",{"text","long","text","text","long","text"},1},{"OpenModule",{"text","text"},0},{"RunCommand",{"long"},1},
-        {"SelectObject",{"long","text","boolean"},2},{"Close",{"long","text","long"},0},{"DeleteObject",{"long","text"},2},{"Rename",{"text","long","text"},3},{"RunCode",{"text"},1},{"Echo",{"boolean","text"},1},{"Requery",{"text"},0},{"StopAllMacros",{},0},{"StopMacro",{},0},{"CancelEvent",{},0},{"RunMacro",{"text","long","text"},1}};
+        {"SelectObject",{"long","text","boolean"},2},{"Close",{"long","text","long"},0},{"DeleteObject",{"long","text"},2},{"Rename",{"text","long","text"},3},{"RunCode",{"text"},1},{"Echo",{"boolean","text"},1},{"Requery",{"text"},0},{"StopAllMacros",{},0},{"StopMacro",{},0},{"CancelEvent",{},0},{"RunMacro",{"text","long","text"},1},
+        {"MoveSize",{"long","long","long","long"},0}};
     return signatures;
 }
 bool nativeMacroNameValid(const QString& name) {
@@ -22,6 +23,26 @@ std::optional<QString> nativeMacroRepeatExpression(const QString& value) {
     if(expression.isEmpty()) return {};
     if(!validVbaExpression(expression.toUtf8().toStdString())) throw VbaRuntimeError(3251,"RunMacro repeat expression syntax unsupported");
     return expression;
+}
+
+std::array<std::optional<int>,4> nativeMacroMoveSizeArguments(const std::vector<VbaValue>& arguments) {
+    std::array<std::optional<int>,4> twips;
+    if(arguments.size()>twips.size()) throw VbaRuntimeError(450,"MoveSize accepts at most four arguments");
+    bool supplied=false;
+    for(std::size_t index=0;index<arguments.size();++index) {
+        const auto& argument=arguments[index];
+        if(argument.kind==VbaValue::Kind::Missing) continue;
+        if(argument.kind!=VbaValue::Kind::Number || !std::isfinite(argument.number)
+            || std::trunc(argument.number)!=argument.number)
+            throw VbaRuntimeError(13,"MoveSize requires whole twips");
+        if(argument.number<std::numeric_limits<qint16>::min() || argument.number>std::numeric_limits<qint16>::max())
+            throw VbaRuntimeError(6,"MoveSize exceeds the supported twips range");
+        if(index>=2 && argument.number<=0) throw VbaRuntimeError(5,"MoveSize dimensions must be positive");
+        twips[index]=static_cast<int>(argument.number);
+        supplied=true;
+    }
+    if(!supplied) throw VbaRuntimeError(450,"MoveSize requires at least one argument");
+    return twips;
 }
 
 QVector<NativeMacroAction> parseNativeMacro(const QJsonObject& definition,const QString& requestedGroup) {
@@ -86,6 +107,7 @@ QVector<NativeMacroAction> parseNativeMacro(const QJsonObject& definition,const 
                 && value.toDouble()>=std::numeric_limits<qint32>::min() && value.toDouble()<=std::numeric_limits<qint32>::max()) action.arguments.push_back(VbaValue::longInteger(static_cast<qint32>(value.toDouble())));
             else throw VbaRuntimeError(13,"Native macro action argument type invalid");
         }
+        if(action.name=="MoveSize") (void)nativeMacroMoveSizeArguments(action.arguments);
         if(action.name=="OpenModule") {
             const auto request=nativeModuleOpenArguments(action.arguments);
             if(request.name.size()>64 || request.procedure.size()>255) throw VbaRuntimeError(5,"Invalid OpenModule name");

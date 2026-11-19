@@ -25,6 +25,16 @@ This is native Linux window behavior. Full Access MDI propagation across all
 windows, popup rules, designer/VBE window control, exact geometry and a Windows
 window/event oracle remain open under F052/F088/F135; no catalog count changes.
 
+The native `MoveSize` macro action moves or resizes the active normal form
+window. It accepts up to four whole twip values for left, top, width and height.
+At least one is required. Omitted arguments keep the current value. The action
+uses signed 16-bit twips with positive dimensions, converts at 96 logical pixels
+per inch and positions the client rectangle relative to the project window.
+The macro persists its arguments. Moving a window leaves the form definition
+and any record draft untouched. The action requires a visible, active top-level
+form and reports error 2046 for unsupported window states, popup forms, modal
+contexts, other document types and positioning on Wayland.
+
 The native macro parser/catalog/load functions now compile once in linaccess_data
 instead of being defined in every including translation unit. Their signatures,
 validation, limits and runtime meaning are retained. The GUI extension checks use

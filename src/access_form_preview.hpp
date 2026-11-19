@@ -57,6 +57,7 @@ public:
     int renderedControls() const { return renderedControls_; }
     QString documentName() const { return formName_; }
     linaccess::AccessDocumentKind documentKind() const { return layout_.kind; }
+    bool isPopupDocument() const { return layout_.popup; }
     bool hasDataSource() const { return dataSourceAvailable_; }
     int dataSourceErrorNumber() const { return dataSourceErrorNumber_; }
     bool cancelledByOpen() const { return openCancelled_; }

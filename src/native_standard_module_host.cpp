@@ -127,6 +127,7 @@ public:
             enterNativeUiExecution();const auto leave=qScopeGuard([] {leaveNativeUiExecution();});
             runNativeMacro(db_,args,[&] {host.check();},[&](const QString& expression) {return host.eval(expression.toUtf8().toStdString());},[&](const NativeMacroAction& action) {
                 if(action.name=="MessageBox") nativeMacroMessageBox(owner_,action.arguments,[&](const QString& expression) {return host.eval(expression.toUtf8().toStdString());},[&] {host.check();});
+                else if(action.name=="MoveSize") nativeProjectMoveSize(db_,owner_,action.arguments);
                 else if(action.name=="SetValue") {QPointer<AccessFormPreview> active;for(const auto& document:nativeLoadedProjectDocuments(db_,owner_)) if(document && document==activePreviewDocument()) active=document;if(active) runNativeMacroSetValue(*active,action.arguments);else nativeMacroSetValue(host,action.arguments,[&] {host.check();});}
                 else if(action.name=="RunCode") {
                     const auto expression=action.arguments.front().asText();const auto target=nativeMacroFunctionName(QString::fromUtf8(expression));

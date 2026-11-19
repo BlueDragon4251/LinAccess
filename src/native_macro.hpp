@@ -12,6 +12,7 @@
 #include <QSqlError>
 #include <QStringList>
 #include <QVector>
+#include <array>
 #include <cmath>
 #include <limits>
 namespace linaccess {
@@ -21,6 +22,7 @@ const QVector<NativeMacroSignature>& nativeMacroSignatures();
 bool nativeMacroNameValid(const QString& name);
 bool nativeMacroCallNameValid(const QString& name);
 std::optional<QString> nativeMacroRepeatExpression(const QString& value);
+std::array<std::optional<int>,4> nativeMacroMoveSizeArguments(const std::vector<VbaValue>& arguments);
 QVector<NativeMacroAction> parseNativeMacro(const QJsonObject& definition,const QString& requestedGroup={});
 QString nativeMacroCatalogName(QSqlDatabase database,const QString& requested);
 QVector<NativeMacroAction> loadNativeMacro(QSqlDatabase database,const QString& name);

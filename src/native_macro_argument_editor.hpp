@@ -20,6 +20,7 @@ inline std::optional<NativeMacroRowDraft> editNativeMacroArguments(QWidget* pare
     const QStringList formLabels{"Formularname","Ansicht","Filtername","WhereCondition","Datenmodus","Fenstermodus","OpenArgs"};
     const QStringList setValueLabels{"Ziel (Steuerelement/Eigenschaft)","Ausdruck (ohne führendes =)"};
     const QStringList reportLabels{"Berichtsname","Ansicht","Filtername","WhereCondition","Fenstermodus","OpenArgs"};
+    const QStringList moveSizeLabels{"Abstand links in Twips","Abstand oben in Twips","Breite in Twips","Höhe in Twips"};
     for(int index=0;index<count;++index) {
         auto* row=new QWidget(&editor);auto* layout=new QHBoxLayout(row);layout->setContentsMargins(0,0,0,0);QWidget* input=nullptr;const auto type=signature->types.value(index);
         if(type!="long" && type!="boolean") {auto* text=new QPlainTextEdit(values.value(index),row);text->setMaximumHeight(85);input=text;}else input=new QLineEdit(values.value(index),row);
@@ -27,7 +28,7 @@ inline std::optional<NativeMacroRowDraft> editNativeMacroArguments(QWidget* pare
         auto* present=new QCheckBox("Übergeben",row);present->setObjectName("native-macro-argument-supplied-"+QString::number(index+1));const bool required=index<signature->required;present->setChecked(required || draft.presence.value(index,-1)==1 || (draft.presence.value(index,-1)==-1 && !values.value(index).isEmpty()));present->setEnabled(!required);input->setEnabled(present->isChecked());supplied.push_back(present);layout->addWidget(present);
         QObject::connect(present,&QCheckBox::toggled,input,&QWidget::setEnabled);
         if(auto* text=qobject_cast<QPlainTextEdit*>(input)) QObject::connect(text,&QPlainTextEdit::textChanged,present,[text,present] {if(!text->toPlainText().isEmpty()) present->setChecked(true);});else if(auto* line=qobject_cast<QLineEdit*>(input)) QObject::connect(line,&QLineEdit::textChanged,present,[present](const QString& text) {if(!text.isEmpty()) present->setChecked(true);});
-        auto label=draft.action=="SetValue" ? setValueLabels.value(index) : draft.action=="MessageBox" ? messageLabels.value(index) : draft.action=="OpenForm" ? formLabels.value(index) : draft.action=="OpenReport" ? reportLabels.value(index) : QString("Argument %1").arg(index+1);label+=QString(" (%1%2)").arg(type.isEmpty() ? QString("nicht zulässig") : type,required ? ", erforderlich" : ", optional");fields->addRow(label,row);
+        auto label=draft.action=="SetValue" ? setValueLabels.value(index) : draft.action=="MessageBox" ? messageLabels.value(index) : draft.action=="OpenForm" ? formLabels.value(index) : draft.action=="OpenReport" ? reportLabels.value(index) : draft.action=="MoveSize" ? moveSizeLabels.value(index) : QString("Argument %1").arg(index+1);label+=QString(" (%1%2)").arg(type.isEmpty() ? QString("nicht zulässig") : type,required ? ", erforderlich" : ", optional");fields->addRow(label,row);
     }
     if(!count) fields->addRow(new QLabel("Diese Aktion hat keine Argumente.",&editor));
     auto* buttons=new QDialogButtonBox(QDialogButtonBox::Ok|QDialogButtonBox::Cancel,&editor);fields->addRow(buttons);QObject::connect(buttons,&QDialogButtonBox::accepted,&editor,&QDialog::accept);QObject::connect(buttons,&QDialogButtonBox::rejected,&editor,&QDialog::reject);

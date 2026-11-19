@@ -1667,7 +1667,20 @@ public:
             enterNativeUiExecution();const auto leave=qScopeGuard([] {leaveNativeUiExecution();});
             linaccess::runNativeMacro(preview.db_,args,[&] {(void)checked();},
                 [&](const QString& expression) {return checked().evalExpression(expression.toUtf8().toStdString());},
-                [&](const linaccess::NativeMacroAction& action) {if(action.name=="MessageBox") linaccess::nativeMacroMessageBox(&checked(),action.arguments,[&](const QString& expression) {return checked().evalExpression(expression.toUtf8().toStdString());},[&] {(void)checked();});else if(action.name=="SetValue") runNativeMacroSetValue(checked(),action.arguments);else if(action.name=="RunCode") runNativeMacroFunction(checked(),action.arguments.front().asText());else {auto forwarded=action.arguments;if(QStringList{"Close","OpenTable","OpenQuery","Requery","RunSQL","SelectObject"}.contains(action.name)) for(auto& value:forwarded) if(value.kind==linaccess::VbaValue::Kind::Missing) value=linaccess::VbaValue::empty();(void)member(action.name.toStdString(),forwarded);}},[] {linaccess::restoreNativeEcho();});
+                [&](const linaccess::NativeMacroAction& action) {
+                    if(action.name=="MessageBox") linaccess::nativeMacroMessageBox(&checked(),action.arguments,[&](const QString& expression) {return checked().evalExpression(expression.toUtf8().toStdString());},[&] {(void)checked();});
+                    else if(action.name=="MoveSize") {
+                        auto& form=checked();
+                        nativeProjectMoveSize(form.db_,&form,action.arguments);
+                    } else if(action.name=="SetValue") runNativeMacroSetValue(checked(),action.arguments);
+                    else if(action.name=="RunCode") runNativeMacroFunction(checked(),action.arguments.front().asText());
+                    else {
+                        auto forwarded=action.arguments;
+                        if(QStringList{"Close","OpenTable","OpenQuery","Requery","RunSQL","SelectObject"}.contains(action.name))
+                            for(auto& value:forwarded) if(value.kind==linaccess::VbaValue::Kind::Missing) value=linaccess::VbaValue::empty();
+                        (void)member(action.name.toStdString(),forwarded);
+                    }
+                },[] {linaccess::restoreNativeEcho();});
             return {};
         }
 
@@ -2255,4 +2268,46 @@ linaccess::VbaValue nativeProjectWindowState(QSqlDatabase database,QWidget* owne
     if(selected) {const auto result=dispatchPreviewDocumentCommand(*selected,command.toStdString(),{});guard();return result;}
     QWidget* project=nullptr;for(auto* widget=owner;widget;widget=widget->parentWidget()) if(qobject_cast<QMainWindow*>(widget)) {project=widget;break;}
     QVariantMap result;if(!project || project->metaObject()->indexOfMethod("setDatabaseWindowState(QString)")<0 || !QMetaObject::invokeMethod(project,"setDatabaseWindowState",Qt::DirectConnection,Q_RETURN_ARG(QVariantMap,result),Q_ARG(QString,command))) throw VbaRuntimeError(2046,"Native window context is unavailable");if(const int error=result.value("error").toInt()) throw VbaRuntimeError(error,result.value("description").toString().toStdString());guard();return VbaValue::empty();
+}
+
+void nativeProjectMoveSize(QSqlDatabase database,QWidget* owner,const std::vector<linaccess::VbaValue>& arguments) {
+    using linaccess::VbaRuntimeError;
+    auto guard=nativeDocumentProjectGuard(database,owner);
+    guard();
+    const auto twips=linaccess::nativeMacroMoveSizeArguments(arguments);
+    auto* caller=dynamic_cast<AccessFormPreview*>(owner);
+    auto* project=qobject_cast<QMainWindow*>(caller ? caller->parentWidget() : owner);
+    const QPointer<AccessFormPreview> active=activePreviewDocument();
+    const auto documents=nativeLoadedProjectDocuments(database,owner);
+    if(!project || !active || !documents.contains(active) || (caller && caller!=active)
+        || active->parentWidget()!=project || QApplication::activeWindow()!=active
+        || active->documentKind()!=linaccess::AccessDocumentKind::Form
+        || !active->isVisible() || !active->isWindow() || active->isModal() || active->isPopupDocument()
+        || active->isMaximized() || active->isMinimized() || active->isFullScreen()
+        || active->windowType()==Qt::Popup || active->windowType()==Qt::Tool
+        || QApplication::activeModalWidget())
+        throw VbaRuntimeError(2046,"MoveSize requires an active normal project form window");
+    if((twips[0] || twips[1]) && QGuiApplication::platformName().startsWith("wayland"))
+        throw VbaRuntimeError(2046,"MoveSize window positioning is unavailable on this platform");
+
+    // Form layout uses 96 logical pixels per inch. The rectangle excludes decorations.
+    const auto pixels=[](int value) {return qRound(value/15.0);};
+    const auto before=active->geometry();
+    const auto origin=project->mapToGlobal(QPoint{});
+    const QRect target(twips[0] ? origin.x()+pixels(*twips[0]) : before.x(),
+        twips[1] ? origin.y()+pixels(*twips[1]) : before.y(),
+        twips[2] ? pixels(*twips[2]) : before.width(),
+        twips[3] ? pixels(*twips[3]) : before.height());
+    if(target.width()<qMax(1,active->minimumWidth()) || target.height()<qMax(1,active->minimumHeight())
+        || target.width()>active->maximumWidth() || target.height()>active->maximumHeight())
+        throw VbaRuntimeError(5,"MoveSize dimensions are outside the window constraints");
+
+    static thread_local bool moving=false;
+    if(moving) throw VbaRuntimeError(2046,"MoveSize is unavailable during a window geometry change");
+    moving=true;
+    const auto finished=qScopeGuard([&] {moving=false;});
+    active->setGeometry(target);
+    guard();
+    if(!active || !active->isVisible()) throw VbaRuntimeError(2501,"Form closed during MoveSize");
+    if(active->geometry()!=target) throw VbaRuntimeError(2046,"The window did not accept the requested geometry");
 }
