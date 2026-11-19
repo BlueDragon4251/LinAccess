@@ -180,9 +180,12 @@ suite or new target. Existing table sizes remain unchanged.
 Existing TableDefs now support CreateField and Fields.Append/Delete for the
 supported ordinary native field types. The builder is bound to the original
 table/workspace generation. Append checks ownership, final names, maximum255
-fields and the complete native definition; adding AutoNumber remains refused.
-SQLite performs the actual ALTER ADD inside a shared savepoint, including real
-validation of existing rows against defaults, Required and storage constraints.
+fields and the complete native definition. A Long field with dbAutoIncrField
+can be appended to a complete supported native table through the managed
+signed32 generator; unknown, imported, shadowed, custom, random and second
+counter shapes remain refused. SQLite performs the actual ALTER ADD inside a
+shared savepoint, including real validation of existing rows against defaults,
+Required and storage constraints.
 
 Field metadata are extended/removed without fabricating unknown original types.
 When an explicit checked index catalog exists, its complete table-column list
