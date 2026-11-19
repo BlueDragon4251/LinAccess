@@ -365,7 +365,11 @@ if(BUILD_TESTING)
             if(TARGET linaccess_access_layout_tests)
                 add_test(NAME real_kassa_dao_event COMMAND linaccess_access_layout_tests
                     "${LINACCESS_COMPLEX_BRIDGE_DIR}" "${LINACCESS_COMPLEX_MDB_FILE}")
-                set_tests_properties(real_kassa_dao_event PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+                # The full original report and DAO corpus exceeds the general CI limit.
+                # Allow enough time for the complete fixture run on slower hosts.
+                set_tests_properties(real_kassa_dao_event PROPERTIES
+                    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+                    TIMEOUT 480)
             endif()
             add_executable(linaccess_complex_mdb_table_tests
                 tests/complex_mdb_table_tests.cpp
