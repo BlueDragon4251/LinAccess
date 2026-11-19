@@ -923,11 +923,22 @@ void testRoundFunction() {
     assert(eval("Round(CCur(\"922337203685477.0001\"),0)").asText()=="922337203685477");
     assert(eval("Round(CCur(\"922337203685477.1234\"),3)").asText()=="922337203685477.123");
     assert(eval("Round(2.5,)").number==2);
+    assert(eval("Round(Number:=2.5)").number==2);
+    const auto namedCurrency=eval("VBA.Round(NumDigitsAfterDecimal:=1, nUmBeR:=CCur(\"-1.35\"))");
+    assert(namedCurrency.kind==VbaValue::Kind::Currency && namedCurrency.currencyUnits==-14000);
+    assert(eval("Round(CDec(\"1.245\"), NumDigitsAfterDecimal:=2)").asText()=="1.24");
+    assert(eval("VBA.Abs(Number:=CInt(-3))").numericType==VbaValue::NumericType::Integer);
+    assert(eval("Int(Number:=-3.75)").number==-4);
+    assert(eval("Fix(Number:=CDec(\"-3.75\"))").asText()=="-3");
+    assert(eval("Sgn(Number:=-3.75)").number==-1);
     assert(eval("Round(CCur(\"922337203685477.5807\"),4)").currencyUnits==std::numeric_limits<std::int64_t>::max());
     const auto number=std::make_shared<ScalarProbe>(),precision=std::make_shared<ScalarProbe>(); number->value=VbaValue::numeric(2.5); precision->value=VbaValue::integer(0);
     assert(evaluateVbaExpression("Round(number,precision)",host,{{"number",VbaValue::reference(number)},{"precision",VbaValue::reference(precision)}}).number==2 && number->reads==1 && precision->reads==1);
+    assert(evaluateVbaExpression("VBA.Fix(Number:=number)",host,{{"number",VbaValue::reference(number)}}).number==2 && number->reads==2);
     for(const auto& [expression,code]:std::vector<std::pair<std::string,int>>{
         {"Round()",450},{"Round(,1)",450},{"Round(1,2,3)",450},{"Round(1,-1)",5},{"Round(1,Null)",94},
+        {"Round(NumDigitsAfterDecimal:=1)",450},{"Round(2.5,Number:=3.5)",450},
+        {"Round(Number:=2.5,1)",450},{"VBA.Abs(Unknown:=-3)",448},{"Sgn(Number:=Null)",94},
         {"Round(CVErr(11))",13},{"Round(\"invalid\")",13},{"Round(Nothing)",91},
         {"Round(1,16)",3251},{"Round(CSng(1.5))",3251},{"Round(1e300,15)",3251},
         {"Round(CCur(\"922337203685477.5807\"),0)",6},{"Round(CCur(\"-922337203685477.5808\"),3)",6}}) {
@@ -2915,10 +2926,12 @@ Left=7
 End Function
 Sub ShadowedFunctions()
 Me!ShadowedFunctions=CStr(Len()) & ":" & CStr(Len(value:="abc")) & ":" & CStr(VBA.Len("abc")) & ":" & Round(,2) & ":" & Left("xyz",1) & ":" & CStr(Left()) & ":" & CStr(calls)
+Me!ShadowedNamedRound=Round(second:=2) & ":" & CStr(VBA.Round(Number:=2.5))
 End Sub
 )VBA","ShadowedFunctions",host);
     if(shadowedFunctions.status!=VbaExecutionStatus::Completed) std::cerr<<"Function shadow error="<<shadowedFunctions.errorNumber<<" line="<<shadowedFunctions.line<<" explanation="<<shadowedFunctions.explanation<<"\n";
     assert(shadowedFunctions.status==VbaExecutionStatus::Completed && host.fields["ShadowedFunctions"]=="18:13:3:True:False:x:7:4");
+    assert(host.fields["ShadowedNamedRound"]=="True:False:2");
     const auto subAsValue=executeVbaProcedure("Sub ValueSub()\nMe!NeverValueSub=1\nEnd Sub\nSub CheckSubValue()\nOn Error Resume Next\nMe!IgnoredSubValue=ValueSub()\nMe!SubValueError=CStr(Err.Number)\nEnd Sub","CheckSubValue",host);
     assert(subAsValue.status==VbaExecutionStatus::Completed && !host.fields.contains("NeverValueSub") && host.fields["SubValueError"]=="3251");
     const auto nativeTypeChecks=executeVbaProcedure(R"VBA(Private inspected As Long

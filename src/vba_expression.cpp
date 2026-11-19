@@ -1635,6 +1635,8 @@ private:
                     {"msgbox",{{"Prompt","Buttons","Title","HelpFile","Context"},1}},
                     {"inputbox",{{"Prompt","Title","Default","XPos","YPos","HelpFile","Context"},1}},
                     {"inputbox$",{{"Prompt","Title","Default","XPos","YPos","HelpFile","Context"},1}},
+                    {"abs",{{"Number"},1}}, {"fix",{{"Number"},1}}, {"int",{{"Number"},1}}, {"sgn",{{"Number"},1}},
+                    {"round",{{"Number","NumDigitsAfterDecimal"},1}},
                     {"sqr",{{"Number"},1}}, {"exp",{{"Number"},1}}, {"log",{{"Number"},1}},
                     {"sin",{{"Number"},1}}, {"cos",{{"Number"},1}}, {"tan",{{"Number"},1}}, {"atn",{{"Number"},1}},
                     {"lcase",{{"String"},1}}, {"lcase$",{{"String"},1}},

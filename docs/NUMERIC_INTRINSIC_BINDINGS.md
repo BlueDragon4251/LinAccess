@@ -27,3 +27,18 @@ arithmetic cover Variant-returning numeric and selection functions, Integer/Long
 boundaries and Double-function Date overflow. Existing core error, precision and
 Access reference checks remain in the same target. No new CTest/catalog IDs.
 The checked5df3cba2 DEB predates the later literal and binding changes.
+
+## Named arguments in native VBA
+
+Native VBA binds `Number` for `Abs`, `Fix`, `Int`, `Sgn` and `Round`.
+`Round` also binds the optional `NumDigitsAfterDecimal`. Names are
+case-insensitive and may be reordered. `VBA.` qualification selects the
+intrinsic when a procedure with the same name exists in the module. The
+binding follows the formal function declarations in
+[MS-VBAL](https://learn.microsoft.com/en-us/openspecs/microsoft_general_purpose_programming_languages/ms-vbal/d5418146-0bd2-45eb-9c7a-fd9502722c74).
+
+The core regression cases exercise omitted precision, a positional number with
+named precision, reordered named arguments, Currency and Decimal results,
+name and argument-count errors, scalar default access and procedure shadowing.
+Verification covers the native runtime. Windows Access behavior and the broader
+F040/F043/F118 requirements remain open.
