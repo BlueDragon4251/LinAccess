@@ -18,9 +18,15 @@ This first implementation evaluates ParamArray values; it does not claim full
 VBA argument-slot/reference mutation semantics. Slot replacement, resize, whole
 array reassignment and ByRef forwarding are rejected explicitly with 3251.
 Object argument references retain their existing native object behavior.
-Combined Optional/ParamArray declarations, named arguments, argument holes,
-array expansion and full Windows binder behavior remain open. ParamArray must
-be last; unsupported declarations fail during procedure validation.
+VBA permits either Optional parameters or a ParamArray in a parameter list.
+ParamArray must follow any required parameters. A Property Let or Set declares
+its separate value parameter after the index parameter list. LinAccess rejects
+mixed declarations during procedure validation.
+[MS-VBAL parameter lists](https://learn.microsoft.com/en-us/openspecs/microsoft_general_purpose_programming_languages/ms-vbal/78bcb344-4966-4401-bb55-72729790ebee)
+
+VBA requires positional arguments when calling a procedure with a ParamArray.
+LinAccess still has gaps in argument-hole and array expansion behavior.
+[VBA ParamArray calls](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/a-procedure-with-a-paramarray-argument-cannot-be-called-with-named-arguments)
 
 
 The subsequent real variable-binding path is documented in PARAMARRAY_ALIASES.md.

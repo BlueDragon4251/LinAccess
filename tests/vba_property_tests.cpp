@@ -73,7 +73,22 @@ Dim values(1 To 2,1 To 2) As Long
 MsgBox "unreached"
 values(,1)=7
 End Sub)VBA","ArrayHole",optionalHost);assert(result.status==VbaExecutionStatus::Unsupported && result.errorNumber==3251 && optionalHost.effects==0);
-    const auto mixed=validateVbaProcedure("Property Get Bad(Optional ByVal first As Long,ParamArray rest() As Variant) As Long\nEnd Property","property get Bad");assert(mixed.status==VbaExecutionStatus::Unsupported);
+
+    const std::vector<std::pair<std::string_view, std::string_view>> mixedDeclarations{
+        {"Bad", "Sub Bad(Optional first As Long = 1, ParamArray rest() As Variant)\nEnd Sub"},
+        {"Bad", "Function Bad(Optional first, ParamArray rest()) As Long\nEnd Function"},
+        {"property get Bad",
+         "Property Get Bad(Optional first As Long, ParamArray rest() As Variant) As Long\nEnd Property"},
+        {"property let Bad",
+         "Property Let Bad(Optional first As Long, ParamArray rest() As Variant, ByVal replacement As Long)\nEnd Property"},
+        {"property set Bad",
+         "Property Set Bad(Optional first As Long, ParamArray rest() As Variant, ByVal replacement As Object)\nEnd Property"},
+    };
+    for (const auto& [procedure, source] : mixedDeclarations) {
+        const auto validation = validateVbaProcedure(source, procedure);
+        assert(validation.status == VbaExecutionStatus::Unsupported);
+    }
+
     PropertyHost arrayHost;
     const auto arrayRun=[&](const char* name){auto value=executeVbaProcedure(nativeArrayReturnFixture,name,arrayHost);if(value.status!=VbaExecutionStatus::Completed)std::cerr<<"Array return "<<name<<": "<<value.explanation<<" line "<<value.line<<" error "<<value.errorNumber<<"\n";assert(value.status==VbaExecutionStatus::Completed && value.typedReturnValue);return *value.typedReturnValue;};
     for(const auto& probe:std::vector<std::pair<const char*,int>>{{"LinArrayReadProbe",297},{"LinArrayCopyProbe",1299},{"LinArrayQueueProbe",14},{ "LinArrayEachProbe",3901},{"LinArrayEachObjects",19},{"LinArrayEachCopy",3999},{"LinArrayEachNested",9}}) assert(arrayRun(probe.first).number==probe.second);
