@@ -155,6 +155,28 @@ struct DatabaseWindowContext { QPointer<QWidget> window; QString project; };
 DatabaseWindowContext& databaseWindowContext() { static DatabaseWindowContext context; return context; }
 QSet<QString>& closingProjects() { static QSet<QString> projects; return projects; }
 QString projectKey(const QSqlDatabase& db) { return db.connectionName()+QChar(0)+db.databaseName(); }
+
+bool closeWithProjectPreflight(const QString& connection,const std::function<bool()>& closeDocuments) {
+    QVector<QPointer<QWidget>> windows;
+    for(auto* window:QApplication::topLevelWidgets())
+        if(dynamic_cast<linaccess::NativeProjectCloseGuard*>(window)) windows.append(window);
+
+    QVector<linaccess::NativeProjectCloseGuard::Completion> participants;
+    bool accepted=false;
+    const auto finish=qScopeGuard([&] {
+        for(const auto& participant:participants)
+            if(participant) participant(accepted);
+    });
+    for(const auto& window:windows) {
+        if(!window) continue;
+        auto* guard=dynamic_cast<linaccess::NativeProjectCloseGuard*>(window.data());
+        auto prepared=guard->prepareProjectClose(connection);
+        if(!prepared) return false;
+        participants.append(std::move(*prepared));
+    }
+    accepted=closeDocuments();
+    return accepted;
+}
 int& nativeExecutionDepth() { static thread_local int depth=0; return depth; }
 QVector<QPointer<AccessFormPreview>>& pendingFormDisposals() {
     static thread_local QVector<QPointer<AccessFormPreview>> pending; return pending;
@@ -2685,31 +2707,39 @@ bool AccessFormPreview::prepareClose() {
 }
 bool AccessFormPreview::projectIsClosing(const QSqlDatabase& database) {return closingProjects().contains(projectKey(database));}
 bool AccessFormPreview::closeProjectDocuments(const QSqlDatabase& db) {
-    for(auto* widget:QApplication::topLevelWidgets())
-        if(auto* guard=dynamic_cast<linaccess::NativeProjectCloseGuard*>(widget);guard && !guard->allowProjectClose(db.connectionName())) return false;
     const auto key=projectKey(db);
     if (closingProjects().contains(key)) return false;
     closingProjects().insert(key);
     const auto reset=qScopeGuard([&] { closingProjects().remove(key); });
-    QVector<AccessFormPreview*> roots;
-    for (auto* widget : QApplication::topLevelWidgets())
-        if (auto* document=dynamic_cast<AccessFormPreview*>(widget); document && projectKey(document->db_)==key)
-            roots.append(document);
-    return closeDocuments(roots);
+    return closeWithProjectPreflight(db.connectionName(),[&] {
+        QVector<AccessFormPreview*> roots;
+        for (auto* widget : QApplication::topLevelWidgets())
+            if (auto* document=dynamic_cast<AccessFormPreview*>(widget); document && projectKey(document->db_)==key)
+                roots.append(document);
+        return closeDocuments(roots);
+    });
 }
 bool AccessFormPreview::closeApplicationDocuments() {
-    for(auto* widget:QApplication::topLevelWidgets())
-        if(auto* guard=dynamic_cast<linaccess::NativeProjectCloseGuard*>(widget);guard && !guard->allowProjectClose({})) return false;
-    QVector<AccessFormPreview*> roots;
     QSet<QString> keys;
     for (auto* widget : QApplication::topLevelWidgets())
-        if (auto* document=dynamic_cast<AccessFormPreview*>(widget); document && !document->closed_ && !document->openCancelled_) {
-            roots.append(document); keys.insert(projectKey(document->db_));
-        }
+        if (auto* document=dynamic_cast<AccessFormPreview*>(widget); document && !document->closed_ && !document->openCancelled_)
+            keys.insert(projectKey(document->db_));
     for (const auto& key : keys) if (closingProjects().contains(key)) return false;
     closingProjects().unite(keys);
     const auto reset=qScopeGuard([&] { closingProjects().subtract(keys); });
-    return closeDocuments(roots);
+    return closeWithProjectPreflight({},[&] {
+        QVector<AccessFormPreview*> roots;
+        for (auto* widget : QApplication::topLevelWidgets()) {
+            auto* document=dynamic_cast<AccessFormPreview*>(widget);
+            if(!document || document->closed_ || document->openCancelled_) continue;
+            const auto key=projectKey(document->db_);
+            if(closingProjects().contains(key) && !keys.contains(key)) return false;
+            keys.insert(key);
+            closingProjects().insert(key);
+            roots.append(document);
+        }
+        return closeDocuments(roots);
+    });
 }
 void AccessFormPreview::quitApplication() {
     if (!closeApplicationDocuments()) throw linaccess::VbaRuntimeError(2501,"Quit action cancelled");

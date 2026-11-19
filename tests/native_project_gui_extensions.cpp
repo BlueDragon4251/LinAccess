@@ -17,6 +17,7 @@
 #include <QDialog>
 #include <QEvent>
 #include <QLineEdit>
+#include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QPrintPreviewWidget>
 #include <QPushButton>
@@ -174,7 +175,22 @@ End
 End
 End)FORM";
     AccessFormPreview form("NativeWindowForm",source,{},db,&window);form.show();QApplication::processEvents();auto root=makePreviewFormObject(form);root->objectItem("Value").object->assign("Value",VbaValue::integer(55));commands->member("Maximize",{});assert(form.isMaximized() && !window.isMaximized());commands->member("Minimize",{});assert(form.isMinimized());commands->member("SelectObject",{VbaValue::integer(2),VbaValue::string("NativeWindowForm"),VbaValue::logical(false)});commands->member("Restore",{});assert(!form.isMinimized() && !form.isMaximized());StateProbe formStates;form.installEventFilter(&formStates);makePreviewApplicationObject(form)->member("DoCmd",{}).object->member("RunMacro",{VbaValue::string("NativeWindowMaxRestore")});form.removeEventFilter(&formStates);assert(formStates.saw(Qt::WindowMaximized) && formStates.saw(Qt::WindowNoState));assert(root->member("Dirty",{}).boolean && root->objectItem("Value").object->scalarValue().number==55);assert(sql.exec("SELECT n FROM native_window_rows") && sql.next() && sql.value(0).toInt()==10);sql.finish();root->member("Undo",{});assert(form.close());
-    QTimer::singleShot(0,&window,[&] {auto* editor=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(editor && editor->objectName()=="native-module-editor");auto* text=editor->findChild<QPlainTextEdit*>("native-module-source");text->setPlainText("Public Sub NativeWindowDraft()\nEnd Sub");const auto draft=text->toPlainText();int failure=0;try {commands->member("Maximize",{});}catch(const linaccess::VbaRuntimeError& result) {failure=result.number;}assert(failure==3251 && editor->isWindowModified() && text->toPlainText()==draft);editor->reject();});action(window,"+ Modul")->trigger();window.showNormal();
+    QTimer::singleShot(0,&window,[&] {
+        auto* editor=qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        assert(editor && editor->objectName()=="native-module-editor");
+        auto* text=editor->findChild<QPlainTextEdit*>("native-module-source");
+        text->setPlainText("Public Sub NativeWindowDraft()\nEnd Sub");
+        const auto draft=text->toPlainText();
+        int failure=0;
+        try {commands->member("Maximize",{});} catch(const linaccess::VbaRuntimeError& result) {failure=result.number;}
+        assert(failure==3251 && editor->isWindowModified() && text->toPlainText()==draft);
+        QTimer::singleShot(0,editor,[] {
+            auto* prompt=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+            assert(prompt && prompt->button(QMessageBox::Discard));
+            prompt->button(QMessageBox::Discard)->click();
+        });
+        assert(editor->close());
+    });action(window,"+ Modul")->trigger();window.showNormal();
 }
 
 void testNativeMoveSize(MainWindow& window,QSqlDatabase database) {

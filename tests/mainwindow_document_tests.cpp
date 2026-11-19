@@ -96,12 +96,23 @@ struct sqlite3_value;
 
 void exerciseStoredForm(MainWindow& window,QSqlDatabase db);
 void exerciseVisualQueryDesigner(MainWindow& window,QSqlDatabase db);
+void exerciseDesignerClose(MainWindow& window,QSqlDatabase db);
 void exerciseNativeDebugOutput(MainWindow& window,QSqlDatabase db);
 void exerciseNativeProperties(QSqlDatabase db);
 void exerciseNativeStaticProcedures(QSqlDatabase db);
 void exerciseNativeClasses(MainWindow& window,QSqlDatabase db);
 
 namespace {
+void discardDesignerDraft(QDialog* editor) {
+    assert(editor->isWindowModified());
+    QTimer::singleShot(0,editor,[] {
+        auto* prompt=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+        assert(prompt && prompt->button(QMessageBox::Discard));
+        prompt->button(QMessageBox::Discard)->click();
+    });
+    assert(editor->close());
+}
+
 QAction* action(MainWindow& window,const QString& text) {
     for(auto* candidate:window.findChildren<QAction*>()) if(candidate->text()==text) return candidate;
     assert(false); return nullptr;
@@ -2893,9 +2904,9 @@ void testNativeMacroStorage(MainWindow& window,QSqlDatabase db) {
     auto external=QSqlDatabase::addDatabase("QSQLITE","macro-editor-concurrent");external.setDatabaseName(db.databaseName());assert(external.open());
     const auto revise=[&](int value) {QSqlQuery update(external);update.prepare("UPDATE _la_objects SET definition=? WHERE kind='macro' AND name='ManagedMacro'");update.addBindValue(QJsonDocument(program(value)).toJson(QJsonDocument::Compact));assert(update.exec() && update.numRowsAffected()==1);};
     QTimer::singleShot(0,&window,[&] {auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-macro-designer");auto* name=dialog->findChild<QLineEdit*>("native-macro-name");auto* list=dialog->findChild<QTableWidget*>("native-macro-actions");name->setText("ManagedMacro");list->item(0,1)->setText("INSERT INTO managed_macro_effects VALUES(1)");QApplication::setActiveWindow(dialog);dialog->activateWindow();list->setFocus();QApplication::processEvents();QTest::keyClick(list,Qt::Key_S,Qt::ControlModifier);QApplication::processEvents();assert(name->isReadOnly() && dialog->findChild<QPushButton*>("native-macro-delete")->isEnabled());
-        revise(9);list->item(0,1)->setText("INSERT INTO managed_macro_effects VALUES(2)");QTimer::singleShot(0,dialog,[] {auto* message=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(message && message->text().contains("zwischenzeitlich"));message->accept();});dialog->findChild<QPushButton*>("native-macro-save")->click();assert(dialog->isVisible() && dialog->isWindowModified());dialog->reject();});action(window,"+ Makro")->trigger();
+        revise(9);list->item(0,1)->setText("INSERT INTO managed_macro_effects VALUES(2)");QTimer::singleShot(0,dialog,[] {auto* message=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(message && message->text().contains("zwischenzeitlich"));message->accept();});dialog->findChild<QPushButton*>("native-macro-save")->click();assert(dialog->isVisible() && dialog->isWindowModified());discardDesignerDraft(dialog);});action(window,"+ Makro")->trigger();
     auto revision=linaccess::readNativeMacroRevision(db,"ManagedMacro");assert(revision && QJsonDocument::fromJson(revision->definition.toByteArray()).object()==program(9));
-    const auto collision=[&](const QString& target) {QTimer::singleShot(0,&window,[&] {auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog);auto* name=dialog->findChild<QLineEdit*>("native-macro-name");name->setText(target);dialog->findChild<QTableWidget*>("native-macro-actions")->item(0,1)->setText("INSERT INTO managed_macro_effects VALUES(99)");QTimer::singleShot(0,dialog,[] {auto* message=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(message && message->text().contains("bereits vorhanden"));message->accept();});dialog->findChild<QPushButton*>("native-macro-save")->click();assert(dialog->isVisible() && !name->isReadOnly() && !dialog->findChild<QPushButton*>("native-macro-delete")->isEnabled());dialog->reject();});action(window,"+ Makro")->trigger();};collision("managedmacro");collision("archivedmanaged");assert(archive()==originalArchive);
+    const auto collision=[&](const QString& target) {QTimer::singleShot(0,&window,[&] {auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog);auto* name=dialog->findChild<QLineEdit*>("native-macro-name");name->setText(target);dialog->findChild<QTableWidget*>("native-macro-actions")->item(0,1)->setText("INSERT INTO managed_macro_effects VALUES(99)");QTimer::singleShot(0,dialog,[] {auto* message=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(message && message->text().contains("bereits vorhanden"));message->accept();});dialog->findChild<QPushButton*>("native-macro-save")->click();assert(dialog->isVisible() && !name->isReadOnly() && !dialog->findChild<QPushButton*>("native-macro-delete")->isEnabled());discardDesignerDraft(dialog);});action(window,"+ Makro")->trigger();};collision("managedmacro");collision("archivedmanaged");assert(archive()==originalArchive);
     auto* explorer=window.findChild<QTreeWidget*>("database-explorer");const auto macroItem=[&](const QString& name) {for(auto* item:explorer->findItems(name,Qt::MatchExactly|Qt::MatchRecursive,0)) if(item->data(0,Qt::UserRole).toString()=="macro") return item;return static_cast<QTreeWidgetItem*>(nullptr);};
     auto* item=macroItem("ManagedMacro");assert(item);QTimer::singleShot(0,&window,[&] {auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->findChild<QLineEdit*>("native-macro-name")->isReadOnly());auto* remove=dialog->findChild<QPushButton*>("native-macro-delete");QTimer::singleShot(0,dialog,[] {auto* message=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(message);message->button(QMessageBox::No)->click();});remove->click();assert(dialog->isVisible());
         QTimer::singleShot(0,dialog,[&] {auto* question=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(question);revise(10);QTimer::singleShot(0,dialog,[] {auto* message=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(message && message->text().contains("zwischenzeitlich"));message->accept();});question->button(QMessageBox::Yes)->click();});remove->click();assert(dialog->isVisible());dialog->reject();});QMetaObject::invokeMethod(explorer,"itemDoubleClicked",Qt::DirectConnection,Q_ARG(QTreeWidgetItem*,item),Q_ARG(int,0));revision=linaccess::readNativeMacroRevision(db,"ManagedMacro");assert(revision && QJsonDocument::fromJson(revision->definition.toByteArray()).object()==program(10));
@@ -3222,7 +3233,7 @@ End Function)VBA",db,&window);eventCode.show();QApplication::processEvents();
     assert(eventCode.close());
     assert(sql.exec("CREATE TEMP TABLE _la_objects(kind,name,definition)"));int error=0;try {(void)linaccess::standardVbaModuleSources(db);}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==3251 && !sql.exec("SELECT NativeAdd(5)"));assert(sql.exec("DROP TABLE temp._la_objects"));
     const int collision=artifact(db,"vba","NATIVEMATH",body);error=0;try {(void)linaccess::standardVbaModuleSources(db);}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==5 && !sql.exec("SELECT NativeAdd(5)"));sql.prepare("DELETE FROM _la_access_artifacts WHERE id=?");sql.addBindValue(collision);assert(sql.exec());sql.finish();assert(archive()==originalArchive);
-    QTimer::singleShot(0,&window,[&] {auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-module-editor");dialog->findChild<QLineEdit*>("native-module-name")->setText("MacroConditions");dialog->findChild<QPlainTextEdit*>("native-module-source")->setPlainText(QString::fromUtf8(body));QTimer::singleShot(0,&window,[&] {auto* message=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(message);message->accept();});dialog->findChild<QPushButton*>("native-module-save")->click();assert(dialog->isVisible());dialog->reject();});action(window,"+ Modul")->trigger();assert(archive()==originalArchive);
+    QTimer::singleShot(0,&window,[&] {auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-module-editor");dialog->findChild<QLineEdit*>("native-module-name")->setText("MacroConditions");dialog->findChild<QPlainTextEdit*>("native-module-source")->setPlainText(QString::fromUtf8(body));QTimer::singleShot(0,&window,[&] {auto* message=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(message);message->accept();});dialog->findChild<QPushButton*>("native-module-save")->click();assert(dialog->isVisible());discardDesignerDraft(dialog);});action(window,"+ Modul")->trigger();assert(archive()==originalArchive);
     error=0;try {(void)linaccess::nativeModuleSource(QJsonObject{{"version",1},{"vba","VERSION 1.0 CLASS\n"}});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==3251);
     assert(sql.exec("CREATE TABLE editor_module_effects(n INTEGER)"));
     sql.prepare("INSERT INTO _la_objects(kind,name,definition) VALUES('module','NativeSupportModule',?)");sql.addBindValue(QJsonDocument(QJsonObject{{"version",1},{"vba","Public Function NativeSupport(value As Long) As Long\nNativeSupport=value*2\nEnd Function"}}).toJson(QJsonDocument::Compact));assert(sql.exec());sql.finish();
@@ -3267,7 +3278,7 @@ End Function)VBA"}}).toJson(QJsonDocument::Compact));assert(sql.exec());sql.fini
         select("NativePreflight");run->click();assert(result->toPlainText().startsWith("Fehler 3251"));
         assert(sql.exec("SELECT COUNT(*) FROM editor_module_effects") && sql.next() && sql.value(0).toInt()==1);sql.finish();
         editor->appendPlainText("'unsaved");assert(!run->isEnabled());dialog->findChild<QPushButton*>("native-module-analyze")->click();select("NativeExecute");run->click();assert(result->toPlainText().startsWith("Fehler 3251"));
-        assert(application->member("Run",{VbaValue::string("NativeCounter")}).number==44);debugErrors.stop();dialog->reject();
+        assert(application->member("Run",{VbaValue::string("NativeCounter")}).number==44);debugErrors.stop();discardDesignerDraft(dialog);
     });
     const auto heldApplication=application->member("Run",{VbaValue::string("SavedModuleApplication")}).object;assert(heldApplication);
     assert(heldApplication->member("Run",{VbaValue::string("NativeOptional"),VbaValue::longInteger(8)}).number==8);
@@ -3609,6 +3620,7 @@ int main(int argc,char** argv) {
         app.setFont(originalFont);
     }
     openProject(window,first); auto db=QSqlDatabase::database("linaccess-main"); assert(db.isOpen() && db.databaseName()==first);
+    exerciseDesignerClose(window,db);
     const QByteArray form="Begin Form\nRecordSource =\"records\"\nKeyPreview =NotDefault\nOnKeyDown =\"[Event Procedure]\"\nOnActivate =\"[Event Procedure]\"\nOnDeactivate =\"[Event Procedure]\"\nOnLoad =\"[Event Procedure]\"\nOnUnload =\"[Event Procedure]\"\nBegin Section\nBegin TextBox\nName =\"editor\"\nControlSource =\"value\"\nBeforeUpdate =\"[Event Procedure]\"\nEnd\nEnd\nEnd";
     const QByteArray code="Sub Form_Load()\nCurrentDb.Execute \"INSERT INTO events(kind) VALUES('load')\"\nEnd Sub\nSub Form_Unload(Cancel As Integer)\nIf Me.Tag=\"hold\" Then Cancel=True\nEnd Sub\nSub CloseSelf()\nDoCmd.Close\nMsgBox \"Synthetic retained document\"\nEnd Sub\n"
         "Sub Form_Activate()\nCurrentDb.Execute \"INSERT INTO events(kind) VALUES('activate')\"\nEnd Sub\nSub Form_Deactivate()\nCurrentDb.Execute \"INSERT INTO events(kind) VALUES('deactivate')\"\nEnd Sub\n"

@@ -10,7 +10,7 @@
 #include "native_schema_editor.hpp"
 #include "native_field_defaults.hpp"
 #include "mainwindow.hpp"
-#include "native_module_editor_dialog.hpp"
+#include "native_designer_dialog.hpp"
 #include "native_macro.hpp"
 #include "native_module_debugger.hpp"
 #include "vba_debugger.hpp"
@@ -205,17 +205,12 @@ QPushButton* addButton(QBoxLayout* layout, const QString& name) {
     layout->addWidget(button);
     return button;
 }
-void installDesignerSaveShortcut(QDialog& dialog,QPushButton* save) {
+void installDesignerSaveShortcut(NativeDesignerDialog& dialog,QPushButton* save) {
+    dialog.setSaveButton(save);
     auto* status=new QLabel(&dialog); status->setObjectName("native-designer-save-status");
     dialog.layout()->addWidget(status);
     auto* shortcut=new QShortcut(QKeySequence::Save,&dialog); shortcut->setContext(Qt::WidgetWithChildrenShortcut);
-    const QPointer<QDialog> guarded=&dialog; const QPointer<QPushButton> button=save;
-    QObject::connect(shortcut,&QShortcut::activated,&dialog,[guarded,button] {
-        if(!guarded || !button) return;
-        const auto previous=guarded->property("la_editor_keep_open"); guarded->setProperty("la_editor_keep_open",true);
-        const auto reset=qScopeGuard([guarded,previous] { if(guarded) guarded->setProperty("la_editor_keep_open",previous); });
-        button->click();
-    });
+    QObject::connect(shortcut,&QShortcut::activated,&dialog,&NativeDesignerDialog::saveKeepingOpen);
 }
 void trackDesignerChanges(QDialog& dialog) {
     dialog.setProperty("la_designer_state_available",true);
@@ -2371,7 +2366,8 @@ QVariantMap MainWindow::closeModuleDocument(int type,const QString& name,int sav
     }
     if(!target) return type==5 ? tableCommandFailure(3251,"Module close target unavailable") : QVariantMap{};
     if(save<0 || save>2) return tableCommandFailure(5,"Invalid module Close save option");
-    if(target->property("la_module_busy").toInt()>0) return tableCommandFailure(2501,"Module editor is busy");
+    if(property("la_module_project_closing").toBool() || target->property("la_module_busy").toInt()>0)
+        return tableCommandFailure(2501,"Module editor is busy");
     if(save==1 && target->isWindowModified()) {
         auto* button=target->findChild<QPushButton*>("native-module-save");if(!button || !button->isEnabled()) return tableCommandFailure(3251,"Module source is read-only");
         const auto keep=target->property("la_editor_keep_open");target->setProperty("la_editor_keep_open",true);button->click();if(!target) return {{"handled",true},{"error",0}};target->setProperty("la_editor_keep_open",keep);
@@ -2381,6 +2377,7 @@ QVariantMap MainWindow::closeModuleDocument(int type,const QString& name,int sav
     if(!target->close()) return tableCommandFailure(2501,"Module close cancelled");return {{"handled",true},{"error",0}};
 }
 void MainWindow::editModule(const QString& existingName) {
+    if(property("la_module_project_closing").toBool()) return;
     if(!existingName.isEmpty()) for(auto* editor:findChildren<QDialog*>("native-module-editor"))
         if(editor->isVisible() && editor->property("la_module_modeless").toBool() && editor->property("la_project_object_generation")==property("la_project_generation") && editor->property("la_project_object_name").toString().compare(existingName,Qt::CaseInsensitive)==0) {editor->raise();editor->activateWindow();return;}
     try {const QPointer<QDialog> editor=createModuleEditor(existingName);if(editor) {editor->exec();if(editor) delete editor.data();}}
@@ -2389,7 +2386,7 @@ void MainWindow::editModule(const QString& existingName) {
 QDialog* MainWindow::createModuleEditor(const QString& existingName,const QByteArray& imported,bool readOnly) {
     if(!hasProject()) return nullptr;const auto old=existingName.isEmpty() ? QJsonObject{} : objectDefinition("module",existingName);
     try {if(!existingName.isEmpty() && !readOnly) (void)linaccess::nativeModuleSource(old);if(imported.size()>1024*1024) throw linaccess::VbaRuntimeError(3035,"Module source exceeds editor limit");}catch(const std::exception& error) {messageError(this,QString::fromUtf8(error.what()));return nullptr;}
-    auto* dialog=new NativeModuleEditorDialog(this);dialog->setObjectName("native-module-editor");dialog->setWindowTitle("Standardmodul bearbeiten");dialog->resize(900,650);tagProjectObject(dialog,this,db_,"module",existingName);auto* layout=new QVBoxLayout(dialog);
+    auto* dialog=new NativeDesignerDialog(this);dialog->setObjectName("native-module-editor");dialog->setWindowTitle("Standardmodul bearbeiten");dialog->resize(900,650);tagProjectObject(dialog,this,db_,"module",existingName);auto* layout=new QVBoxLayout(dialog);
     const QPointer<MainWindow> owner=this;const auto identity=db_.databaseName();const auto generation=property("la_project_generation");
     const auto checkProject=[owner,identity,generation] {if(!owner || !owner->db_.isOpen() || owner->db_.databaseName()!=identity || owner->property("la_project_generation")!=generation) throw linaccess::VbaRuntimeError(3420,"Das Modul gehört nicht mehr zum aktuellen Projekt.");};
 
@@ -2457,9 +2454,10 @@ QDialog* MainWindow::createModuleEditor(const QString& existingName,const QByteA
 }
 
 void MainWindow::editMacro(const QString& existingName) {
-    if(!hasProject()) return;QJsonObject old;std::optional<linaccess::NativeMacroRevision> revision;
+    if(!hasProject() || property("la_module_project_closing").toBool()) return;
+    QJsonObject old;std::optional<linaccess::NativeMacroRevision> revision;
     try {if(!existingName.isEmpty()) {revision=linaccess::readNativeMacroRevision(db_,existingName);if(!revision) throw linaccess::VbaRuntimeError(2485,"Gespeichertes Makro ist nicht verfügbar.");QJsonParseError error;const auto document=QJsonDocument::fromJson(revision->definition.toByteArray(),&error);if(error.error!=QJsonParseError::NoError || !document.isObject()) throw linaccess::VbaRuntimeError(13,"Ungültige native Makrodefinition.");old=document.object();(void)linaccess::parseNativeMacro(old);}}catch(const std::exception& error) {messageError(this,QString::fromUtf8(error.what()));return;}
-    QDialog dialog(this);dialog.setObjectName("native-macro-designer");dialog.setWindowTitle("Makro bearbeiten");dialog.resize(1000,600);tagProjectObject(&dialog,this,db_,"macro",existingName);
+    NativeDesignerDialog dialog(this);dialog.setObjectName("native-macro-designer");dialog.setWindowTitle("Makro bearbeiten");dialog.resize(1000,600);tagProjectObject(&dialog,this,db_,"macro",existingName);
     const QPointer<MainWindow> owner=this;const auto identity=db_.databaseName();const auto generation=property("la_project_generation");
     const auto checkProject=[owner,identity,generation] {if(!owner || !owner->db_.isOpen() || owner->db_.databaseName()!=identity || owner->property("la_project_generation")!=generation) throw linaccess::VbaRuntimeError(3420,"Makro gehört nicht mehr zum aktuellen Projekt.");};
     auto* layout=new QVBoxLayout(&dialog);auto* name=new QLineEdit(existingName,&dialog);name->setObjectName("native-macro-name");name->setMaxLength(64);name->setReadOnly(!existingName.isEmpty());name->setPlaceholderText("Name des Makros / der Makrogruppe");layout->addWidget(name);
@@ -2514,12 +2512,12 @@ void MainWindow::editMacro(const QString& existingName) {
 }
 
 void MainWindow::editQuery(const QString& existingName) {
-    if (!hasProject()) return;
+    if (!hasProject() || property("la_module_project_closing").toBool()) return;
     const auto old=existingName.isEmpty() ? QJsonObject{} : objectDefinition("query",existingName);
     const QPointer<MainWindow> owner=this;const auto identity=db_.databaseName();const auto generation=property("la_project_generation");
     const auto checkProject=[owner,identity,generation]{if(!owner || !owner->db_.isOpen() || owner->db_.databaseName()!=identity || owner->property("la_project_generation")!=generation)throw linaccess::VbaRuntimeError(3420,"Die Abfrage gehört nicht mehr zum aktuellen Projekt.");};
     auto visual=std::make_shared<QJsonObject>(old.value("visual_query").toObject());
-    QDialog dialog(this); dialog.setObjectName("native-query-designer");
+    NativeDesignerDialog dialog(this); dialog.setObjectName("native-query-designer");
     dialog.setWindowTitle("SQL-Abfrage");
     tagProjectObject(&dialog,this,db_,"query",existingName);
     dialog.resize(920, 700);
@@ -2592,7 +2590,7 @@ void MainWindow::editQuery(const QString& existingName) {
 }
 
 void MainWindow::editForm(const QString& existingName) {
-    if (!hasProject()) return;
+    if (!hasProject() || property("la_module_project_closing").toBool()) return;
     const auto old = existingName.isEmpty() ? QJsonObject{} : objectDefinition("form", existingName);
     const QPointer<MainWindow> owner=this;const auto identity=db_.databaseName();const auto generation=property("la_project_generation");
     const auto checkProject=[owner,identity,generation]{if(!owner || !owner->db_.isOpen() || owner->db_.databaseName()!=identity || owner->property("la_project_generation")!=generation)throw linaccess::VbaRuntimeError(3420,"Das Formular gehört nicht mehr zum aktuellen Projekt.");};
@@ -2610,7 +2608,7 @@ void MainWindow::editForm(const QString& existingName) {
     if(!existingName.isEmpty()) for(const auto& document:AccessFormPreview::projectDocuments(db_))
         if(document && document->documentKind()==linaccess::AccessDocumentKind::Form && document->documentName().compare(existingName,Qt::CaseInsensitive)==0)
             if(!document->close()) return;
-    QDialog dialog(this);
+    NativeDesignerDialog dialog(this);
     dialog.setObjectName("native-form-designer");
     dialog.setWindowTitle("Formulardesigner — experimentelle VBA-Ereignislaufzeit");
     tagProjectObject(&dialog,this,db_,"form",existingName);
@@ -2886,7 +2884,7 @@ void MainWindow::runReport(const QString& name) {
     } catch(const std::exception& error) { messageError(this,QString::fromUtf8(error.what())); }
 }
 void MainWindow::editReport(const QString& existingName) {
-    if (!hasProject()) return;
+    if (!hasProject() || property("la_module_project_closing").toBool()) return;
     for (const auto& document:AccessFormPreview::projectDocuments(db_))
         if (document && document->documentKind()==linaccess::AccessDocumentKind::Report && document->documentName().compare(existingName,Qt::CaseInsensitive)==0)
             if (!document->close()) return;
@@ -2895,7 +2893,7 @@ void MainWindow::editReport(const QString& existingName) {
     const auto checkProject=[owner,identity,generation]{if(!owner || !owner->db_.isOpen() || owner->db_.databaseName()!=identity || owner->property("la_project_generation")!=generation)throw linaccess::VbaRuntimeError(3420,"Der Bericht gehört nicht mehr zum aktuellen Projekt.");};
     auto visual=std::make_shared<QJsonObject>(old.value("visual_query").toObject());
     const auto hash=[](const QString& value){return QString::fromLatin1(QCryptographicHash::hash(value.toUtf8(),QCryptographicHash::Sha256).toHex());};
-    QDialog dialog(this); dialog.setObjectName("native-report-designer");
+    NativeDesignerDialog dialog(this); dialog.setObjectName("native-report-designer");
     dialog.setWindowTitle("Berichtsentwurf"); tagProjectObject(&dialog,this,db_,"report",existingName); dialog.resize(930,720);
     auto* outer=new QVBoxLayout(&dialog);
     auto* name=new QLineEdit(existingName,&dialog); name->setObjectName("native-report-name"); name->setPlaceholderText("Berichtname"); outer->addWidget(name);
@@ -3038,16 +3036,45 @@ bool MainWindow::canCloseDataPage(QWidget* page) {
     return true;
 }
 bool MainWindow::allowProjectClose(const QString& connection) {
-    if(property("la_module_project_closing").toBool()) return false;
     if(!connection.isEmpty() && connection!=db_.connectionName()) return true;
+    if(property("la_module_project_closing").toBool()) return false;
     if(linaccess::vbaDebuggerBusy()) {statusBar()->showMessage("Debugger fortsetzen oder beenden, bevor das Projekt geschlossen wird.",10000);return false;}
     if(queryExecutionDepth_>0) { statusBar()->showMessage("Projektwechsel während einer laufenden Abfrage ist noch nicht verfügbar.",10000); return false; }
     if(macroExecutionDepth_>0 || linaccess::nativeProjectMacrosActive(db_)) {statusBar()->showMessage("Projektwechsel während eines laufenden Makros ist nicht verfügbar.",10000);return false;}
     for(int i=0;i<tabs_->count();++i) if(!canCloseDataPage(tabs_->widget(i))) return false;
-    const auto old=property("la_module_project_closing");setProperty("la_module_project_closing",true);const auto reset=qScopeGuard([this,old] {setProperty("la_module_project_closing",old);});
-    QVector<QPointer<QDialog>> editors;for(auto* editor:findChildren<QDialog*>("native-module-editor")) if(editor->isVisible() && editor->property("la_module_modeless").toBool() && editor->property("la_project_object_generation")==property("la_project_generation")) editors.append(editor);
-    for(const auto& editor:editors) if(editor && !editor->close()) return false;
     return true;
+}
+
+std::optional<linaccess::NativeProjectCloseGuard::Completion> MainWindow::prepareProjectClose(const QString& connection) {
+    if(!connection.isEmpty() && connection!=db_.connectionName()) return Completion{};
+    if(!allowProjectClose(connection)) return std::nullopt;
+
+    QVector<QPointer<NativeDesignerDialog>> editors;
+    const auto generation=property("la_project_generation");
+    for(auto* child:findChildren<QDialog*>(QString(),Qt::FindDirectChildrenOnly)) {
+        auto* editor=dynamic_cast<NativeDesignerDialog*>(child);
+        if(!editor || !editor->isVisible()) continue;
+        // Untitled designers are owned by this window before they have a catalog identity.
+        const auto editorGeneration=editor->property("la_project_object_generation");
+        if(!editorGeneration.isValid() || editorGeneration==generation) editors.append(editor);
+    }
+
+    const QPointer<MainWindow> owner=this;
+    const auto previous=property("la_module_project_closing");
+    setProperty("la_module_project_closing",true);
+    QVector<QPointer<NativeDesignerDialog>> prepared;
+    const auto finish=[owner,previous](const auto& dialogs,bool proceed) {
+        for(const auto& dialog:dialogs)
+            if(dialog) dialog->finishProjectClose(proceed);
+        if(owner) owner->setProperty("la_module_project_closing",previous);
+    };
+    auto rollback=qScopeGuard([&] { finish(prepared,false); });
+    for(const auto& editor:editors) {
+        if(!owner || !editor || !editor->prepareProjectClose()) return std::nullopt;
+        prepared.append(editor);
+    }
+    rollback.dismiss();
+    return [finish,prepared=std::move(prepared)](bool proceed) { finish(prepared,proceed); };
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {
@@ -3056,9 +3083,10 @@ void MainWindow::closeEvent(QCloseEvent* event) {
 }
 
 void MainWindow::editClass(const QString& existingName) {
-    if(!hasProject()) return;const auto old=existingName.isEmpty() ? QJsonObject{} : objectDefinition("class",existingName);
+    if(!hasProject() || property("la_module_project_closing").toBool()) return;
+    const auto old=existingName.isEmpty() ? QJsonObject{} : objectDefinition("class",existingName);
     try {if(!existingName.isEmpty()) (void)linaccess::nativeClassModuleSource(old,existingName);}catch(const std::exception& error){messageError(this,QString::fromUtf8(error.what()));return;}
-    QDialog dialog(this);dialog.setObjectName("native-class-editor");dialog.setWindowTitle("Klassenmodul bearbeiten");dialog.resize(900,650);tagProjectObject(&dialog,this,db_,"class",existingName);auto* layout=new QVBoxLayout(&dialog);
+    NativeDesignerDialog dialog(this);dialog.setObjectName("native-class-editor");dialog.setWindowTitle("Klassenmodul bearbeiten");dialog.resize(900,650);tagProjectObject(&dialog,this,db_,"class",existingName);auto* layout=new QVBoxLayout(&dialog);
     const QPointer<MainWindow> owner=this;const auto identity=db_.databaseName();const auto generation=property("la_project_generation");
     const auto check=[owner,identity,generation]{if(!owner || !owner->db_.isOpen() || owner->db_.databaseName()!=identity || owner->property("la_project_generation")!=generation) throw linaccess::VbaRuntimeError(3420,"Klassenmodul gehört nicht mehr zum aktuellen Projekt.");};
     auto* name=new QLineEdit(existingName,&dialog);name->setObjectName("native-class-name");name->setMaxLength(64);name->setReadOnly(!existingName.isEmpty());name->setPlaceholderText("Klassenname (Buchstaben, Ziffern, Unterstrich)");layout->addWidget(name);

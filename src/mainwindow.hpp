@@ -22,7 +22,8 @@ class MainWindow final : public QMainWindow, public linaccess::NativeProjectClos
 public:
     explicit MainWindow(QWidget* parent = nullptr);
     ~MainWindow() override;
-    bool allowProjectClose(const QString& connection) override;
+    bool allowProjectClose(const QString& connection);
+    std::optional<Completion> prepareProjectClose(const QString& connection) override;
     Q_INVOKABLE void focusDatabaseWindow();
     Q_INVOKABLE void cycleDocument(bool backwards);
     Q_INVOKABLE int activateOpenTable(const QString& name);

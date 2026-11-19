@@ -17,6 +17,7 @@
 #include <QListWidget>
 #include <QLineEdit>
 #include <QMap>
+#include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSqlDriver>
@@ -24,6 +25,7 @@
 #include <QSpinBox>
 #include <QTableWidget>
 #include <QTableView>
+#include <QTest>
 #include <QTimer>
 #include <QTreeWidget>
 #include <sqlite3.h>
@@ -37,6 +39,155 @@ QAction* createQuery(MainWindow& window) {for(auto* action:window.findChildren<Q
 QDialog* builder() {auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-query-builder");return dialog;}
 int fieldRow(QTableWidget* fields,const QString& name) {for(int row=0;row<fields->rowCount();++row)if(fields->item(row,1)->text()==name)return row;assert(false);return -1;}
 }
+void exerciseDesignerClose(MainWindow& window,QSqlDatabase database) {
+    QSqlQuery sql(database);
+    const auto answer=[](QMessageBox::StandardButton button) {
+        auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+        assert(box && box->button(button));
+        assert(button==QMessageBox::Ok || box->objectName()=="native-designer-close");
+        box->button(button)->click();
+    };
+    QTimer::singleShot(0,&window,[&] {
+        auto* editor=qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        assert(editor && editor->objectName()=="native-query-designer");
+        auto* name=editor->findChild<QLineEdit*>("native-query-name");
+        auto* source=editor->findChild<QPlainTextEdit*>("native-query-sql");
+        name->setText("ClosePromptQuery");
+        source->setPlainText("SELECT 7 AS number_value");
+        QTimer::singleShot(0,editor,[&] { answer(QMessageBox::Cancel); });
+        QTest::keyClick(editor,Qt::Key_Escape);
+        assert(editor->isVisible() && editor->isWindowModified() && source->toPlainText()=="SELECT 7 AS number_value");
+        QTimer::singleShot(0,editor,[&] { answer(QMessageBox::Cancel); });
+        assert(!window.close() && window.isVisible() && editor->isVisible() && editor->isEnabled());
+
+        source->clear();
+        QTimer::singleShot(0,editor,[&] {
+            QTimer::singleShot(0,editor,[&] { answer(QMessageBox::Ok); });
+            answer(QMessageBox::Save);
+        });
+        assert(!editor->close() && editor->isVisible() && editor->isWindowModified());
+        QTimer::singleShot(0,editor,[&] { answer(QMessageBox::Discard); });
+        assert(editor->close());
+    });
+    createQuery(window)->trigger();
+    assert(sql.exec("SELECT definition FROM _la_objects WHERE kind='query' AND name='ClosePromptQuery'") && !sql.next());
+    sql.finish();
+
+    QTimer::singleShot(0,&window,[&] {
+        auto* editor=qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        assert(editor && editor->objectName()=="native-query-designer");
+        editor->findChild<QLineEdit*>("native-query-name")->setText("ClosePromptQuery");
+        editor->findChild<QPlainTextEdit*>("native-query-sql")->setPlainText("SELECT 42 AS number_value");
+        QTimer::singleShot(0,editor,[&] { answer(QMessageBox::Save); });
+        assert(editor->close());
+    });
+    createQuery(window)->trigger();
+    assert(sql.exec("SELECT definition FROM _la_objects WHERE kind='query' AND name='ClosePromptQuery'") && sql.next());
+    assert(QJsonDocument::fromJson(sql.value(0).toByteArray()).object().value("sql").toString()=="SELECT 42 AS number_value");
+    sql.finish();
+    assert(sql.exec("DELETE FROM _la_objects WHERE kind='query' AND name='ClosePromptQuery'"));
+
+    QAction* createMacro=nullptr;
+    for(auto* action:window.findChildren<QAction*>())
+        if(action->text()=="+ Makro") createMacro=action;
+    assert(createMacro);
+    const QString storedArgument="INSERT INTO records(value) VALUES('stored')";
+    const QString liveArgument="INSERT INTO records(value) VALUES('live')";
+    QTimer::singleShot(0,&window,[&] {
+        auto* editor=qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        assert(editor && editor->objectName()=="native-macro-designer");
+        editor->findChild<QLineEdit*>("native-macro-name")->setText("ClosePromptMacro");
+        auto* grid=editor->findChild<QTableWidget*>("native-macro-actions");
+        qobject_cast<QComboBox*>(grid->cellWidget(0,0))->setCurrentText("RunSQL");
+        auto* item=grid->item(0,1);
+        item->setText(storedArgument);
+        QApplication::setActiveWindow(editor);
+        grid->setFocus();
+        QApplication::processEvents();
+        QTest::keyClick(grid,Qt::Key_S,Qt::ControlModifier);
+        assert(editor->isVisible() && !editor->isWindowModified());
+
+        grid->setCurrentCell(0,1);
+        grid->setFocus();
+        grid->editItem(item);
+        auto* cell=qobject_cast<QLineEdit*>(QApplication::focusWidget());
+        assert(cell && grid->viewport()->isAncestorOf(cell));
+        cell->setText(liveArgument);
+        assert(item->text()==storedArgument && !editor->isWindowModified());
+        QTimer::singleShot(0,editor,[&] { answer(QMessageBox::Cancel); });
+        assert(!editor->close() && editor->isVisible() && item->text()==liveArgument);
+        QTimer::singleShot(0,editor,[&] { answer(QMessageBox::Discard); });
+        assert(editor->close());
+    });
+    createMacro->trigger();
+    assert(sql.exec("SELECT definition FROM _la_objects WHERE kind='macro' AND name='ClosePromptMacro'") && sql.next());
+    const auto actions=QJsonDocument::fromJson(sql.value(0).toByteArray()).object().value("actions").toArray();
+    assert(actions.at(0).toObject().value("arguments").toArray().at(0).toString()==storedArgument);
+    sql.finish();
+    assert(sql.exec("DELETE FROM _la_objects WHERE kind='macro' AND name='ClosePromptMacro'"));
+
+    const QString original="Public Sub Probe()\nEnd Sub";
+    const auto definition=QJsonDocument(QJsonObject{{"version",1},{"vba",original}}).toJson(QJsonDocument::Compact);
+    QVector<QPointer<QDialog>> editors;
+    for(const QString name:{"FirstCloseModule","SecondCloseModule"}) {
+        sql.prepare("INSERT INTO _la_objects(kind,name,definition) VALUES('module',?,?)");
+        sql.addBindValue(name);
+        sql.addBindValue(QString::fromUtf8(definition));
+        assert(sql.exec());
+        sql.finish();
+        assert(window.openModuleDocument(name,{}).value("error").toInt()==0);
+        QDialog* editor=nullptr;
+        for(auto* candidate:window.findChildren<QDialog*>("native-module-editor"))
+            if(candidate->property("la_project_object_name").toString()==name) editor=candidate;
+        assert(editor && editor->isVisible() && !editor->isModal());
+        editor->findChild<QPlainTextEdit*>("native-module-source")->appendPlainText("' pending close draft");
+        editors.append(editor);
+    }
+    const auto assertDrafts=[&] {
+        for(const auto& editor:editors) {
+            assert(editor && editor->isVisible() && editor->isEnabled() && editor->isWindowModified());
+            assert(editor->findChild<QPlainTextEdit*>("native-module-source")->toPlainText().endsWith("' pending close draft"));
+        }
+    };
+    const auto answerBoth=[&](QMessageBox::StandardButton second) {
+        QTimer::singleShot(0,&window,[&,second] {
+            QTimer::singleShot(0,&window,[&,second] {
+                for(const auto& editor:editors) assert(editor && editor->isVisible());
+                answer(second);
+            });
+            answer(QMessageBox::Discard);
+        });
+    };
+    const QByteArray layout="Begin Form\nOnUnload =\"[Event Procedure]\"\nBegin Section\nEnd\nEnd";
+    const QByteArray code="Sub Form_Unload(Cancel As Integer)\nIf Me.Tag=\"hold\" Then Cancel=True\nEnd Sub";
+    AccessFormPreview form("HoldDesignerClose",layout,code,database,&window);
+    form.show();
+    const auto formObject=makePreviewFormObject(form);
+    formObject->assign("Tag",linaccess::VbaValue::string("hold"));
+
+    answerBoth(QMessageBox::Cancel);
+    assert(!AccessFormPreview::closeApplicationDocuments());
+    assert(!form.eventResult("OnUnload").has_value());
+    assertDrafts();
+
+    answerBoth(QMessageBox::Discard);
+    assert(!AccessFormPreview::closeProjectDocuments(database));
+    const auto unload=form.eventResult("OnUnload");
+    assert(form.isVisible() && unload && unload->cancelled);
+    assertDrafts();
+
+    formObject->assign("Tag",linaccess::VbaValue::string("release"));
+    answerBoth(QMessageBox::Discard);
+    assert(AccessFormPreview::closeProjectDocuments(database));
+    assert(!form.isVisible());
+    for(const auto& editor:editors) assert(!editor || !editor->isVisible());
+    assert(sql.exec("SELECT definition FROM _la_objects WHERE kind='module' AND name IN ('FirstCloseModule','SecondCloseModule')"));
+    assert(sql.next() && sql.value(0).toByteArray()==definition);
+    assert(sql.next() && sql.value(0).toByteArray()==definition && !sql.next());
+    sql.finish();
+    assert(sql.exec("DELETE FROM _la_objects WHERE kind='module' AND name IN ('FirstCloseModule','SecondCloseModule')"));
+}
+
 void exerciseVisualQueryDesigner(MainWindow& window,QSqlDatabase database) {
     QSqlQuery sql(database);assert(sql.exec("CREATE TABLE builder_input(id INTEGER4,label TEXT,score REAL)"));
     assert(sql.exec("INSERT INTO builder_input VALUES(1,'rowA',2),(2,'rowB',4),(3,'rowC',6)"));sql.finish();
