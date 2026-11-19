@@ -380,6 +380,9 @@ if(BUILD_TESTING)
             target_link_libraries(linaccess_complex_mdb_table_tests PRIVATE linaccess_runtime linaccess_data Qt6::Sql Qt6::Core)
             add_test(NAME complex_real_mdb_table_copy
                 COMMAND linaccess_complex_mdb_table_tests "${LINACCESS_COMPLEX_MDB_FILE}")
+            # Individual table copies followed by the full import can exceed
+            # the shared CI timeout on slower runners.
+            set_tests_properties(complex_real_mdb_table_copy PROPERTIES TIMEOUT 480)
         endif()
     endif()
 endif()
