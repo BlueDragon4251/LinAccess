@@ -3569,22 +3569,38 @@ int main(int argc,char** argv) {
     QApplication app(argc,argv); app.setQuitOnLastWindowClosed(false); app.setApplicationName("LinAccessSyntheticGuiTest"); app.setOrganizationName("LinAccessSyntheticTests");
     QStandardPaths::setTestModeEnabled(true);
     const auto profileStart=std::chrono::steady_clock::now();
-    const auto phase=[&](const char* name) {if(qEnvironmentVariableIsSet("LINACCESS_GUI_PROFILE")) std::cerr<<"GUI phase "<<name<<" ms="<<std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-profileStart).count()<<'\n';};
-    QTimer watchdog; watchdog.setSingleShot(true); watchdog.setTimerType(Qt::PreciseTimer);
-    QObject::connect(&watchdog,&QTimer::timeout,[] {
+    const char* lastCompletedPhase = "startup";
+    QTimer watchdog;
+    watchdog.setInterval(std::chrono::seconds(20));
+    watchdog.setSingleShot(true);
+    watchdog.setTimerType(Qt::PreciseTimer);
+    QObject::connect(&watchdog,&QTimer::timeout,[&] {
         auto* modal=QApplication::activeModalWidget();
-        std::cerr<<"Synthetic main-window document test timed out; modal="<<(modal ? modal->metaObject()->className() : "none")<<"\n";
+        std::cerr<<"Synthetic main-window document test timed out after "<<lastCompletedPhase
+                 <<"; modal="<<(modal ? modal->metaObject()->className() : "none")<<'\n';
         std::abort();
-    }); watchdog.start(20000);
+    });
+    // Refresh only after test sections complete so an unattended modal dialog still times out.
+    const auto phase = [&](const char* name) {
+        lastCompletedPhase = name;
+        watchdog.start();
+        if (qEnvironmentVariableIsSet("LINACCESS_GUI_PROFILE")) {
+            const auto elapsed = std::chrono::steady_clock::now() - profileStart;
+            std::cerr<<"GUI phase "<<name<<" ms="<<std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count()<<'\n';
+        }
+    };
+    watchdog.start();
     QTemporaryDir temporary; assert(temporary.isValid());
     QSettings::setDefaultFormat(QSettings::IniFormat);
     QSettings::setPath(QSettings::IniFormat,QSettings::UserScope,temporary.path());
     exerciseNativeRelationDesigner();
     exerciseNativeDecimalClipboard();
     exerciseExactDecimalDefaultForm();
+    phase("relation designer and Decimal controls");
     exerciseExactCurrencyGrid();
     exercisePhysicalFormIdentity();
     exerciseNativeWarnings();
+    phase("Currency grid, form identity and warnings");
     const auto first=temporary.filePath("first.linaccess"),second=temporary.filePath("second.linaccess");
     auto seed=QSqlDatabase::addDatabase("QSQLITE","mainwindow-seed"); seed.setDatabaseName(first); assert(seed.open());
     QSqlQuery initial(seed); assert(initial.exec("CREATE TABLE records(id INTEGER PRIMARY KEY,value TEXT)"));
@@ -3681,6 +3697,7 @@ int main(int argc,char** argv) {
         dialog->reject();
     });
     action(window,"+ Abfrage")->trigger(); assert(objectState(1,"Native State Query")==0);
+    phase("application options and object state");
 
     assert(projectMetadata->member("Name",{}).asText()=="first.linaccess" && projectMetadata->member("Path",{}).asText()==temporary.path().toStdString());
     assert(entry->executeProcedure("ReadProjectMetadata",arguments).status==linaccess::VbaExecutionStatus::Completed && root->member("Tag",{}).asText()==first.toStdString());
@@ -3754,6 +3771,7 @@ int main(int argc,char** argv) {
     assert(nativeFormItem && !nativeCatalog->member("IsLoaded",{}).boolean);
     assert(QMetaObject::invokeMethod(window.findChild<QTreeWidget*>("database-explorer"),"itemDoubleClicked",Qt::DirectConnection,Q_ARG(QTreeWidgetItem*,nativeFormItem),Q_ARG(int,0)));
     assert(nativeCatalog->member("IsLoaded",{}).boolean && !QApplication::activeModalWidget());
+    phase("project metadata and catalogs");
     QPointer<AccessFormPreview> nativeDocument;
     for(const auto& document:AccessFormPreview::projectDocuments(db))
         if(document && document->documentName()=="catalog_native_form") nativeDocument=document;
@@ -3867,6 +3885,7 @@ int main(int argc,char** argv) {
     cycle(explorer,true,selectedReport); assert(!selectedReport->isMinimized());
     assert(sql.exec("SELECT value FROM records WHERE id=1") && sql.next() && sql.value(0).toString()=="fresh" && entry->hasUnsavedChanges()); sql.finish();
     assert(entry->executeProcedure("SelectEntry",arguments).status==linaccess::VbaExecutionStatus::Completed);
+    phase("form focus and window cycling");
     QApplication::setActiveWindow(entry); editor->setFocus(); editor->selectAll(); QTest::keyClicks(editor,"temporary");
     root->assign("Tag",linaccess::VbaValue::string("close-cycle")); cycle(editor,false,entry);
     dispose(); assert(!selectedReport);
@@ -3939,6 +3958,7 @@ int main(int argc,char** argv) {
     selection=modalWindow->executeProcedure("SelectTable",arguments); assert(selection.status==linaccess::VbaExecutionStatus::Error && selection.errorNumber==2046 && QApplication::activeModalWidget()==modalWindow);
     assert(modalWindow->close()); dispose(); assert(!modalWindow && QApplication::activeModalWidget()==nullptr);
     openArtifact(window,cancelId); assert(!document("cancel") && QApplication::activeModalWidget()==nullptr);
+    phase("document selection and close");
     openProject(window,first,explorer); // Same filename still starts a new project generation.
     bool staleProject=false;
     try { (void)projectMetadata->member("FullName",{}); } catch(const linaccess::VbaRuntimeError& error) { staleProject=error.number==3420; }
@@ -3974,20 +3994,28 @@ int main(int argc,char** argv) {
     });
     QTest::keyClick(explorer,Qt::Key_N,Qt::ControlModifier);
     assert(refused && hash()==beforeRefusal && QSqlDatabase::database("linaccess-main").databaseName()==third);
+    phase("project reopening and creation");
     exerciseQueryEditor(window,db);
+    phase("query editor");
     exerciseVisualQueryDesigner(window,db);
+    phase("visual query designer");
     exerciseNativeDebugOutput(window,db);
     exerciseNativeProperties(db);
     exerciseNativeStaticProcedures(db);
+    phase("native module diagnostics, properties and static procedures");
     exerciseNativeClasses(window,db);
+    phase("native classes");
     exerciseTableSave(window,db);
     exerciseReferenceDatasheet();
+    phase("datasheet save and reference cases");
     exerciseDatasheetOutput(window,db);
     exerciseDatasheetPageSetup(window,db);
+    phase("datasheet printing and page setup");
     exerciseTableReplace(window,db);
     exerciseTableMultiDelete(window,db);
     exerciseRecordEscape(window,db);
     exercisePageNavigation(window,db);
+    phase("datasheet editing and navigation");
     exerciseDateDefaultBuffers();
     exerciseScalarRelationDesigner(window,5);
     exerciseScalarRelationDesigner(window,6);
@@ -4050,6 +4078,7 @@ int main(int argc,char** argv) {
         cursor->member("AddNew",{});assert(cursor->item("id").asNumber()==2 && cursor->item("id").numericType==linaccess::VbaValue::NumericType::Long);cursor->member("CancelUpdate",{});
         cursor->member("AddNew",{});assert(cursor->item("id").asNumber()==3);cursor->member("Update",{});cursor->member("Close",{});
         assert(authored.exec("SELECT COUNT(*) FROM authored_defaults WHERE id=2") && authored.next() && authored.value(0).toInt()==0);authored.finish();
+        phase("table defaults, keys and record insertion");
         const auto matching=explorer->findItems("authored_defaults",Qt::MatchExactly|Qt::MatchRecursive,0);assert(matching.size()==1);explorer->setCurrentItem(matching.front());
         QTimer::singleShot(0,&window,[&] {
             auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-index-designer");
@@ -4061,6 +4090,7 @@ int main(int argc,char** argv) {
             for(int row=0;row<list->count();++row) if(list->item(row)->data(Qt::UserRole).toString()=="QtyDescending") list->setCurrentRow(row);
             QTimer::singleShot(0,dialog,[] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(box);box->button(QMessageBox::Yes)->click();});
             dialog->findChild<QPushButton*>("native-index-delete")->click();assert(list->count()==2);
+            phase("index creation and deletion");
             for(int row=0;row<list->count();++row) if(list->item(row)->data(Qt::UserRole).toString()=="PrimaryKey") list->setCurrentRow(row);
             QTimer::singleShot(0,dialog,[] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(box);box->button(QMessageBox::Yes)->click();});dialog->findChild<QPushButton*>("native-index-delete")->click();assert(list->count()==1);
             dialog->findChild<QCheckBox*>("native-index-primary")->setChecked(true);dialog->findChild<QLineEdit*>("native-index-name")->setText("PrimaryKey");qobject_cast<QComboBox*>(grid->cellWidget(0,0))->setCurrentText("id");qobject_cast<QComboBox*>(grid->cellWidget(0,1))->setCurrentIndex(0);
@@ -4073,6 +4103,7 @@ int main(int argc,char** argv) {
         });
         auto* editIndexes=window.findChild<QAction*>("native-table-indexes");assert(editIndexes);editIndexes->trigger();
         assert(authored.exec("SELECT COUNT(*) FROM authored_defaults") && authored.next() && authored.value(0).toInt()==2);authored.finish();
+        phase("index design");
         QTimer::singleShot(0,&window,[&] {
             auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-field-designer");
             auto* list=dialog->findChild<QTableWidget*>("native-field-list");assert(list && list->rowCount()==6);
@@ -4089,12 +4120,14 @@ int main(int argc,char** argv) {
             auto propertyField=linaccess::makeDaoDatabase(db)->member("TableDefs",{linaccess::VbaValue::string("authored_defaults")}).object->member("Fields",{linaccess::VbaValue::string("ExtraNote")}).object;
             assert(propertyField->member("Size",{}).asNumber()==12 && propertyField->member("Required",{}).truthy());assert(!propertyField->member("AllowZeroLength",{}).truthy());
             assert(values.exec("SELECT COUNT(*) FROM authored_defaults WHERE ExtraNote='note'") && values.next() && values.value(0).toInt()==2);values.finish();
+            phase("new-field properties");
             dialog->findChild<QLineEdit*>("native-field-rename-name")->setText("RenamedNote");
             QTimer::singleShot(0,dialog,[] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());if(box && box->windowTitle()=="Feld konnte nicht geändert werden") {std::cerr<<"Field rename GUI error: "<<box->text().toStdString()<<"\n";box->accept();}});
             dialog->findChild<QPushButton*>("native-field-rename")->click();assert(list->item(list->currentRow(),0)->text()=="RenamedNote");
             assert(values.exec("SELECT COUNT(*) FROM authored_defaults WHERE RenamedNote='note'") && values.next() && values.value(0).toInt()==2);values.finish();assert(!values.exec("INSERT INTO authored_defaults(RenamedNote) VALUES('')"));
             QTimer::singleShot(0,dialog,[] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(box);box->button(QMessageBox::Yes)->click();});
             dialog->findChild<QPushButton*>("native-field-delete")->click();assert(list->rowCount()==6);
+            phase("field rename and deletion");
             for(int row=0;row<list->rowCount();++row) if(list->item(row,0)->text()=="qty") list->setCurrentCell(row,0);auto* rule=dialog->findChild<QLineEdit*>("native-field-property-validation");assert(rule && rule->isEnabled());rule->setText("Between 0 And 10");dialog->findChild<QLineEdit*>("native-field-property-validation-text")->setText("Bereich für Menge beachten");dialog->findChild<QPushButton*>("native-field-property-save")->click();assert(list->item(list->currentRow(),5)->text()=="Between 0 And 10");assert(!values.exec("UPDATE authored_defaults SET qty=11") && values.lastError().databaseText().contains("Bereich für Menge beachten"));assert(values.exec("SELECT SUM(qty) FROM authored_defaults") && values.next() && values.value(0).toInt()==14);values.finish();dialog->findChild<QSpinBox*>("native-field-property-position")->setValue(0);dialog->findChild<QPushButton*>("native-field-move")->click();assert(list->item(0,0)->text()=="qty");assert(values.exec("SELECT * FROM authored_defaults") && values.record().fieldName(0)=="qty");values.finish();auto* numericType=dialog->findChild<QComboBox*>("native-field-property-type");assert(numericType && numericType->isEnabled());numericType->setCurrentIndex(numericType->findData(7));dialog->findChild<QPushButton*>("native-field-change-type")->click();assert(list->item(0,1)->text().contains("Double"));for(int row=0;row<list->rowCount();++row) if(list->item(row,0)->text()=="moment") list->setCurrentCell(row,0);assert(rule->isEnabled());rule->setText(">=#2000-01-01# And <=Now()");dialog->findChild<QPushButton*>("native-field-property-save")->click();assert(!values.exec("UPDATE authored_defaults SET moment='1999-12-31 00:00:00'"));for(int row=0;row<list->rowCount();++row) if(list->item(row,0)->text()=="qty") list->setCurrentCell(row,0);auto* caption=dialog->findChild<QLineEdit*>("native-field-property-caption");assert(caption && caption->isEnabled());caption->setText("Anzahl Ä");dialog->findChild<QLineEdit*>("native-field-property-description")->setText("Technischer Hinweis");auto* format=dialog->findChild<QLineEdit*>("native-field-property-format");assert(format && format->isEnabled());format->setText("0.00\" units\"");dialog->findChild<QPushButton*>("native-field-display-save")->click();assert(caption->text()=="Anzahl Ä");
             dialog->findChild<QTabWidget*>("native-field-editor-tabs")->setCurrentIndex(0);dialog->findChild<QLineEdit*>("native-field-name")->setText("ui_currency");auto* newType=dialog->findChild<QComboBox*>("native-field-type");assert(newType->findData(5)>=0);newType->setCurrentIndex(newType->findData(5));dialog->findChild<QLineEdit*>("native-field-default")->setText("1.2500");dialog->findChild<QLineEdit*>("native-field-validation")->setText("Between 0.0001 And 2.0001");dialog->findChild<QPushButton*>("native-field-create")->click();assert(list->rowCount()==7);
             for(int row=0;row<list->rowCount();++row) if(list->item(row,0)->text()=="ui_currency") list->setCurrentCell(row,0);dialog->findChild<QTabWidget*>("native-field-editor-tabs")->setCurrentIndex(1);assert(list->item(list->currentRow(),1)->text().contains("Währung") && rule->isEnabled());
@@ -4102,6 +4135,7 @@ int main(int argc,char** argv) {
             rule->setText(">=1.2500 And <=2.0001");dialog->findChild<QLineEdit*>("native-field-property-validation-text")->setText("Währungsgrenze");
             dialog->findChild<QLineEdit*>("native-field-property-default")->setText("2.0001");dialog->findChild<QPushButton*>("native-field-property-save")->click();assert(dialog->findChild<QLineEdit*>("native-field-property-default")->text()=="2.0001");assert(values.exec("SELECT COUNT(*) FROM authored_defaults WHERE ui_currency=1.25") && values.next() && values.value(0).toInt()==2);values.finish();
             assert(!values.exec("UPDATE authored_defaults SET ui_currency=2.0002") && values.lastError().databaseText().contains("Währungsgrenze"));values.finish();
+            phase("Currency field validation");
             QTimer::singleShot(0,dialog,[] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(box);box->button(QMessageBox::Yes)->click();});dialog->findChild<QPushButton*>("native-field-delete")->click();assert(list->rowCount()==6);dialog->reject();
         });
         auto* editFields=window.findChild<QAction*>("native-table-fields-edit");assert(editFields);editFields->trigger();phase("after-field-editor");
@@ -4146,6 +4180,7 @@ int main(int argc,char** argv) {
         assert(db.tables().contains("authored_renamed") && !db.tables().contains("authored_defaults"));assert(linaccess::datasheet_page_store::read(db,"table","authored_renamed").present && !linaccess::datasheet_page_store::read(db,"table","authored_defaults").present);
         assert(authored.exec("INSERT INTO authored_renamed DEFAULT VALUES"));assert(authored.exec("SELECT COUNT(*),MAX(id) FROM authored_renamed") && authored.next() && authored.value(0).toInt()==3 && authored.value(1).toInt()==beforeRenameCounter+1);authored.finish();
     }
+    phase("table renaming");
     QTimer::singleShot(0,&window,[&] {auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-form-designer");dialog->findChild<QLineEdit*>("native-form-name")->setText("Caption form");dialog->findChild<QComboBox*>("native-form-source")->setCurrentText("authored_renamed");auto* fields=dialog->findChild<QListWidget*>("native-form-fields");bool caption=false;for(int row=0;row<fields->count();++row) if(fields->item(row)->data(Qt::UserRole).toString()=="qty") {caption=fields->item(row)->text()=="Anzahl Ä";}assert(caption);dialog->findChild<QPushButton*>("native-form-save")->click();dialog->reject();});action(window,"+ Formular")->trigger();
     {const auto stored=linaccess::loadNativeStoredForm(db,"Caption form");assert(stored && stored->layout.contains(QString("Anzahl Ä").toUtf8()) && stored->layout.contains("Format ="));}
     QTimer::singleShot(0,&window,[&] {auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-report-designer");dialog->findChild<QLineEdit*>("native-report-name")->setText("Caption report");dialog->findChild<QPlainTextEdit*>("native-report-sql")->setPlainText("SELECT * FROM authored_renamed");dialog->findChild<QPushButton*>("native-report-save")->click();dialog->reject();});action(window,"+ Bericht")->trigger();
@@ -4177,6 +4212,7 @@ int main(int argc,char** argv) {
         assert(makePreviewFormObject(bad)->member("Controls",{linaccess::VbaValue::string("qty")}).object->scalarValue().number==7);
         assert(pdf.open(QIODevice::ReadOnly) && pdf.readAll()==original);assert(bad.close());
     }
+    phase("native form and report design");
     QTimer::singleShot(0,&window,[&] {auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-query-designer");dialog->findChild<QLineEdit*>("native-query-name")->setText("Owned rename query");dialog->findChild<QPlainTextEdit*>("native-query-sql")->setPlainText("SELECT qty FROM authored_renamed");dialog->findChild<QPushButton*>("native-query-save")->click();});action(window,"+ Abfrage")->trigger();
     {const auto before=linaccess::datasheet_page_store::read(db,"query","Owned rename query");linaccess::datasheet_page_store::save(db,"query","Owned rename query",before,linaccess::datasheet_page_store::defaults());}
     {auto* tree=window.findChild<QTreeWidget*>();bool selected=false;for(auto* item:tree->findItems("Owned rename query",Qt::MatchExactly|Qt::MatchRecursive,0)) if(item->data(0,Qt::UserRole).toString()=="query") {tree->setCurrentItem(item);selected=true;break;}assert(selected);}
@@ -4222,6 +4258,7 @@ End Sub
         assert(window.openQueryDocument("Command query",0,2).value("error").toInt()==0);assert(caller.executeProcedure("DeleteQuery",arguments).errorNumber==3251);assert(window.closeQueryDocument(1,"Command query",2).value("error").toInt()==0);
         assert(caller.executeProcedure("DeleteQuery",arguments).status==VbaExecutionStatus::Completed);assert(!db.tables(QSql::Views).contains("Command query",Qt::CaseInsensitive) && !datasheet_page_store::read(db,"query","Command query").present);assert(caller.close());
     }
+    phase("query document commands");
     {const auto before=linaccess::datasheet_page_store::read(db,"table","renamed_command_table");linaccess::datasheet_page_store::save(db,"table","renamed_command_table",before,linaccess::datasheet_page_store::defaults());auto* tree=window.findChild<QTreeWidget*>();bool selected=false;for(auto* item:tree->findItems("renamed_command_table",Qt::MatchExactly|Qt::MatchRecursive,0)) if(item->data(0,Qt::UserRole).toString()=="table") {tree->setCurrentItem(item);selected=true;break;}assert(selected);}
     QTimer::singleShot(0,&window,[] {auto* question=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(question && question->objectName()=="native-object-delete-confirm");question->done(QMessageBox::No);});window.findChild<QAction*>("native-object-delete")->trigger();assert(db.tables().contains("renamed_command_table"));
     QTimer::singleShot(0,&window,[] {auto* question=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(question && question->objectName()=="native-object-delete-confirm");question->done(QMessageBox::Yes);});window.findChild<QAction*>("native-object-delete")->trigger();assert(!db.tables().contains("renamed_command_table") && !linaccess::datasheet_page_store::read(db,"table","renamed_command_table").present);
@@ -4327,7 +4364,9 @@ End Sub
         amount->assign("Format",VbaValue::string(""));assert(line->text()=="1.2345" && amount->scalarValue().currencyUnits==12345);
         const auto closing=std::make_shared<ScalarFormatValue>();closing->callback=[&form] {assert(form.close());};expect([&] {writable->assign("Value",VbaValue::reference(closing));},2450);assert(closing->reads==1);
     }
+    phase("bound field and control formats");
     testEditableControlFormats(window,db);
+    phase("editable control formats");
     testNativeMacros(window,db);phase("testNativeMacros");
     testNativeMacroDesigner(window,db);phase("testNativeMacroDesigner");
     testNativeModuleEditor(window,db);phase("testNativeModuleEditor");
@@ -4351,7 +4390,7 @@ End Sub
     testStandaloneDocumentOpening(window,db);phase("testStandaloneDocumentOpening");
     testMacroArgumentPresence(window,db);phase("testMacroArgumentPresence");
     testNativeMacroSetValue(window,db);phase("testNativeMacroSetValue");
-    testNativeProjectGuiExtensions(window,db);phase("testNativeProjectGuiExtensions");
+    testNativeProjectGuiExtensions(window,db,phase);phase("testNativeProjectGuiExtensions");
     testNativeAutoExec(window,db);phase("testNativeAutoExec");
     assert(window.close()); dispose();phase("finished"); watchdog.stop();
     std::cout<<"Main window: native project/explorer opening, independent nonmodal form/report lifetime, deduplication, modal metadata, cancellation, SQL save and retained close/MsgBox passed\n";

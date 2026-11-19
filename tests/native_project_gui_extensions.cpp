@@ -563,17 +563,20 @@ End Sub
     assert(target.close() && caller.close());
 }
 
-void testNativeProjectGuiExtensions(MainWindow& window,QSqlDatabase db) {
+void testNativeProjectGuiExtensions(MainWindow& window,QSqlDatabase db,const std::function<void(const char*)>& phase) {
     testNativeFocusedRequery(window,db);
     testNativeRepaintObject(window,db);
     testNativeSetValueDoubleEvaluation(window,db);
     testNativeFormRecordFields(window,db);
+    phase("native control commands and form record fields");
     testNativeProjectFilters(window,db);
     testNativeWindowStateCommands(window,db);
     testNativeMoveSize(window,db);
     testNativeMacroContinuations(window,db);
+    phase("native filters, window commands and macro continuations");
     testNativeSqlObjectProperties(window,db);
     testNativeModuleDebugger(window,db);
+    phase("native SQL object properties and module debugger");
     testNativeCapabilityReport(window,db);
     testNativeConditionCoercions(window,db);
 }
