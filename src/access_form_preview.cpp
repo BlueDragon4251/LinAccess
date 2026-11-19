@@ -2165,10 +2165,11 @@ void AccessFormPreview::loadRecords() {
                 auto statement=plan.sql;
                 QVariantList entryBindings;
                 if(layout_.dataEntry && layout_.allowAdditions) {
-                    const bool hasWhere=filterOn_ && !filter_.trimmed().isEmpty();
                     QStringList entryPlaceholders;
                     for(const auto id:dataEntryRows_) { entryPlaceholders.append("?"); entryBindings.append(id); }
-                    statement+=(hasWhere ? " AND " : " WHERE ")+(entryPlaceholders.isEmpty() ? QString("0") : sqlIdentifier(identityAlias)+" IN ("+entryPlaceholders.join(',')+")");
+                    const auto entryCriteria=entryPlaceholders.isEmpty() ? QString("0")
+                        : sqlIdentifier(identityAlias)+" IN ("+entryPlaceholders.join(',')+")";
+                    statement="SELECT * FROM ("+statement+") WHERE "+entryCriteria;
                 }
                 const bool prepared=query.prepare(statement+order);
                 if(prepared) for(const auto& id:entryBindings) query.addBindValue(id);
