@@ -21,6 +21,7 @@
 #include <QPrintPreviewWidget>
 #include <QAbstractScrollArea>
 #include <QMainWindow>
+#include <QWindow>
 #include "vba_qt_value.hpp"
 #include "access_format.hpp"
 #include <QSignalBlocker>
@@ -2282,22 +2283,36 @@ void nativeProjectMoveSize(QSqlDatabase database,QWidget* owner,const std::vecto
     if(!project || !active || !documents.contains(active) || (caller && caller!=active)
         || active->parentWidget()!=project || QApplication::activeWindow()!=active
         || active->documentKind()!=linaccess::AccessDocumentKind::Form
-        || !active->isVisible() || !active->isWindow() || active->isModal() || active->isPopupDocument()
+        || !active->isVisible() || !active->isWindow() || active->isModal()
         || active->isMaximized() || active->isMinimized() || active->isFullScreen()
         || active->windowType()==Qt::Popup || active->windowType()==Qt::Tool
         || QApplication::activeModalWidget())
         throw VbaRuntimeError(2046,"MoveSize requires an active normal project form window");
-    if((twips[0] || twips[1]) && QGuiApplication::platformName().startsWith("wayland"))
+    const bool positioning=twips[0] || twips[1];
+    if(positioning && QGuiApplication::platformName().startsWith("wayland"))
         throw VbaRuntimeError(2046,"MoveSize window positioning is unavailable on this platform");
 
-    // Form layout uses 96 logical pixels per inch. The rectangle excludes decorations.
-    const auto pixels=[](int value) {return qRound(value/15.0);};
+    const bool popup=active->isPopupDocument();
     const auto before=active->geometry();
-    const auto origin=project->mapToGlobal(QPoint{});
-    const QRect target(twips[0] ? origin.x()+pixels(*twips[0]) : before.x(),
-        twips[1] ? origin.y()+pixels(*twips[1]) : before.y(),
-        twips[2] ? pixels(*twips[2]) : before.width(),
-        twips[3] ? pixels(*twips[3]) : before.height());
+    QMargins decorations;
+    if(popup) {
+        auto* window=active->windowHandle();
+        if(!window || !window->isExposed() || (positioning && QGuiApplication::screens().size()!=1))
+            throw VbaRuntimeError(2046,"MoveSize popup placement requires a visible window with an unambiguous desktop");
+        decorations=window->frameMargins();
+        if(decorations.left()<0 || decorations.top()<0 || decorations.right()<0 || decorations.bottom()<0
+            || before.marginsAdded(decorations)!=active->frameGeometry())
+            throw VbaRuntimeError(2046,"MoveSize popup frame dimensions are unavailable");
+    }
+    // Normal forms use the project client origin. Popup coordinates and dimensions describe the desktop frame.
+    const auto pixels=[](int value) {return qRound(value/15.0);};
+    const auto bounds=before.marginsAdded(decorations);
+    const auto origin=popup ? QPoint{} : project->mapToGlobal(QPoint{});
+    const QRect requested(twips[0] ? origin.x()+pixels(*twips[0]) : bounds.x(),
+        twips[1] ? origin.y()+pixels(*twips[1]) : bounds.y(),
+        twips[2] ? pixels(*twips[2]) : bounds.width(),
+        twips[3] ? pixels(*twips[3]) : bounds.height());
+    const auto target=requested.marginsRemoved(decorations);
     if(target.width()<qMax(1,active->minimumWidth()) || target.height()<qMax(1,active->minimumHeight())
         || target.width()>active->maximumWidth() || target.height()>active->maximumHeight())
         throw VbaRuntimeError(5,"MoveSize dimensions are outside the window constraints");
@@ -2309,5 +2324,6 @@ void nativeProjectMoveSize(QSqlDatabase database,QWidget* owner,const std::vecto
     active->setGeometry(target);
     guard();
     if(!active || !active->isVisible()) throw VbaRuntimeError(2501,"Form closed during MoveSize");
-    if(active->geometry()!=target) throw VbaRuntimeError(2046,"The window did not accept the requested geometry");
+    if((popup ? active->frameGeometry() : active->geometry())!=requested)
+        throw VbaRuntimeError(2046,"The window did not accept the requested geometry");
 }

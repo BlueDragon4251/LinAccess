@@ -31,9 +31,13 @@ At least one is required. Omitted arguments keep the current value. The action
 uses signed 16-bit twips with positive dimensions, converts at 96 logical pixels
 per inch and positions the client rectangle relative to the project window.
 The macro persists its arguments. Moving a window leaves the form definition
-and any record draft untouched. The action requires a visible, active top-level
-form and reports error 2046 for unsupported window states, popup forms, modal
-contexts, other document types and positioning on Wayland.
+and any record draft untouched. For a visible, active nonmodal popup, position
+and size apply to the outer frame in desktop coordinates. This follows an
+Access 2003 observation at 96 DPI. Qt frame margins must be available and
+consistent. Popup positioning requires a single display.
+Error 2046 covers unsupported window states, modal contexts, other document
+types, positioning on Wayland and geometry requested before a form is active
+and visible.
 
 The native macro parser/catalog/load functions now compile once in linaccess_data
 instead of being defined in every including translation unit. Their signatures,

@@ -262,6 +262,28 @@ End)FORM";
     assert(form.close());
     window.focusDatabaseWindow();
     assert(linaccess::loadNativeMacro(database,"ResizeFormHeight").front().arguments[3].number==6000);
+
+    // An Access popup uses the desktop frame even when the project origin is offset.
+    window.move(180,135);
+    auto popupSource=source;
+    popupSource.replace("Begin Form\n","Begin Form\nPopUp =NotDefault\n");
+    AccessFormPreview popup("NativeMoveSizePopup",popupSource,{},database,&window);
+    assert(popup.isPopupDocument());
+    popup.show();
+    QApplication::processEvents();
+    QApplication::setActiveWindow(&popup);
+    const auto projectOrigin=window.mapToGlobal(QPoint{});
+    assert(!projectOrigin.isNull());
+    run(commands,"ResizeProjectForm");
+    const QRect popupFrame(14,26,500,350);
+    assert(popup.frameGeometry()==popupFrame);
+    auto popupCommands=makePreviewApplicationObject(popup)->member("DoCmd",{}).object;
+    run(popupCommands,"ResizeFormHeight");
+    assert(popup.frameGeometry()==QRect(14,26,500,400));
+    assert(window.mapToGlobal(QPoint{})==projectOrigin);
+    assert(popup.close());
+    window.focusDatabaseWindow();
+    window.setGeometry(projectGeometry);
 }
 
 void testNativeMacroContinuations(MainWindow& window,QSqlDatabase db) {
