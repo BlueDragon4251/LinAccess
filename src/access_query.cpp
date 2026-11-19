@@ -1231,7 +1231,7 @@ QVector<ColumnOrigin> columnOrigins(QSqlDatabase db,const QString& source,QSet<Q
     }
     return origins;
 }
-QString resolveQueryOrigins(QSqlDatabase db,const QString& sql) {
+QString resolveQueryOrigins(QSqlDatabase db,const QString& sql,QSet<QString>* ambiguousReferences=nullptr) {
     auto tokens=tokenize(sql,true);
     const auto word=[&](qsizetype i,const char* text) { return i>=0 && i<tokens.size() && tokens[i].kind==Token::Word && tokens[i].value.compare(text,Qt::CaseInsensitive)==0; };
     const auto name=[](const Token& token) { return token.kind==Token::Word || token.kind==Token::Identifier; };
@@ -1302,7 +1302,11 @@ QString resolveQueryOrigins(QSqlDatabase db,const QString& sql) {
         QVector<QPair<QString,QString>> matches;
         for (const auto& source : sources) for (const auto& origin : source.origins)
             if (!origin.table.isEmpty() && origin.table.compare(owner,Qt::CaseInsensitive)==0 && origin.column.compare(tokens[i+2].value,Qt::CaseInsensitive)==0) matches.append({source.alias,origin.label});
-        if (matches.size()!=1) continue; // Never guess across ambiguous origins.
+        if (matches.size()!=1) {
+            if (ambiguousReferences && matches.size()>1)
+                ambiguousReferences->insert(owner+'.'+tokens[i+2].value);
+            continue;
+        }
         tokens[i]={Token::Identifier,matches.front().first}; tokens[i+2]={Token::Identifier,matches.front().second}; changed=true;
     }
     // Jet permits referring to earlier computed projection aliases. Expand only
@@ -2700,11 +2704,12 @@ QMap<QString,QVariant> bindAccessQueryParameters(const AccessQueryPlan& plan, co
 namespace {
 struct PreparedAccessQuery { QSqlQuery query; bool hiddenRank; QVector<QString> types; QVector<QString> columnTypes; QVector<QPair<QString,QString>> fieldOrigins; };
 std::optional<AccessQueryPlan> exactUnionPlan(QSqlDatabase db,const AccessQueryPlan& input);
-bool unresolvedQualifiedQueryField(const QString& sql,const QSqlError& error) {
+bool unresolvedQualifiedQueryField(const QString& sql,const QSqlError& error,const QSet<QString>& ambiguousReferences) {
     const QString prefix="no such column: ";
     const auto detail=error.databaseText();
     if (!detail.startsWith(prefix)) return false;
     const auto reference=detail.mid(prefix.size());
+    if (ambiguousReferences.contains(reference)) return false;
     const auto tokens=tokenize(sql,true);
     const auto isName=[](const Token& token) { return token.kind==Token::Word || token.kind==Token::Identifier; };
     for (qsizetype i=0;i+2<tokens.size();++i) {
@@ -2722,9 +2727,10 @@ PreparedAccessQuery prepareAccessQuery(QSqlDatabase db,const AccessQueryPlan& un
     const auto source=topOne ? plan.topOneSql : useLeftJoin(db,plan) ? plan.rightJoinSql : plan.sql;
     if (missingSqlDependency(db,source)) throw VbaRuntimeError(3078,"SQL dependency unavailable");
     QSqlQuery query(db);
-    const auto sql=resolveQueryOrigins(db,source);
+    QSet<QString> ambiguousReferences;
+    const auto sql=resolveQueryOrigins(db,source,&ambiguousReferences);
     if (!query.prepare(sql)) {
-        if (unresolvedQualifiedQueryField(sql,query.lastError()))
+        if (unresolvedQualifiedQueryField(sql,query.lastError(),ambiguousReferences))
             throw VbaRuntimeError(3061,"DAO: query field reference is unresolved");
         failAccessQuery(query);
     }

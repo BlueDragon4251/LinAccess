@@ -148,6 +148,10 @@ int main(int argc,char** argv) {
     try { model.execute(db,"SELECT a.id FROM repeated_origins"); }
     catch(const linaccess::VbaRuntimeError& error) { ambiguousOrigin=error.number==3146; }
     assert(ambiguousOrigin);
+    bool missingField=false;
+    try { model.execute(db,"SELECT repeated_origins.missing_field,a.id FROM repeated_origins"); }
+    catch(const linaccess::VbaRuntimeError& error) { missingField=error.number==3061; }
+    assert(missingField);
     calls=0;
     bool volatileAlias=false;
     try { model.execute(db,"SELECT Forms!Filter!Year AS x,x+1 FROM a"); }

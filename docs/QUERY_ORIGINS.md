@@ -44,6 +44,7 @@ It requests a column absent from its referenced view's six exposed columns.
 The same schema mismatch occurs in two other artifacts. The sanitized Access 2003
 DAO comparison reports 3061 for all three. The adapter now reports 3061 when
 SQLite rejects a qualified field explicitly present in the prepared SELECT.
+References with multiple proven column origins retain error 3146.
 The corpus regression still verifies the omissions against the actual saved
 view or table schema. These queries remain unresolved.
 
