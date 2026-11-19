@@ -230,7 +230,7 @@ int main(int argc,char** argv) {
                 : error.number == 3078 ? "missing_query_dependency" : error.number == 3075 ? "unsupported_sql_grammar"
                 : error.number == 3035 ? "execution_budget_exceeded" : "unsupported_jet_or_binding";
             if (sourceColumnMismatchHashes.contains(object["sha256"].toString())) {
-                assert(error.number==3146);
+                assert(error.number==3061);
                 const auto plan=linaccess::compileAccessQuery(linaccess::accessQuerySource(db,object["name"].toString()));
                 QSqlQuery probe(db); assert(!probe.prepare(plan.sql));
                 const auto message=probe.lastError().text();

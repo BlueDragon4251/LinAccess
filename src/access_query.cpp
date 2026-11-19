@@ -2700,6 +2700,19 @@ QMap<QString,QVariant> bindAccessQueryParameters(const AccessQueryPlan& plan, co
 namespace {
 struct PreparedAccessQuery { QSqlQuery query; bool hiddenRank; QVector<QString> types; QVector<QString> columnTypes; QVector<QPair<QString,QString>> fieldOrigins; };
 std::optional<AccessQueryPlan> exactUnionPlan(QSqlDatabase db,const AccessQueryPlan& input);
+bool unresolvedQualifiedQueryField(const QString& sql,const QSqlError& error) {
+    const QString prefix="no such column: ";
+    const auto detail=error.databaseText();
+    if (!detail.startsWith(prefix)) return false;
+    const auto reference=detail.mid(prefix.size());
+    const auto tokens=tokenize(sql,true);
+    const auto isName=[](const Token& token) { return token.kind==Token::Word || token.kind==Token::Identifier; };
+    for (qsizetype i=0;i+2<tokens.size();++i) {
+        if (isName(tokens[i]) && symbol(tokens[i+1],".") && isName(tokens[i+2])
+            && reference==tokens[i].value+'.'+tokens[i+2].value) return true;
+    }
+    return false;
+}
 PreparedAccessQuery prepareAccessQuery(QSqlDatabase db,const AccessQueryPlan& untyped) {
     auto plan=resolveCurrencyQuery(db,untyped);
     if (!plan.sql.trimmed().startsWith("SELECT",Qt::CaseInsensitive))
@@ -2709,7 +2722,12 @@ PreparedAccessQuery prepareAccessQuery(QSqlDatabase db,const AccessQueryPlan& un
     const auto source=topOne ? plan.topOneSql : useLeftJoin(db,plan) ? plan.rightJoinSql : plan.sql;
     if (missingSqlDependency(db,source)) throw VbaRuntimeError(3078,"SQL dependency unavailable");
     QSqlQuery query(db);
-    if (!query.prepare(resolveQueryOrigins(db,source))) failAccessQuery(query);
+    const auto sql=resolveQueryOrigins(db,source);
+    if (!query.prepare(sql)) {
+        if (unresolvedQualifiedQueryField(sql,query.lastError()))
+            throw VbaRuntimeError(3061,"DAO: query field reference is unresolved");
+        failAccessQuery(query);
+    }
     auto types=plan.resultTypes;
     QVector<QString> columnTypes;
     QVector<QPair<QString,QString>> fieldOrigins;

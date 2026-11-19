@@ -30,11 +30,10 @@ views are repaired in dependency passes; user views and tables are not replaced.
 ## Original regression evidence
 
 All 100 unchanged Kassa queries remain hash-checked on an isolated MDB import.
-The current run executes 73 without extra parameters and five with parameters:
-78 total, without a Microsoft Access result oracle. For those five, a non-Null
-parameter is selected from actual unfiltered results; the DAO filtered row count
-must be positive and equal an independent C++ filter count. Values are not
-included in reports. Synthetic tests separately check exact returned values,
+The run executes 73 without extra parameters and five with parameters.
+For those five, LinAccess takes a non-Null value from the unfiltered results.
+The DAO filtered row count matches a positive, independently computed C++
+filter count. Reports omit the parameter values. Synthetic tests separately check exact returned values,
 alias dependencies, nested derived tables, duplicate preservation, ambiguous
 origins, and that a live callback is not expanded/evaluated during metadata work.
 
@@ -42,10 +41,11 @@ One of the six original parameterized derived-table queries remains unresolved
 (artifact SHA-256
 `4a8db1b0b4f74446d4d95098591dbb4f36c871de05533f3c182b23bfa6127e6e`).
 It requests a column absent from its referenced view's six exposed columns.
-The regression checks that schema mismatch and reports error 3146. It does not
-substitute a similarly named column from another table. A Microsoft Access
-comparison is required to distinguish an original query/source mismatch from
-additional Access name-resolution behavior. This query is not counted executed.
+The same schema mismatch occurs in two other artifacts. The sanitized Access 2003
+DAO comparison reports 3061 for all three. The adapter now reports 3061 when
+SQLite rejects a qualified field explicitly present in the prepared SELECT.
+The corpus regression still verifies the omissions against the actual saved
+view or table schema. These queries remain unresolved.
 
 Remaining corpus classifications: nine missing query dependencies, eight
 binding/context failures, three source-column mismatches, and two joined
@@ -112,7 +112,8 @@ executes on the full isolated import. Synthetic real SQL checks distinct values
 from duplicate labels and two view inputs over the same base table, WHERE/ORDER
 binding, and refusal of ambiguous/unknown/compound/overqualified paths.
 The current original corpus is 78/100 executed: 73 ordinary and five with checked
-data-selected parameters. No Microsoft Access result oracle is available.
+data-selected parameters. The Access 2003 DAO comparison establishes the error
+boundary described above. Result equivalence remains open.
 
 Three remaining source-column cases are now independently classified: two
 unchanged saved source definitions omit the requested field, and one requested

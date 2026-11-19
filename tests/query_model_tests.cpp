@@ -322,6 +322,31 @@ int main(int argc, char** argv) {
     rejected=false;
     try { model.execute(db,"SELECT * FROM missing_dependency"); } catch(const linaccess::VbaRuntimeError&) { rejected=true; }
     assert(rejected && model.rowCount()==0);
+    {
+        using linaccess::VbaValue;
+        assert(query.exec("CREATE VIEW field_surface AS SELECT id FROM samples"));
+        auto database=linaccess::makeDaoDatabase(db);
+        const auto openSnapshot=[&](const char* source) {
+            auto definition=database->member("CreateQueryDef",{VbaValue::string(""),VbaValue::string(source)}).object;
+            return definition->member("OpenRecordset",{VbaValue::numeric(4)}).object;
+        };
+        const auto expectError=[](const auto& open,int expected) {
+            int number=0;
+            try { open(); } catch(const linaccess::VbaRuntimeError& error) { number=error.number; }
+            assert(number==expected);
+        };
+        for (const auto source : {"SELECT field_surface.score FROM field_surface",
+                                  "SELECT samples.absent_score FROM samples"}) {
+            expectError([&] { model.execute(db,source); },3061);
+            assert(model.rowCount()==0 && model.columnCount()==0);
+            expectError([&] { openSnapshot(source); },3061);
+        }
+        expectError([&] { openSnapshot("SELECT absent_source.id FROM absent_source"); },3078);
+        expectError([&] { openSnapshot("SELECT id FROM samples AS a INNER JOIN samples AS b ON a.id=b.id"); },3146);
+        auto available=openSnapshot("SELECT field_surface.id FROM field_surface");
+        assert(available->member("RecordCount",{}).asNumber()==4);
+        available->member("Close",{});
+    }
     // Metadata expansion must reject missing transitive dependencies before
     // SQLite prepares nested outer joins (a crash on Ubuntu's SQLite 3.45).
     assert(query.exec("CREATE TEMP VIEW broken_outer AS SELECT a.id, sum(b.score) AS total FROM (samples AS a RIGHT JOIN samples AS b ON a.id=b.id) LEFT JOIN absent_outer AS c ON b.id=c.id GROUP BY a.id"));
