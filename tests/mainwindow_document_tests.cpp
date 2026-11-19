@@ -2592,6 +2592,101 @@ End Function)VBA"}}).toJson(QJsonDocument::Compact));assert(sql.exec());sql.fini
     assert(first.close());int error=0;try {(void)firstObject->member("Name",{});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==2450 && forms->member("Count",{}).number==formCount+1);assert(hidden.close() && report.close());assert(forms->member("Count",{}).number==formCount && reports->member("Count",{}).number==reportCount);window.focusDatabaseWindow();error=0;try {(void)screen->member("ActiveForm",{});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==2450);assert(sql.exec("DELETE FROM _la_objects WHERE kind='module' AND name='StandaloneDocumentCode'"));
 }
 
+void testScreenActiveReport(MainWindow& window,QSqlDatabase db) {
+    using linaccess::VbaValue;
+    const QByteArray reportSource="Begin Report\nBegin Section\nHeight =600\nEnd\nEnd";
+    const QByteArray formSource="Begin Form\nBegin Section\nEnd\nEnd";
+    linaccess::NativeStandardModuleHost host(&window,db,[] {});
+    auto application=host.applicationObject();
+    auto screen=application->member("Screen",{}).object;
+    auto reports=application->member("Reports",{}).object;
+    auto commands=application->member("DoCmd",{}).object;
+    const auto expectUnavailable=[&] {
+        int error=0;
+        try { (void)screen->member("ActiveReport",{}); }
+        catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; }
+        assert(error==2450);
+    };
+    const auto select=[&](int type,const char* name) {
+        commands->member("SelectObject",{VbaValue::integer(type),VbaValue::string(name),VbaValue::logical(false)});
+    };
+
+    auto unloadSource=reportSource;
+    unloadSource.replace("Begin Report\n","Begin Report\nOnUnload =\"[Event Procedure]\"\n");
+    const QByteArray unloadCode=R"VBA(Sub Report_Unload(Cancel As Integer)
+Dim activeReportObject As Report
+On Error Resume Next
+Set activeReportObject=Screen.ActiveReport
+If Err.Number<>2450 Then Cancel=1
+End Sub)VBA";
+    AccessFormPreview first("ScreenFirstReport",unloadSource,unloadCode,db,&window);
+    AccessFormPreview second("ScreenSecondReport",reportSource,{},db,&window);
+    AccessFormPreview form("ScreenReportController",formSource,{},db,&window);
+    window.focusDatabaseWindow();
+    expectUnavailable();
+    first.show();
+    second.show();
+    form.show();
+    select(2,"ScreenReportController");
+    expectUnavailable();
+
+    select(3,"ScreenFirstReport");
+    auto held=screen->member("ActiveReport",{}).object;
+    assert(held==reports->item("ScreenFirstReport").object && held->isNativeType("access.report"));
+    const auto result=linaccess::executeVbaProcedure(R"VBA(Public Function IsActiveReport() As Boolean
+Dim activeReportObject As Report
+Set activeReportObject=Screen.ActiveReport
+IsActiveReport=(activeReportObject Is Application.Screen.ActiveReport) And (activeReportObject Is Reports("ScreenFirstReport"))
+End Function)VBA","IsActiveReport",host);
+    assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue
+        && result.typedReturnValue->kind==VbaValue::Kind::Boolean && result.typedReturnValue->boolean);
+    auto formScreen=makePreviewApplicationObject(form)->member("Screen",{}).object;
+    assert(formScreen->member("ActiveReport",{}).object==held);
+    select(3,"ScreenSecondReport");
+    assert(screen->member("ActiveReport",{}).object==reports->item("ScreenSecondReport").object);
+    assert(held->member("Name",{}).asText()=="ScreenFirstReport");
+
+    window.focusDatabaseWindow();
+    expectUnavailable();
+    first.hide();
+    form.hide();
+    select(3,"ScreenSecondReport");
+    second.hide();
+    // Inactive reports can remain loaded while there is no active document.
+    expectUnavailable();
+    assert(reports->item("ScreenSecondReport").object==makePreviewFormObject(second));
+
+    auto foreignDb=QSqlDatabase::addDatabase("QSQLITE","screen-foreign-report");
+    foreignDb.setDatabaseName(":memory:");
+    assert(foreignDb.open());
+    {
+        AccessFormPreview foreign("ScreenFirstReport",reportSource,{},foreignDb);
+        foreign.show();
+        QApplication::setActiveWindow(&foreign);
+        linaccess::NativeStandardModuleHost foreignHost(&foreign,foreignDb,[] {});
+        auto foreignScreen=foreignHost.applicationObject()->member("Screen",{}).object;
+        assert(foreignScreen->member("ActiveReport",{}).object==makePreviewFormObject(foreign));
+        expectUnavailable();
+        assert(foreign.close());
+    }
+    foreignDb=QSqlDatabase();
+    QSqlDatabase::removeDatabase("screen-foreign-report");
+
+    first.show();
+    select(3,"ScreenFirstReport");
+    assert(first.close());
+    const auto unload=first.eventResult("OnUnload");
+    assert(unload && unload->status==linaccess::VbaExecutionStatus::Completed);
+    expectUnavailable();
+    int error=0;
+    try { (void)held->member("Name",{}); }
+    catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; }
+    assert(error==2450);
+    assert(second.close() && form.close());
+    window.focusDatabaseWindow();
+    expectUnavailable();
+}
+
 void testStandaloneProjectCatalog(MainWindow& window,QSqlDatabase db) {
     using linaccess::VbaValue;QSqlQuery sql(db);sql.prepare("INSERT INTO _la_objects VALUES('module','StandaloneCatalogCode',?)");sql.addBindValue(QJsonDocument(QJsonObject{{"version",1},{"vba","Public Function StandaloneCatalogProbe() As Long\nDim project As Object\nSet project=CurrentProject\nStandaloneCatalogProbe=CurrentData.AllTables.Count+project.AllModules.Count\nEnd Function"}}).toJson(QJsonDocument::Compact));assert(sql.exec());sql.finish();linaccess::NativeStandardModuleHost host(&window,db,[] {});auto application=host.applicationObject();auto project=application->member("CurrentProject",{}).object;auto data=application->member("CurrentData",{}).object;assert(project && data && project==application->member("CurrentProject",{}).object && data==application->member("CurrentData",{}).object);auto modules=project->member("AllModules",{}).object;auto tables=data->member("AllTables",{}).object;const auto count=modules->member("Count",{}).number+tables->member("Count",{}).number;assert(count>0 && application->member("Run",{VbaValue::string("StandaloneCatalogProbe")}).number==count);auto descriptor=modules->member("Item",{VbaValue::string("standalonecatalogcode")}).object;assert(descriptor->member("Name",{}).asText()=="StandaloneCatalogCode");assert(tables->member("Item",{VbaValue::string("module_find_rows")}).object->member("Name",{}).asText()=="module_find_rows");
     {AccessFormPreview form("StandaloneCatalogIdentity","Begin Form\nBegin Section\nEnd\nEnd",{},db,&window);form.show();QApplication::processEvents();auto formApplication=makePreviewApplicationObject(form);assert(formApplication->member("CurrentProject",{}).object==project && formApplication->member("CurrentData",{}).object==data);assert(form.close());}assert(modules->member("Count",{}).number+tables->member("Count",{}).number==count);
@@ -2894,6 +2989,7 @@ End Function)VBA"}});
     const auto count=[&] {QSqlQuery query(db);assert(query.exec("SELECT COUNT(*) FROM startup_effects") && query.next());return query.value(0).toInt();};assert(count()==2);
     int stale=0;try {(void)heldApplication->member("Eval",{VbaValue::string("1")});}catch(const linaccess::VbaRuntimeError& error) {stale=error.number;}assert(stale==3420);stale=0;try {(void)heldProject->member("AllModules",{});}catch(const linaccess::VbaRuntimeError& error) {stale=error.number;}assert(stale==3420);stale=0;try {(void)heldTables->member("Count",{});}catch(const linaccess::VbaRuntimeError& error) {stale=error.number;}assert(stale==3420);
     stale=0;try {(void)heldForms->member("Count",{});}catch(const linaccess::VbaRuntimeError& error) {stale=error.number;}assert(stale==3420);stale=0;try {(void)heldScreen->member("MousePointer",{});}catch(const linaccess::VbaRuntimeError& error) {stale=error.number;}assert(stale==3420);
+    stale=0;try {(void)heldScreen->member("ActiveReport",{});}catch(const linaccess::VbaRuntimeError& error) {stale=error.number;}assert(stale==3420);
     stale=0;try {(void)heldPicker->member("Title",{});}catch(const linaccess::VbaRuntimeError& error) {stale=error.number;}assert(stale==3420);{linaccess::NativeStandardModuleHost current(&window,db,[] {});auto fresh=current.applicationObject()->member("FileDialog",{VbaValue::integer(3)}).object;assert(fresh!=heldPicker && fresh->member("DialogType",{}).number==3);}
     openProject(window,path);assert(window.property("la_startup_macro_status").toString()=="completed" && count()==4);
     openProject(window,path,nullptr,true);QTest::keyRelease(&window,Qt::Key_Shift);assert(window.property("la_startup_macro_status").toString()=="bypassed" && count()==4);
@@ -4230,6 +4326,7 @@ End Sub
     testModuleUiCommands(window,db);phase("testModuleUiCommands");
     testStandaloneProjectCatalog(window,db);phase("testStandaloneProjectCatalog");
     testStandaloneDocuments(window,db);phase("testStandaloneDocuments");
+    testScreenActiveReport(window,db);phase("testScreenActiveReport");
     testProjectDocumentLifetime(window,db);phase("testProjectDocumentLifetime");
     testStandaloneFileDialog(window,db);phase("testStandaloneFileDialog");
     testStandaloneApplicationServices(window,db);phase("testStandaloneApplicationServices");

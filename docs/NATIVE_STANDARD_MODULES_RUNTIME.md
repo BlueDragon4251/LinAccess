@@ -119,14 +119,18 @@ No hidden placeholder form is created to supply the collection.
 
 Application.Screen and bare Screen expose the existing actual ActiveForm,
 ActiveControl and MousePointer implementation, with its current documented bounds.
+ActiveReport is read-only and returns the Reports collection's native object for
+the active visible top-level report. A loaded report may be available through
+Reports while Screen.ActiveReport raises LinAccess error 2450. This occurs when
+the database window or a form is active, the active report belongs to another
+project, or the report is hidden, closing, or unavailable.
 MousePointer assignment uses the owned cursor contract and rechecks context after
 scalar-default evaluation. Active lookups are isolated by connection and database
 identity. Native project-owned collections/Screen survive caller-form closure and
-reject stale generations3420 after actual project switching. Existing form-owned
+reject stale generations with error 3420 after actual project switching. Existing form-owned
 collection/Screen handles retain their prior caller-lifetime behavior.
 
-This is not a complete Access Application/Screen surface: ActiveReport,
-PreviousControl and arbitrary screen properties remain unsupported. Global object
+PreviousControl and arbitrary screen properties remain outside this scope. Global object
 identity across independently created Application handles and full original
 hidden/modal/new-instance ordering still require broader implementation/oracle.
 

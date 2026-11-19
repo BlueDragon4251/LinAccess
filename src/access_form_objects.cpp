@@ -1591,6 +1591,15 @@ public:
                 return linaccess::VbaValue::reference(makePreviewFormObject(*form));
             throw linaccess::VbaRuntimeError(2450,"Active form unavailable");
         }
+        if (key=="activereport") {
+            auto* report=activePreviewDocument();
+            if (!AccessFormPreview::databaseWindowActive() && database.isOpen()
+                && report && report->opened_ && !report->closed_ && !report->closing_ && !report->openCancelled_
+                && report->isWindow() && report->isVisible() && report->layout_.kind==linaccess::AccessDocumentKind::Report
+                && report->db_.connectionName()==database.connectionName() && report->db_.databaseName()==database.databaseName())
+                return linaccess::VbaValue::reference(makePreviewFormObject(*report));
+            throw linaccess::VbaRuntimeError(2450,"Active report unavailable");
+        }
         if (key=="activecontrol") {
             if(AccessFormPreview::databaseWindowActive()) throw linaccess::VbaRuntimeError(2474,"Active control unavailable in database window");
             QWidget* focus=QApplication::focusWidget();
